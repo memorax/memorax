@@ -1,0 +1,194 @@
+
+=== Raw grammar ===
+
+TEST ::=
+    BAD-STATES PREDICATES 'data' VAR-INIT PROCESS-LIST
+  | BAD-STATES PREDICATES PROCESS-LIST
+
+BAD-STATES ::= 'forbidden' BAD-STATES-LIST-LIST
+
+BAD-STATES-LIST-LIST ::= 
+    BAD-STATES-LIST
+  | BAD-STATES-LIST ';' BAD-STATES-LIST-LIST
+
+BAD-STATES-LIST ::=
+    LABEL
+  | LABEL BAD-STATES-LIST
+
+PREDICATES ::=
+    e
+  | 'predicates' BEXPR-LIST
+
+BEXPR-LIST ::=
+    BEXPR
+  | BEXPR ';' BEXPR-LIST
+
+PROCESS-LIST ::=
+    PROCESS
+  | PROCESS PROCESS-LIST
+
+PROCESS ::=
+  'process' PROC-COUNT VAR-INIT REG-INIT 'text' STMT-LIST
+
+PROC-COUNT ::=
+    e
+  | '(' NAT ')'
+
+VAR-INIT ::=
+    e
+  | 'data' VAR-INIT-LIST
+
+VAR-INIT-LIST ::=
+    ID '=' VAR-INIT-VALUE VAR-DOMAIN
+  | ID '=' VAR-INIT-VALUE VAR-DOMAIN ',' VAR-INIT-LIST
+
+VAR-INIT-VALUE ::= 
+    NAT
+  | '-' NAT
+  | '*'  
+
+VAR-DOMAIN ::=
+    e
+  | ':' '[' INT ':' INT ']'
+  | ':' 'Z'
+
+REG-INIT ::=
+    e
+  | 'registers' REG-INIT-LIST
+
+REG-INIT-LIST ::=
+    REG '=' VAR-INIT-VALUE VAR-DOMAIN
+  | REG '=' VAR-INIT-VALUE VAR-DOMAIN ',' REG-INIT-LIST
+
+STMT-LIST ::=
+    LSTMT
+  | LSTMT ';' STMT-LIST
+
+LSTMT ::=
+    STMT
+  | LABEL ':' STMT
+
+STMT ::=
+    'nop'
+  | 'read:' MEMLOC '=' EXPR
+  | 'read:' REG ':=' MEMLOC
+  | 'write:' MEMLOC ':=' EXPR
+  | 'locked write:' MEMLOC ':=' EXPR
+  | 'cas(' MEMLOC ',' EXPR ',' EXPR ')'
+  | REG ':=' EXPR
+  | 'assume:' BEXPR
+  | 'if' BEXPR 'then' LSTMT
+  | 'if' BEXPR 'then' LSTMT 'else' LSTMT
+  | 'while' BEXPR 'do' LSTMT
+  | 'goto' LABEL
+  | 'either' '{' STMT-LIST EITHER-LIST '}' /* nondeterministic choice */
+  | 'locked' '{' STMT-LIST EITHER-LIST '}'
+  | '{' STMT-LIST '}'
+
+EITHER-LIST ::=
+    e
+  | 'or' STMT-LIST EITHER-LIST
+
+BEXPR ::=
+    BEXPR-AND
+  | BEXPR '||' BEXPR
+
+BEXPR-AND ::=
+    BEXPR-ATOM
+  | BEXPR-AND '&&' BEXPR-AND
+  | 'not' BEXPR-ATOM
+
+BEXPR-ATOM ::=
+    'true'
+  | 'false'
+  | EXPR '=' EXPR
+  | EXPR '!=' EXPR
+  | EXPR '<' EXPR
+  | EXPR '>' EXPR
+  | '[' BEXPR ']'
+
+EXPR ::=
+    EXPR-ARITH
+  | 'me'
+  | 'other' NAT
+  | '@' NAT
+
+EXPR ::=
+    EXPR-ARITH '+' EXPR-ARITH
+  | EXPR-ARITH '-' EXPR-UNIT
+  | EXPR-UNIT
+
+EXPR-UNIT ::=
+    REG
+  | NAT
+  | '-' EXPR-UNIT
+  | '(' EXPR-ARITH ')'
+
+REG ::= $[_a-zA-Z0-9]+
+
+MEMLOC ::=
+    ID
+  | ID '[' 'my' ']'
+  | ID '[' NAT ']'
+  | '[' '@' NAT ']'
+  | '[' REG ']'
+
+LABEL ::= ID
+
+ID ::= [_a-zA-Z][_a-zA-Z0-9]*      /* except for reserved words */
+
+reserved words: 
+  if       then       else
+  while    do         read
+  write    locked     cas
+  goto     true       false
+  my       me         other
+  process  not        nop
+
+=== Predictive grammar ===
+
+EXPR ::=
+  EXPR-UNIT EXPR-R
+
+EXPR-R ::=
+    '+' EXPR-UNIT EXPR-R
+  | '-' EXPR-UNIT EXPR-R
+  | e
+
+EXPR-UNIT ::=
+    REG
+  | NAT
+  | '-' EXPR-UNIT
+  | '(' EXPR ')'
+
+BEXPR ::=
+    BEXPR-AND BEXPR-R
+
+BEXPR-R ::=
+    '||' BEXPR-AND BEXPR-R
+  | e
+
+BEXPR-AND ::=
+    BEXPR-AND-L BEXPR-AND-R
+
+BEXPR-AND-L ::=
+    'not' BEXPR-ATOM
+  | BEXPR-ATOM
+
+BEXPR-AND-R ::=
+    '&&' BEXPR-AND-L BEXPR-AND-R
+  | e
+
+BEXPR-ATOM ::=
+    'true'
+  | 'false'
+  | EXPR BEXPR-ATOM-R
+  | '[' BEXPR ']'
+
+BEXPR-ATOM-R ::=
+    '=' EXPR
+  | '!=' EXPR
+  | '<' EXPR
+  | '>' EXPR
+  | e
+    

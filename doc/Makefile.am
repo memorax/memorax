@@ -1,0 +1,24 @@
+nobase_dist_doc_DATA = \
+   manual.pdf \
+   examples/bakery.rmm \
+   examples/burns.rmm \
+   examples/clh.rmm \
+   examples/dekker.2.rmm \
+   examples/dekker.rmm \
+   examples/dijkstra.rmm \
+   examples/lamport_fast.rmm \
+   examples/peterson.rmm \
+   examples/ticket_spin_lock.2.rmm \
+   examples/ticket_spin_lock.rmm
+
+EXTRA_DIST = manual.tex biblio.bib fdl-1.3.tex fdl.pdf Makefile.am
+
+fdl.pdf: @FDLDEP@
+	@FDLBUILDRULE@
+
+manual.pdf: @MANUALDEP@
+	@MANUALBUILDRULE@
+
+clean-local:
+	@MANUALCLEANRULE@bakery.bound2.rmm
+

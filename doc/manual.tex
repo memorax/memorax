@@ -1,0 +1,1704 @@
+\documentclass[a4paper]{article}
+
+\usepackage[english]{babel} %language selection
+\selectlanguage{english}
+
+\usepackage{pdfpages}
+\usepackage{amssymb}
+\usepackage[utf8]{inputenc}
+\usepackage[colorlinks]{hyperref}
+\usepackage{cleveref}
+\usepackage{cite}
+\usepackage{verbatim}
+\usepackage{tikz}
+\usetikzlibrary{backgrounds,calc}
+
+\newcommand{\tool}{Memorax} % Name of the tool
+\newcommand{\thetool}{the Memorax tool} % variation
+\newcommand{\Thetool}{The Memorax tool} % variation
+\newcommand{\binary}{memorax} % Name of the command line executable
+\newcommand{\gui}{memorax-gui} % Name of the GUI executable
+
+\title{Memorax\\\small{User Manual}}
+\author{Carl Leonardsson}
+
+\begin{document}
+
+\maketitle
+
+\pagebreak
+
+\begin{verbatim}
+Copyright (C)  2012  Carl Leonardsson
+Permission is granted to copy, distribute and/or modify this document
+under the terms of the GNU Free Documentation License, Version 1.3
+or any later version published by the Free Software Foundation;
+with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+A copy of the license is included in the section entitled ``GNU
+Free Documentation License''.
+\end{verbatim}
+
+\pagebreak
+
+\tableofcontents
+
+\section{Introduction}
+
+\tool{} is a tool for verification of safety properties in programs
+running under relaxed memory models, and for automatic inference of
+memory fences that are necessary in order to guarantee satisfaction of
+those safety properties.
+
+The verification is achieved through state space exploration and
+specifically control state reachability analysis. Inference of fences
+is achieved by repeated reachability analysis according to the method
+described in \cite{AACLR12}. 
+
+Programs running under relaxed memory models tend to have an infinite
+state space, even in the cases where the same program would have a
+finite state space if executed under SC. For this reason, explicit
+state space analysis is impossible. The problem can be handled by
+using under approximation, over approximation or by using exact,
+infinite state analysis methods such as the well-quasi ordering
+method \cite{ACJT96}. \Thetool{} is built to accommodate different
+approaches. 
+
+Currently \tool{} supports two approaches for verification/fence
+insertion of programs executed under the TSO memory model. Details are
+given in \cref{sec:abstractions}.
+
+This manual will assume basic knowledge about memory models. An
+introduction to the topic can be found in \cite{adve-gharachorloo-96}.
+
+\section{Contact / Bug Report}
+
+Feedback, questions or bug reports should be directed to Carl
+Leonardsson ({\tt carl.leonardsson@it.uu.se}).
+
+\section{Installation}
+
+\subsection{Requirements}
+
+\begin{enumerate}
+
+  \item A C++ compiler supporting C++11. For example g++ version 4.6 or
+     higher.
+
+  \item In order to run the graphical interface, python is required at a
+     version of 2.6 or higher installed with tcl/tk of version 8.4 or
+     higher.
+
+  \item For predicate abstraction the MathSAT SMT solver as well as the
+     library gmpxx are required. \tool supports MathSAT 4 and 
+     MathSAT 5. MathSAT 4 is recommended. \tool can be compiled without
+     MathSAT and gmpxx, but will then not support predicate
+     abstraction.
+
+  \item To be able to graphically draw automata, Graphviz is required.
+\end{enumerate}
+
+\subsection{Basic Installation}
+
+   In the simplest case, \tool can be installed with the following
+   commands:
+
+\begin{verbatim}
+$ tar xvf memorax-<version>.tar.gz
+$ cd memorax-<version>
+$ ./configure
+$ make
+$ make install
+\end{verbatim}
+
+\subsection{Installation Options}
+
+   The configure script is built with GNU autotools, and should accept
+   the usual options and environment variables. This section outlines
+   some of the typical use cases.
+
+\paragraph{Changing Installation Directory}
+
+   The command '\verb+make install+' will install \tool, its graphical
+   interface and its documentation in the directories which are
+   standard on your system. To override this behaviour add the switch
+   \verb+--prefix+ to the '\verb+./configure+' command:
+
+\begin{verbatim}
+$ ./configure --prefix=/your/desired/install/path
+\end{verbatim}
+
+\paragraph{Compiling with Predicate Abstraction Support}
+
+   To support predicate abstraction, \tool must be compiled with
+   MathSAT and gmpxx. Their header files and shared libraries must
+   reside where they can be found by the compilation. If they are
+   installed in non-standard locations, then the compilation can be
+   directed to their location by appropriately specifying
+   \verb+CXXFLAGS+ and \verb+LDFLAGS+ when invoking the
+   '\verb+./configure+' command:
+
+\begin{verbatim}
+$ ./configure CXXFLAGS='-I/path/to/mathsat/include' \
+              LDFLAGS='-L/path/to/mathsat/lib'
+\end{verbatim}
+
+   If MathSAT and/or gmpxx are not found by the configure script, then
+   \tool will be installed without support for predicate abstraction.
+
+\paragraph{Specifying Compiler}
+
+   When the configure script is invoked, it will by GNU autotools
+   magic determine which C++ compiler will be used during
+   compilation. In case e.g. your default compiler does not support
+   C++11, but you have the compiler g++-4.6 installed at a
+   non-standard location you may want to override this. In order to do
+   so, specify the path to g++-4.6 in CXX when invoking the
+   '\verb+./configure+' command:
+
+\begin{verbatim}
+$ ./configure CXX='/path/to/g++-4.6'
+\end{verbatim}
+
+\subsection{Troubleshooting}
+
+\paragraph{MSatFailure}
+
+   In case you get the following error message when trying to use the
+   PB abstraction:
+
+\begin{verbatim}
+Error: MSatFailure: Program is not compiled with MathSAT.
+\end{verbatim}
+
+   In order to use predicate abstraction, (e.g. the PB abstraction)
+   \tool needs to be compiled with MathSAT. To solve the problem,
+   install MathSAT on your system and then reinstall \tool. In case the
+   installation fails to find MathSAT (see the output from the
+   configure script), then try the instructions in the paragraph
+   "Compiling with Predicate Abstraction Support" above.
+
+\section{Usage}\label{sec:usage}
+
+\Thetool{} provides a command line interface, as well as a graphical
+interface. It has three main modes of operation (henceforth
+``\emph{commands}''): reachability checking, automatic fence inference
+and graphical representation of programs as automata. In all three
+modes \thetool{} works on parallel programs given in the RMM language
+(See \cref{sec:rmm:language}.).
+
+The algorithms used for reachability and automatic fence inference
+depend on which \emph{abstraction} is selected. An abstraction defines
+what a configuration looks like, what are the semantics of the
+analysed program and how the reachability analysis works. Abstractions
+can be over or under approximations of the semantics given in
+\cref{sec:semantics}. They can alternatively be exact, or even an
+approximation that is neither an over approximation nor an under
+approximation. \Thetool{} currently supports two abstractions: SB and
+PB. See \cref{sec:abstractions} for details.
+
+\paragraph{Reachability checking}
+ In this mode, \thetool{} will attempt to determine whether or not
+ certain (``\emph{forbidden}'') configurations are reachable when the
+ RMM program is executed. The forbidden configurations are specified
+ in the RMM program as combinations of control states; one for each
+ process. Any configuration where the processes are each in a control
+ state such that they together satisfy such a combination is
+ considered forbidden. 
+
+ The reachability is determined by some reachability analysis, which
+ depends on what abstraction is chosen.
+
+\paragraph{Automatic fence inference}
+In this mode, \thetool{} will perform repeated reachability checks,
+while gradually adding memory fences that turn out to be necessary in
+order to guarantee the non-reachability of the forbidden control
+states. \Thetool{} will report a collection $C$ of sets $S$ of memory
+fences such that for every set $S$, the memory fences in $S$ are
+sufficient to guarantee the non-reachability of the forbidden control
+states. Furthermore each fence in $S$ is necessary, in the sense that
+adding all fences except one from $S$ to the program, is insufficient
+to guarantee non-reachability. Here, ``reachability'' should be
+interpreted as reachability according to the given abstraction. Thus,
+an over approximating abstraction may report more fences than are
+actually necessary under the actual memory model, and an under
+approximating abstraction may fail to report fences that are actually
+necessary. The abstractions SB and PB (when run without a bound on the
+number of refinements) guarantee that the reported fences are both
+necessary and sufficient.
+
+For the TSO memory model, reported fences are identified with write
+instructions. Adding the fence to the RMM program corresponds to
+making that write instruction into a locked write instruction. In the
+actual machine code/assembly code that implements the program runnable
+on real hardware, this corresponds to adding memory fence immediately
+after the writing instruction. On x86, one can alternatively change
+the writing instruction into a LOCK'd version of the same instruction.
+
+\paragraph{Graphical representation of RMM programs}
+In this mode, \thetool{} produces a PDF file containing a graphical
+representation of automata corresponding to the given RMM
+program. There will be one automaton per process in the program. 
+
+\subsection{Using the Command Line Interface}
+
+A call to the command line interface is on the following form:
+
+\vspace{15pt}
+
+\noindent
+{\tt \binary{} [command] [options] [program]}
+
+\vspace{15pt}
+
+The {\tt [command]} part indicates the mode of operation. It should be
+given as one of {\tt reach} (indicating reachability analysis), {\tt
+  fencins} (indicating automatic fence inference) and {\tt dotify}
+(indicating graphical representation of the RMM program).
+
+The {\tt [options]} part is optional and gives details about how the
+command should be executed. Accepted options are listed and explained
+below.
+
+The {\tt [program]} part should be the path to a text file containing
+an RMM program. The program path can be left out of the command line
+invocation, in which case \thetool{} will expect the RMM program via
+the standard input.
+
+\newcommand{\explainrff}{Converting an RMM program to register free
+  form, means to rewrite it such that the values of the registers are
+  encoded in the control states, and all registers are replaced by the
+  corresponding integer literals wherever they occur in
+  instructions. This conversion is possible when all registers in the
+  program have finite domains. Converting a program to register free
+  form may be beneficial for analysis time, in particular when using
+  the SB abstraction.}
+
+\paragraph{Options:}
+
+\begin{itemize}
+\item {\tt -o <filename>} or {\tt --output <filename>}\\ Write output
+  to {\tt <filename>}. This option is used to specify the desired path
+  of the PDF file produced by the {\tt dotify} command.
+
+\item {\tt -a <abstraction>} or {\tt --abstraction <abstraction>}
+  \\ Use abstraction {\tt <abstraction>}. The abstraction should be
+  one of {\tt pb} and {\tt sb}. If no abstraction is specified, then
+  \thetool{} will default to using the SB abstraction.
+
+\item {\tt -k <int>}\\ Use {\tt k} as buffer bound. The TSO buffers in
+  the PB abstraction will not be allowed to grow larger than this many
+  elements.
+
+\item {\tt --cegar}\\ Use CEGAR refinement in reachability
+  analysis. CEGAR can be used with the PB abstraction, and will refine
+  the abstraction by gradually, and as necessary, using additional
+  predicates in the predicate abstraction, and a larger bound on the
+  length of the TSO buffers.
+
+\item {\tt --max-refinements <int>}\\ Perform at most {\tt <int>} many
+  refinements in the CEGAR loop. If more refinements are necessary,
+  then \thetool{} will terminate with an error message.
+
+\item {\tt -v} or {\tt --verbose}\\
+  Print output verbosely.
+\item {\tt -vv} or {\tt --very-verbose}\\
+  Print output very verbosely.
+\item {\tt -vvv} or {\tt --very-very-verbose}\\
+  Print output very very verbosely.
+\item {\tt -o1} or {\tt --only-one}\\
+  During fence insertion, stop searching after finding one sufficient, minimal fence set.
+\item {\tt --rff}\\
+  Convert machine to \emph{register free form}
+  before using it. \explainrff
+\end{itemize}
+
+\subsection{Using the Graphical Interface}
+
+The graphical interface is a python script using tcl/tk, running on
+top of the command line interface. It runs on top of the command line
+interface, provides the CLI with appropriate switches and performs
+some interpretation of the output from the CLI. The graphical
+interface is installed as {\tt \gui{}}.
+
+The GUI window contains, from top to bottom:
+
+\begin{itemize}
+\item A menu bar, allowing to load and save RMM programs and output,
+  and to configure the behaviour of the GUI.
+\item A \emph{command area} containing a number of buttons, check buttons etc.
+\item A \emph{code area} where an RMM program may be loaded, edited
+  and saved. All commands executed with the GUI will act on the
+  program displayed here.
+\item An \emph{output area} where text output from the underlying CLI
+  will be displayed. The output is divided into two different
+  consoles: ``Output'' and ``Error''.
+\end{itemize}
+
+At the top of the command area are radio buttons allowing the user to
+chose a command: ``Reachability'' (indicating reachability analysis),
+``Fence insertion'' (indicating automatic fence inference) and ``Draw
+automata'' (indicating graphical representation of the RMM program).
+
+For all commands, the user may specify a level of output verbosity
+ranging from ``Only Results'' (least output) to ``Extreme'' (most
+output). For most users and use cases, one of the levels ``Only
+Results'' and ``Messages'' is probably the most suitable.
+
+Execution of the selected command is started with the button
+``Run''. A running execution can be interrupted with the button
+``Break'' (shortcut Ctrl-C). While the underlying tool is running, it
+will output text to the text fields ``Output'' and ``Error'' at the
+bottom of the GUI window.
+
+For commands ``Reachability'' and ``Fence Insertion'', the user may
+chose what abstraction should be used: SB or PB. (See
+\cref{sec:abstractions}.) Whether CEGAR should be used for
+automatically refining the PB abstraction. Also the user may chose to
+convert the RMM program into \emph{register free form} before
+analysing it. \explainrff
+
+When the command ``Fence Insertion'' finds a set of fences, they are
+indicated in the output by textual representation of the writing
+transitions in the RMM automata which should be changed into locked
+writes. Mouse-over will highlight the corresponding lines of code in
+the code area, and clicking them will center the code area over those
+lines.
+
+For the command ``Draw Automata'', the user should specify a path,
+where a PDF file displaying the RMM program will be created. When the
+``Draw Automata'' command is used, the PDF file will be immediately
+displayed, provided that the user has specified a PDF viewer in the
+GUI configuration (Misc$\rightarrow$Configuration).
+
+\section{Tutorial}
+
+This section gives a short tutorial to usage of \thetool.
+
+Start the GUI.
+
+\noindent
+\begin{verbatim}
+$ memorax-gui &
+\end{verbatim}
+
+The GUI window shows an example RMM program that can be analysed, an
+output area showing the version of the GUI, and a number of controls
+that allow the user to select a command and options.
+
+\paragraph{Reachability analysis}
+First, let us analyse the reachability of the forbidden states in the
+example program: Select the command ``Reachability'', the abstraction
+``SB'' and the verbosity ``Messages''. Press the ``Run'' button to
+start the analysis.
+
+In case the GUI is unable to find the \tool CLI, then you will receive
+an error message:
+
+\noindent
+\begin{verbatim}
+Failed to start subprocess (...)
+[Errno 2] No such file or directory
+Failed to terminate subprocess.
+Interrupted
+\end{verbatim}
+
+If so, enter Misc$\rightarrow$Configuration and setup the correct path
+to where you have installed the \tool CLI.
+
+If the GUI finds the CLI, you should instead receive a screenful of
+text describing the result. The most important part is the last
+section. It tells you that the forbidden states are reachable when the
+example program is executed under the TSO memory model. I.e. that the
+program is unsafe.
+
+\noindent
+\begin{verbatim}
+Reachability analysis results:
+  Reachable:             Yes
+  Generated constraints: 500
+  Size of visited set:   216
+  Time consumption:      0 s
+\end{verbatim}
+
+You will also receive a ``witness trace'' showing \emph{how} the
+forbidden states can be reached in the SB semantics.
+
+\paragraph{Fence inference}
+Now, let us see how \thetool can be used to automatically infer the
+fences that are necessary to make the example program safe. Select the
+command ``Fence insertion''. Keep the abstraction ``SB'' and verbosity
+``Messages''. Press the ``Run'' button. 
+
+If all goes well you should receive an output like this:
+
+\noindent
+\begin{verbatim}
+$ /path/to/memorax fencins --json -v --abstraction sb
+Currently examining fence set:
+  (No fences)
+
+Reachability analysis results:
+  Reachable:             Yes
+  Generated constraints: 500
+  Size of visited set:   216
+  Time consumption:      0.01 s
+
+Cycles found in trace:
+TsoCycle (complete):
+  P0: update(var:0, P0)
+  L14 P0: read: var:1 = 0
+  L22 P1: locked{ write: var:1 := 1 }
+  L23 P1: read: var:0 = 0
+
+Currently examining fence set:
+  L13 P0: write: x := 1
+  L22 P1: write: y := 1
+
+Reachability analysis results:
+  Reachable:             No
+  Generated constraints: 86
+  Size of visited set:   39
+  Time consumption:      0 s
+
+Found 1 fence set:
+Fence set #0:
+  L13 P0: write: x := 1
+  L22 P1: write: y := 1
+
+Total time to insert fences: 0.01s.
+\end{verbatim}
+
+Reading it from top to bottom, it tells us the following:
+
+\noindent
+\begin{verbatim}
+Currently examining fence set:
+  (No fences)
+\end{verbatim}
+
+The inference procedure starts without any inserted memory fences.
+
+\noindent
+\begin{verbatim}
+Reachability analysis results:
+  Reachable:             Yes
+  Generated constraints: 500
+  Size of visited set:   216
+  Time consumption:      0.01 s
+\end{verbatim}
+
+Without any memory fences, the forbidden states are reachable. At the
+verbosity level ``Messages'', the witness traces are omitted. If you
+want to see the traces, use e.g. ``Debug'' instead.
+
+\noindent
+\begin{verbatim}
+Cycles found in trace:
+TsoCycle (complete):
+  P0: update(var:0, P0)
+  L14 P0: read: var:1 = 0
+  L22 P1: locked{ write: var:1 := 1 }
+  L23 P1: read: var:0 = 0
+
+Currently examining fence set:
+  L13 P0: write: x := 1
+  L22 P1: write: y := 1
+\end{verbatim}
+
+The inference procedure analyses the witness trace, and concludes that
+in order to prevent the example program from reaching the forbidden
+states by such an execution, two memory fences are necessary. The
+memory fences are ``{\tt L13 P0: write: x := 1}'' and ``{\tt L22 P1:
+  write: y := 1}''. This notation should be interpreted as follows:
+{\tt L13 P0: write: x := 1} is the writing instruction of process 0
+that occurs at line 13 in the code. The corresponding fence, which is
+suggested by the inference procedure, should be placed immediately
+after this writing transition. In the RMM language, inserting the
+fence is done by changing {\tt write: x := 1} into {\tt locked write:
+  x := 1} in the code.
+
+\noindent
+\begin{verbatim}
+Reachability analysis results:
+  Reachable:             No
+  Generated constraints: 86
+  Size of visited set:   39
+  Time consumption:      0 s
+\end{verbatim}
+
+The inference procedure attempts another reachability analysis, now
+with the two new fences inserted. This time it turns out that the
+forbidden states are not reachable, and the current fence set is
+sufficient for safety.
+
+\noindent
+\begin{verbatim}
+Found 1 fence set:
+Fence set #0:
+  L13 P0: write: x := 1
+  L22 P1: write: y := 1
+\end{verbatim}
+
+The inference procedure terminates, telling us that it detected
+exactly one minimal and sufficient set of memory fences: 
+\begin{displaymath}
+\{\texttt{L13 P0: write: x := 1},\texttt{L22 P1: write: y := 1}\}
+\end{displaymath}
+Hovering the mouse over the fence set will highlight the
+corresponding write instructions in the code area. Clicking the fence
+set will center the code over the highlighted instructions.
+
+\paragraph{Adding the fences}
+Let us manually insert the fences, and then try again. Rewrite the
+code by adding ``{\tt locked}'' in two places as shown below:
+
+\begin{center}
+\small{\tt
+\begin{tabular}{l|l}
+/* An example code */\\
+\\
+forbidden\\
+  CS CS\\
+\\
+data\\
+  x = 0 : [0:1]\\
+  y = 0 : [0:1]\\
+\\
+process                  & process\\
+text                     & text\\
+L0:                      & L0:\\
+  \fbox{locked} write: x := 1;  & \fbox{locked} write: y := 1;\\
+  read: y = 0;           & read: x = 0;\\
+CS:                      & CS:\\
+  write: x := 0;         & write: y := 0;\\
+  goto L0                & goto L0 \\
+\end{tabular}}
+\end{center}
+
+The previous fence inference result told us that this new version of
+the example code should be safe. To satisfy our curiosity and to see
+what it looks like when we run the fence inference procedure on an
+already safe program, let us try to run the fence insertion command
+again. We get the following result:
+
+\noindent
+\begin{verbatim}
+$ /home/claerulf/memorax/build/bin/memorax fencins --json -v --abstraction sb
+Currently examining fence set:
+  (No fences)
+
+Reachability analysis results:
+  Reachable:             No
+  Generated constraints: 86
+  Size of visited set:   39
+  Time consumption:      0 s
+
+Found 1 fence set:
+Fence set #0:
+  (No fences)
+
+Total time to insert fences: 0s.
+\end{verbatim}
+
+It tells us that the fence inference procedure starts with no fences
+(no fences except the ones that are explicitly part of the
+program). It runs the reachability analysis and finds that the
+forbidden states are not reachable; the program is safe. \Thetool
+concludes by telling us that it found exactly one memory fence set
+that is necessary and sufficient: the empty set. I.e. as expected, the
+program is safe and requires no additional fences.
+
+\section{The RMM language}\label{sec:rmm:language}
+
+The RMM language allows to model a parallel program and specify safety
+properties that should hold.
+
+The sometimes assembly-like syntax of the RMM language is motivated by
+the necessity, when analysing programs under relaxed memory models, of
+unambiguously specifying the order of memory accesses, and whether
+variables are stored in memory or in registers. Note that for
+conventional programming languages, such as e.g. C, the memory access
+ordering, register allocations, reuse of common sub-expressions and the
+like depend on the compiler (and compiler switches). Therefore, when
+trying to verify an implementation written in a high level language,
+it may be necessary to examine the machine code after compilation, or
+use inline assembly, to be certain that the model, written in RMM, and
+the compiled program, written in some high level language, correspond.
+
+This section will start by introducing the RMM language by giving an
+example together with explanation. Then we continue by explaining the
+abstract machine on which an RMM program runs. We introduce control
+structures and informally explain about instructions under the
+Sequentially Consistent memory model. Finally we give formally and
+informally, the semantics of all instructions under the TSO memory
+model.
+
+\subsection{Machine Model and Memory Addressing}\label{sec:abstmachinememaddr}
+
+This section describes the abstract machine on which an RMM program is
+executed. 
+
+\newcommand{\vars}{\mathcal{X}} % The set of memory locations
+\newcommand{\procs}{\mathcal{P}} % The set of processes
+\newcommand{\automata}{A} % The set of process automata
+\newcommand{\pautomaton}[1]{A(#1)} % \pautomaton{p} is the automaton
+                                    % of process p
+\newcommand{\regs}{\mathcal{R}} % \regs is the set of register sets
+\newcommand{\pregs}[1]{\mathcal{R}(#1)} % \pregs{p} is the registers
+                                         % of process p
+\newcommand{\pcstates}[1]{\mathcal{Q}_{#1}} % \pcstates{p} is the set
+                                            % of control states of
+                                            % \pautomaton{p}
+\newcommand{\ptransitions}[1]{\Delta_{#1}} % \ptransitions{p} is the
+                                           % set of transitions of
+                                           % \pautomaton{p} 
+
+
+A \emph{machine} $(\procs,\automata,\regs,\vars)$ consists of a memory
+with (shared) memory locations $\vars$, and a set of processes
+$\procs$ executing in parallel. Each process $p\in\procs$ has a unique
+process identifier $pid(p) \in \{0,\cdots,|\procs|-1\}$. We will
+subsequently use $p$ and $pid(p)$ interchangingly where there is no
+danger of confusion. 
+
+\paragraph{Automata}
+Each process $p$ is equipped with an automaton $\pautomaton{p} =
+(\pcstates{p},\ptransitions{p})$ describing the program executed by
+$p$. The set $\pcstates{p} = \{0,\cdots\}$ is the set of control
+states of the automaton. The set $\ptransitions{p}$ is the set of
+transitions of the automaton. A transition $(q_0,instr,q_1)$ consists
+of a source control state $q_0$, a target control state $q_1$ and an
+RMM \emph{instruction}. Instructions will be defined and given
+semantics in later sections.
+
+\paragraph{Registers} 
+Each process $p$ has a set of registers $\pregs{p}$. Registers
+$r\in\pregs{p}$ hold integer values and can only be accessed by the
+owning process $p$. Registers are not affected by memory model
+relaxations since they are not located in memory (and also are
+private). The differences between registers and memory locations are
+summarised in \cref{tbl:memregdiff}.
+
+\begin{table}[ht]
+  \small{
+  \begin{center}
+    \begin{tabular}{|l|c|c|}
+      \cline{2-3}
+      \multicolumn{1}{c|}{} & Memory locations & Registers\\
+      \hline
+      Integer values & Yes & Yes\\
+      \hline
+      Accessible by & All processes & Owning process\\
+      \hline
+      In arith. expr. & No & Yes\\
+      \hline
+      Write & {\tt write}-instruction & 
+      \begin{tabular}{@{}c@{}}
+      Assignment instruction\\
+      (E.g. {\tt \$r0 := \$r1 + 1})\\
+      or assigning read\\
+      (E.g. {\tt read: \$r0 := x})\\
+      \end{tabular}\\
+      \hline
+      Read & 
+      \begin{tabular}{@{}c@{}}
+        {\tt read}-instruction \\
+        (assigning read or \\
+        asserting read)\\
+      \end{tabular} &
+      \begin{tabular}{@{}c@{}}
+        Use in arithmetic expression\\
+        (E.g. {\tt \$r1 + 1})\\
+      \end{tabular}\\
+      \hline
+      Names & 
+      \begin{tabular}{@{}c@{}}
+        Alphanumerical or\\
+        alphanumerical followed\\
+        by process specifier\\
+      \end{tabular} & {\tt \$} followed by alphanumerical\\
+      \hline
+    \end{tabular}
+  \end{center}
+  }
+  \caption{Differences between memory locations and
+    registers.}\label{tbl:memregdiff}
+\end{table}
+
+\paragraph{Integer Domains}
+Each memory location $v$ and each register $r$ has an associated
+domain $domain(v), domain(r) \subseteq\mathbb{Z}$. The domain is
+either the (infinite) set of integers $\mathbb{Z}$, or a finite
+interval $\{i,i+1,\cdots,j-1,j\}$. 
+
+\paragraph{Memory Addressing}
+Memory locations in $\vars$ are of two kinds: \emph{local} and
+\emph{global}. Both kinds are accessible for reading and writing by
+all processes, and there is no difference between the two kinds
+regarding memory model relaxation. The difference is purely in how
+they are addressed. A global memory location $v$ has an alphanumerical
+name $n$, and is addressed by all processes by precisely that name. A
+local memory location $v$ has an alphanumerical name $n$, but is also
+associated with one particular process $owner(v)\in\procs$. When a
+process $p$ accesses the local variable $v$, it should use the name
+$n$\verb+[+$spec$\verb+]+ where $spec$ depends on $owner(v)$ and on
+$p$ as described in \cref{tbl:locvarnames}. For example: suppose that
+process 2 should access a local variable $v$ by the name \verb+x+. If
+$owner(v) = 1$ then the correct address of $v$ for process 2 would be
+\verb+x[1]+. If $owner(v) = 2$ then \verb+x[my]+ would be the address,
+and if $owner(v) = 5$ then \verb+x[4]+ would be the correct address.
+
+\begin{table}[ht]
+  \begin{center}
+    \begin{tabular}{|l|l|}
+      \hline
+      condition & $spec$\\
+      \hline
+      $owner(v) < p$ & $owner(v)$\\
+      $owner(v) = p$ & \verb+my+\\
+      $owner(v) > p$ & $owner(v)-1$\\
+      \hline
+    \end{tabular}
+  \end{center}
+  \caption{Process $p$, when accessing variable $v$ declared locally
+    in process $owner(v)$, should use the name
+    $v${\tt [}$spec${\tt ]}.}
+  \label{tbl:locvarnames}
+\end{table}
+
+\subsection{An Example}
+
+\begin{figure}[ht]
+\begin{minipage}[b]{0.5\linewidth}
+\small{
+\begin{verbatim}
+ 1: /* Dijkstra's lock */
+   
+ 2: forbidden
+ 3:   CS CS
+   
+ 4: data
+ 5:   turn = * : [0:1]
+   
+ 6: process
+ 7: data
+ 8:   flag = 0 : [0:2]
+ 9: registers
+10:   $flag = * : [0:2]
+11:   $turn = * : [0:1]
+12: text
+13:   START:
+14:   write: flag[my] := 1;
+15:   read: $turn := turn;
+16:   while $turn != 0 do{
+17:     read: $flag := flag[0];
+18:     if $flag = 0 then
+19:       write: turn := 0;
+20:     read: $turn := turn
+21:   };
+22:   write: flag[my] := 2;
+23:   read: $flag := flag[0];
+24:   if $flag = 2 then
+25:     goto START;
+26:   CS:
+27:   write: flag[my] := 0;
+28:   goto START
+\end{verbatim}
+}
+\end{minipage}
+\hspace{0pt}
+\begin{minipage}[b]{0.45\linewidth}
+\small{
+\begin{verbatim}
+29: process
+30: data
+31:   flag = 0 : [0:2]
+32: registers
+33:   $flag = * : [0:2]
+34:   $turn = * : [0:1]
+35: text
+36:   START:
+37:   write: flag[my] := 1;
+38:   read: $turn := turn;
+39:   while $turn != 1 do{
+40:     read: $flag := flag[0];
+41:     if $flag = 0 then
+42:       write: turn := 1;
+43:     read: $turn := turn
+44:   };
+45:   write: flag[my] := 2;
+46:   read: $flag := flag[0];
+47:   if $flag = 2 then
+48:     goto START;
+49:   CS:
+50:   write: flag[my] := 0;
+51:   goto START
+\end{verbatim}
+}
+\end{minipage}
+\caption{RMM model of two processes using Dijkstra's mutual exclusion protocol\cite{LP93}}\label{fig:code:dijkstra.rmm}
+\end{figure}
+
+\Cref{fig:code:dijkstra.rmm} shows an RMM model of two processes using
+Dijkstra's mutual exclusion protocol. We will explain the format line
+by line.
+
+The first line is a comment. Everything starting with \verb+/*+
+continuing until \verb+*/+ is ignored by the parser.
+
+Lines 2 and 3 declare the safety property. Every RMM file must start
+with such a declaration. The word \verb+forbidden+ is a reserved
+word. Line 3 tells us that the declared safety property states that at
+no time may simultaneously process 0 be at its control state labelled
+\verb+CS+ (line 26) and process 1 be at its control state labelled
+\verb+CS+ (line 49). The label names \verb+CS+ and \verb+CS+ are
+coincidentally the same, but refer to different processes and hence
+different control states. Additional lines like line 3 can be added
+provided that they are separated by semi-colons. Below we have added
+the safety properties that none of the processes may enter its
+critical section (label CS) while the other process is at its initial
+control state (label START).
+
+\begin{verbatim}
+forbidden
+  CS CS ; 
+  START CS ;
+  CS START
+\end{verbatim}
+
+Lines 4 and 5 declare a memory location called \verb+turn+. The word
+\verb+data+ is a reserved word. After the word \verb+data+ comes a
+list of memory location declarations. The declaration
+\verb+turn = * : [0:1]+ starts with the name of the memory location.
+Then states (\verb+= *+) that it may initially have any value in its
+domain. The last part (\verb+: [0:1]+) specifies that the domain of
+the memory location is all integers from and including 0 up to and
+including 1. Below we have extended the declaration section to also
+declare a variable \verb+x+ with domain $\mathbb{Z}$ and initial
+value 0, and a variable \verb+y+ with the default domain (which is
+also $\mathbb{Z}$) and unspecified initial value.
+
+\begin{verbatim}
+data
+  turn = * : [0:1]
+  x = 0 : Z
+  y = *
+\end{verbatim}
+
+Lines 6 to 28 declare process 0. Lines 29 to 51 similarly declare
+process 1, and will not be separately explained. The word
+\verb+process+ on line 6 is a reserved word and informs us that a
+process declaration begins. The process declaration has three parts:
+data declaration (optional), register declaration (optional) and text
+declaration (mandatory).
+
+Lines 7 and 8 is the data declaration for process 0. It declares a
+memory location named flag, with domain $\{0,1,2\}$ and initial value
+0. This memory location is like the memory location \verb+turn+ that
+we declared earlier, in that it is accessible for both reading and
+writing to all processes and in that it is affected by the memory
+model. The only difference between memory locations declared at the
+top level (\emph{global} memory locations) and memory locations
+declared inside a process declaration (\emph{local} memory locations)
+is the naming. In order to access a global memory location, a process
+will use its name as it is. A local memory location $var$ is accessed
+by its name and a specifier: $var$\verb+[+$spec$\verb+]+. The correct
+way of addressing local memory locations is described in
+\cref{sec:abstmachinememaddr} and in particular in
+\cref{tbl:locvarnames}.
+
+Lines 9 to 11 declare the registers of process 0. Registers are
+similar to memory locations. They correspond to processor registers,
+so they are accessible only to the process owning them, and they are
+not affected by the memory model. In RMM, registers have
+alphanumerical names preceded by a single \verb+$+ character.
+
+The word \verb+text+ on line 12 informs that the program code begins. 
+
+The program code is a semi-colon separated sequence of
+statements. Each statement is optionally preceded by a process-unique
+label and a colon.
+
+Line 13 declares a label \verb+START+ that identifies the control
+state immediately before execution of the first instruction.
+
+Line 14, 19, 22 and 27 are memory writes. A value computed by
+arithmetic operations on literal integers and on values in registers
+is assigned to a memory location. In this case literal integers 0, 1
+and 2 are stored in the global memory location \verb+turn+ and the
+local memory location \verb+flag+ of process 0.
+
+Line 15, 17, 20 and 23 are memory reads. The value in a memory
+location is loaded into a register. In the case of line 17, the value
+in the local variable \verb+flag+ of process 1 (see
+\cref{tbl:locvarnames}) is loaded into the register \verb+$flag+ of
+process 0.
+
+Lines 16 to 21 is a while-loop. The loop condition works on literal
+integers and values in registers. 
+
+Lines 18-19 and 24-25 are if-statements. The if-condition works on
+literal integers and values in registers. If-statements may optionally
+have an else-clause.
+
+Lines 25 and 28 are goto-statements. A goto-statement \verb+goto +$LBL$
+immediately redirects the control flow to the control state labelled
+by $LBL$.
+
+\subsection{Semantics}\label{sec:semantics}
+\subsubsection{Statements}
+
+In the RMM language a process's automaton is defined by a statement
+that follows the keyword \verb+text+ in the process
+declaration. Statements come in two kinds: \emph{instructions} and
+\emph{control structures}. 
+
+An \emph{instruction} is a statement that can be attached to a
+transition in an automaton, and be executed atomically. An instruction
+corresponds loosely to a machine language instruction on an actual
+piece of hardware. But there are differences: Some composed operations
+that would require many machine language instructions can be performed
+in a single RMM instruction. This is the case for local operations,
+such as evaluation of arithmetic expressions over private registers,
+where the non-atomicity of the operation on actual hardware is not
+observable. Furthermore, some instructions on hardware architectures,
+such as e.g. un-LOCK'd INC on Intel x86, appear as a single
+instruction in the machine language but executes equivalently to
+multiple subsequent and non-atomic memory accesses. Such instructions
+are not included in RMM.
+
+A \emph{control structure} is a statement that affects the structure
+of the process automaton. Control structures themselves cannot occur
+as labels for individual transitions, but control structures may
+contain instructions and define a sub-automaton with transitions
+labelled by those instructions.
+
+\Cref{tbl:allstatements} lists all types of RMM statements.
+
+\begin{table}
+  \begin{center}
+  \small{
+  \begin{tabular}{|ll|}
+    \hline
+    \hline
+    \multicolumn{2}{|c|}{Instructions}\\
+    \hline
+    \hline
+    Name & Example \\
+    \hline
+    Nop & {\tt nop}\\ & \\
+    Assignment & {\tt \$reg := 42}\\ & \\
+    Assume & {\tt assume: \$r0 = 0 \&\& \$r1 > 2}\\ & \\
+    Asserting read & {\tt read: x = 3}\\ & \\
+    Assigning read & {\tt read: \$reg := x}\\ & \\
+    Write & {\tt write: x := \$r0 + \$r1 - 1}\\ & \\
+    Locked block & {\tt 
+      \begin{tabular}{@{}l@{}}
+        locked\verb+{+\\
+        \rule{5pt}{0pt} read: x = 0;\\
+        \rule{5pt}{0pt} write: x := 1\\
+        \verb+}+\\
+      \end{tabular}
+    }\\ & \\
+    (Locked write) & {\tt locked write: x := 1}\\ & \\
+    (Compare \& Swap) & {\tt cas(x,2,13)}\\ & \\
+    \hline
+    \hline
+    \multicolumn{2}{|c|}{Control statements}\\
+    \hline
+    \hline
+    Name & Example \\
+    \hline
+    Goto & {\tt goto LBL}\\ & \\
+    Sequence & {\tt 
+      \begin{tabular}{@{}l@{}}
+        \verb+{+\\
+        \rule{5pt}{0pt} read: \$r0 := x;\\
+        \rule{5pt}{0pt} \$r1 := \$r0 + 1;\\
+        \rule{5pt}{0pt} write: x := \$r1\\
+        \verb+}+\\
+      \end{tabular}
+    }\\ & \\
+    If-statement & 
+    {\tt 
+    \begin{tabular}{@{}l@{}}
+    if \$r0 = 0 then \verb+{+\\
+    \rule{5pt}{0pt} \$r1 := 1; \\
+    \rule{5pt}{0pt} \$r2 := 20 \\
+    \verb+}+ else\\
+    \rule{5pt}{0pt} goto L0
+    \end{tabular}}\\ & \\
+    While-statement &
+    {\tt
+    \begin{tabular}{@{}l@{}}
+      while \$reg > 0 do\\
+      \rule{5pt}{0pt} read: \$reg := x\\
+    \end{tabular}}\\ & \\
+    Either-statement &
+    {\tt
+    \begin{tabular}{@{}l@{}}
+      either\verb+{+\\
+      \rule{5pt}{0pt} read: v = 0\\
+      or\\
+      \rule{5pt}{0pt} read: v = 1;\\
+      \rule{5pt}{0pt} write: w := 1\\
+      \verb+}+\\
+    \end{tabular}
+    }\\ & \\
+    \hline
+  \end{tabular}
+  }
+  \end{center}
+  \caption{RMM statements}\label{tbl:allstatements}
+\end{table}
+
+\subsubsection{Arithmetical and Boolean Expressions}
+
+Some statements make use of arithmetical or boolean expressions. An
+arithmetical expression may contain registers, integer literals,
+addition, subtraction, unary minus and parentheses. A boolean
+expression may contain the boolean literals \verb+true+ and
+\verb+false+, conjunction (\verb+&&+), disjunction (\verb+||+),
+negation (\verb+not+), parentheses (\verb+[]+ is used for boolean
+expressions as opposed to \verb+()+ for arithmetical) and comparison
+of arithmetical expressions by the following comparison functions:
+\verb+=+, \verb+!=+, \verb+<+, \verb+>+. The
+expressions are interpreted in the obvious way. Note that memory
+locations cannot be used in expressions!
+
+\subsubsection{Instructions Informally}
+
+This section gives an informal description of the semantics of RMM
+instructions under the SC memory model.
+
+In the below, we use the following conventions: Registers are named
+$reg$, $reg'$ etc. Registers used in an instruction always refer to
+registers owned by the process that executes the
+instruction. Arithmetical expressions are named $expr$, $expr'$
+etc. Boolean expressions are named $bexpr$, $bexpr'$ etc. Memory
+locations are named $v$, $v'$ etc. That an instruction is
+\emph{enabled} means that it can be executed. An instruction that is
+not enabled is blocking.
+
+\paragraph{Nop} \verb+nop+
+
+This instruction is always enabled, and has no effect when executed.
+
+\paragraph{Assignment} $reg$\verb+ := +$expr$
+
+Evaluates the expression $expr$ and stores the result in the register
+$reg$. The instruction is enabled precisely when the valuation of
+$expr$ is within the domain of $reg$.
+
+\paragraph{Assume} \verb+assume: +$bexpr$
+
+Is enabled precisely when $bexpr$ evaluates to true. The instruction
+has no effect when executed.
+
+\paragraph{Asserting Read} \verb+read: +$v$\verb+ = +$expr$
+
+Is enabled when the value of memory location $v$ in memory is the same
+as the value to which $expr$ evaluates. The instruction has no effect
+when executed.
+
+\paragraph{Assigning Read} \verb+read: +$reg$\verb+ := +$v$
+
+Reads the value of memory location $v$ from memory and stores the
+value in register $reg$. The instruction is enabled precisely when the
+value of $v$ in memory is within the domain of $reg$.
+
+\paragraph{Write} \verb+write: +$v$\verb+ := +$expr$
+
+Evaluates the expression $expr$ and writes the result to memory
+location $v$. Enabled when the value of $expr$ is in the domain of
+$v$.
+
+\paragraph{Locked Block} \mbox{}
+
+\noindent
+\begin{tabular}{@{}l@{}}
+  \verb+locked{+\\
+  \rule{5pt}{0pt}$sl_0$\\
+  \verb+or+\\
+  \rule{5pt}{0pt}$\cdots$\\
+  \verb+or+\\
+  \rule{5pt}{0pt}$sl_n$\\
+  \verb+}+\\
+\end{tabular}
+
+Here $sl_i$ for all $0 \leq i \leq n$ is a semi-colon separated
+sequence of instructions. The sequence $sl_i$ is said to be enabled if
+it is possible to execute its constituent instructions in order
+without blocking and without context-switching. When the locked block
+is executed, any one single enabled sequence $sl_i$ is picked, and the
+instructions of $sl_i$ are executed in order atomically. The locked
+block is enabled when there is at least one sequence $sl_i$ that is
+enabled.
+
+{\bf Important:} The locked block is a powerful construction meant to
+enable modellers to model the occasional more obscure machine
+instructions that may occur on their hardware. Its TSO semantics are
+quite complicated, and improper use is easy. It is therefore
+recommended to not explicitly use locked blocks unless absolutely
+necessary. It is recommended to limit use of locked blocks to implicit
+use by means of the two instructions \emph{locked write} and
+\emph{Compare \& Swap}.
+
+\paragraph{Locked Write} \verb+locked write: +$v$\verb+ := +$expr$
+
+Under SC semantics, a locked write is equivalent to an ordinary
+write. The locked write \verb+locked write: +$v$\verb+ := +$expr$ is
+syntactic sugar for \\\verb+locked{ write: +$v$\verb+ := +$expr$\verb+}+
+
+\paragraph{Compare \& Swap (CAS)} \verb+cas(+$v$\verb+,+$expr$\verb+,+$expr'$\verb+)+
+
+The compare and swap instruction is enabled precisely when the value
+of $v$ in memory is equal to the value of $expr$, and $expr'$ evaluates
+to a value within the domain of $v$. Executing the compare and swap
+instruction will store the value of $expr'$ in memory location
+$v$. The instruction
+\verb+cas(+$v$\verb+,+$expr$\verb+,+$expr'$\verb+)+ is syntactic sugar
+for
+\verb+locked{ read: +$v$\verb+ = +$expr$\verb+; write: +$v$\verb+ := +$expr'$\verb+}+
+
+\subsubsection{Control Structures}
+
+\newcommand{\tikzq}[3]{\node (#1) at (#2) [circle,draw=black,inner sep=0pt,minimum size=25pt] {$#3$}}
+
+This section describes how control structures in the RMM language are
+used to shape the process automata of a machine. This is done by
+describing the sub-automata corresponding to each type of control
+structure.
+
+Below we use the following conventions: The described sub-automaton is
+a part of the automaton $\pautomaton{p}$ corresponding to process
+$p$. The initial state of the sub-automaton is $q_{src}$. The control
+state that corresponds to the position in the RMM code immediately
+after the control structure is named $q_{tgt}$.
+
+\paragraph{Instructions} $s$
+
+A single instruction $s$ translates into a transition
+$(q_{src},s,q_{tgt})$.
+
+\begin{center}
+\small{
+\begin{tikzpicture}
+  \tikzq{qsrc}{0,0}{q_{src}};
+  \tikzq{qtgt}{2,0}{q_{tgt}};
+  \draw [->] (qsrc) -- node [above] {$s$} (qtgt);
+  \draw[draw=black,rounded corners] ($(current bounding box.north west) + (-0.5,0.5)$) rectangle
+  ($(current bounding box.south east) + (0.5,-0.5)$);
+\end{tikzpicture}
+}
+\end{center}
+
+\paragraph{Goto} \verb+goto +$LBL$
+
+Here $LBL$ is a label attached to some control state $q_{LBL}$ in
+$\pcstates{p}$. The goto statement translates into a transition
+$(q_{src},\verb+nop+,q_{LBL})$.
+
+\begin{center}
+\small{
+\begin{tikzpicture}
+  \tikzq{qsrc}{0,0}{q_{src}};
+  \tikzq{qlbl}{1.5,-1.5}{q_{LBL}};
+  \tikzq{qtgt}{2,0}{q_{tgt}};
+  \draw[->] (qsrc) -> node [above] {\tt nop} (qlbl);
+  \draw[draw=black,rounded corners] ($(current bounding box.north west) + (-0.5,0.5)$) rectangle
+  ($(current bounding box.south east) + (0.5,-0.5)$);
+\end{tikzpicture}
+}
+\end{center}
+
+
+\paragraph{Sequence} \verb+{+$s_0$\verb+;+$\cdots$\verb+;+$s_n$\verb+}+
+
+The sequence construct arranges its constituent sub-statements,
+unsurprisingly, in a sequence from $q_{src}$ to $q_{tgt}$, as shown in
+the diagram below.
+
+\begin{center}
+\small{
+\begin{tikzpicture}
+  \tikzq{qsrc}{0,0}{q_{src}};
+  \tikzq{q1}{2,0}{};
+  \tikzq{q2}{4,0}{};
+  \tikzq{qtgt}{6,0}{q_{tgt}};
+  \draw[->] (qsrc) -- node [above] {$s_0$} (q1);
+  \draw[->] (q1) -- node [above] {$\cdots$} (q2);
+  \draw[->] (q2) -- node [above] {$s_n$} (qtgt);
+
+  \draw[draw=black,rounded corners] ($(current bounding box.north west) + (-0.5,0.5)$) rectangle
+  ($(current bounding box.south east) + (0.5,-0.5)$);
+\end{tikzpicture}
+}
+\end{center}
+
+\paragraph{If-statement} \verb+if +$bexpr$\verb+ then +$s_{then}$\verb+ else +$s_{else}$
+
+An if-statement branches the automaton into two branches where the
+initial assume transitions ensure that only one branch can be taken at
+any one time.
+
+\begin{center}
+\small{
+\begin{tikzpicture}
+  \tikzq{qsrc}{0,0}{q_{src}};
+  \tikzq{q1}{3,1}{};
+  \tikzq{q2}{3,-1}{};
+  \tikzq{qtgt}{6,0}{q_{tgt}};
+  \draw[->,out=70,in=180] (qsrc) to node [above] {{\tt assume: }$bexpr$} (q1);
+  \draw[->,out=290,in=180] (qsrc) to node [below] {{\tt assume: not }$bexpr$} (q2);
+  \draw[->,out=0,in=110] (q1) to node [above] {$s_{then}$} (qtgt);
+  \draw[->,out=0,in=250] (q2) to node [below] {$s_{else}$} (qtgt);
+
+  \draw[draw=black,rounded corners] ($(current bounding box.north west) + (-0.5,0.5)$) rectangle
+  ($(current bounding box.south east) + (0.5,-0.5)$);
+\end{tikzpicture}
+}
+\end{center}
+
+\paragraph{While-statement} \verb+while +$bexpr$\verb+ do +$s$
+
+A while-statement translates to a loop that will be taken as long as
+$bexpr$ evaluates to true, but no longer.
+
+\begin{center}
+\small{
+\begin{tikzpicture}
+  \tikzq{qsrc}{0,0}{q_{src}};
+  \tikzq{q1}{0,2}{};
+  \tikzq{qtgt}{3,0}{q_{tgt}};
+  \draw[->,out=135,in=225] (qsrc) to node [left] {{\tt assume: }$bexpr$} (q1);
+  \draw[->,out=315,in=45] (q1) to node [right] {$s$} (qsrc);
+  \draw[->,out=335,in=205] (qsrc) to node [below] {{\tt assume: not }$bexpr$} (qtgt);
+
+  \draw[draw=black,rounded corners] ($(current bounding box.north west) + (-0.5,0.5)$) rectangle
+  ($(current bounding box.south east) + (0.5,-0.5)$);
+\end{tikzpicture}
+}
+\end{center}
+
+\paragraph{Either-statement} 
+\verb+either{+$s_0^0$\verb+;+$\cdots$\verb+;+$s_0^m$\verb+ or +$\cdots$\verb+ or +$s_n^0$\verb+;+$\cdots$\verb+;+$s_n^l$\verb+}+
+
+An either statement is a non-deterministic choice. It translates into
+multiple branches with no attached guards (except for what may occur
+in the constituents $s_i^j$).
+
+
+\begin{center}
+\small{
+\begin{tikzpicture}
+  \tikzq{qsrc}{0,0}{q_{src}};
+  \tikzq{q1}{2,2}{};
+  \node (vd) at (2,0) [] {$\vdots$};
+  \tikzq{q2}{2,-2}{};
+  \tikzq{q3}{4,2}{};
+  \node (vd2) at (4,0) [] {$\vdots$};
+  \tikzq{q4}{4,-2}{};
+  \tikzq{qtgt}{6,0}{q_{tgt}};
+
+  \draw[->,out=70,in=180] (qsrc) to node [above] {$s_0^0$} (q1);
+  \draw[->,out=290,in=180] (qsrc) to node [below] {$s_n^0$} (q2);
+  \draw[-] (qsrc) -- ($(qsrc) + (1,1)$);
+  \draw[-] (qsrc) -- ($(qsrc) + (1,0)$);
+  \draw[-] (qsrc) -- ($(qsrc) + (1,-1)$);
+
+  \draw[->] (q1) -- node [above] {$\cdots$} (q3);
+  \draw[->] (q2) -- node [below] {$\cdots$} (q4);
+
+  \draw[->,out=0,in=110] (q3) to node [above] {$s_0^m$} (qtgt);
+  \draw[->,out=0,in=250] (q4) to node [below] {$s_n^l$} (qtgt);
+  \draw[->] ($(qtgt) + (-1,1)$) -- (qtgt);
+  \draw[->] ($(qtgt) + (-1,0)$) -- (qtgt);
+  \draw[->] ($(qtgt) + (-1,-1)$) -- (qtgt);
+
+  \draw[draw=black,rounded corners] ($(current bounding box.north west) + (-0.5,0.5)$) rectangle
+  ($(current bounding box.south east) + (0.5,-0.5)$);
+\end{tikzpicture}
+}
+\end{center}
+
+\subsubsection{TSO Semantics}
+
+This section describes the TSO semantics of the instructions in the
+RMM language. This is done formally and informally in parallel.
+
+\newcommand{\mem}{M}
+\newcommand{\regval}{M_{reg}}
+\newcommand{\pc}{pc}
+\newcommand{\buf}{B}
+
+A \emph{constraint} $(\mem,\regval,\pc,\buf)$ describes the
+configuration of an abstract machine at a particular time. Each memory
+location $v\in\vars$ has a particular value $\mem(v)\in
+domain(v)$. Each register $r$ owned by each process $p$ has a
+particular value $\regval(p)(r)\in domain(r)$. Each process $p$ is at
+a particular control state $\pc(p)\in\pcstates{p}$.
+
+Furthermore, each process $p$ is equipped with a FIFO buffer
+\\$\buf(p) = \langle \buf(p)_0, \cdots, \buf(p)_n\rangle$ where $n =
+len(\buf(p)) - 1$. More recently inserted elements have a lower
+index. For all $0 \leq i \leq n$, the element $\buf(p)_i = (v,w) \in
+\vars\times\mathbb{Z}$ is a pending write of process $p$ to memory
+location $v$ with value $w\in domain(v)$. 
+
+When a process executes a write to a memory location under TSO, it
+does not immediately update the memory, but instead it enqueues the
+write in its write buffer $\buf(p)$. Asynchronously, and without the
+active participation of the process $p$ itself, the enqueued writes
+will be pushed, one by one in the same order they were enqueued, to
+memory and dequeued from the write buffer. The event of a write
+reaching memory is called an \emph{update}.
+
+In the below we describe the rules for process $p$ to perform a
+transition $t$. For a function $f$, by $f[x:=v]$ we denote the
+function $f'$ such that $f'(y) = f(y)$ if $y \neq x$ and $f'(x) =
+v$. For a register valuation $\regval(p)$ and an arithmetic expression
+$expr$ over registers from $\pregs(p)$, we let $\regval(p)[expr]$
+denote the evaluation of $expr$ where each register $r$ in $expr$
+evaluates to $\regval(p)(r)$. We define similarly $\regval(p)[bexpr]$
+for a boolean expression $bexpr$. 
+
+\newcommand{\sep}{\rule{10pt}{0pt}}
+
+\paragraph{Nop} $t = (q_{src},\verb+nop+,q_{tgt})$
+
+The nop instruction is the same under TSO semantics as under SC
+semantics: It does nothing.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem,\regval,\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+\paragraph{Assignment} $t = (q_{src},reg\verb+ := +expr, q_{tgt})$
+
+The assignment instruction is the same under TSO semantics as under SC
+semantics: It evaluates $expr$ and assigns the result to the register
+$reg$.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src} \sep 
+      w \in domain(reg)\\
+      \regval' = \regval[p:=M_p']\\
+      \textrm{where}\\
+      w = \regval(p)[expr]\\
+      M_p' = \regval(p)[reg:=w]\\
+    \end{array}
+  }
+       {(\mem,\regval,\pc,\buf) \rightarrow_t (\mem,\regval',\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+\paragraph{Assume} $t = (q_{src},\verb+assume: +bexpr,q_{tgt})$
+
+The assume instruction is the same under TSO semantics as under SC
+semantics: It evaluates $bexpr$ and is enabled precisely when the
+result is true.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \regval(p)[bexpr]
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem,\regval,\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+\paragraph{Asserting Read} $t = (q_{src},\verb+read: +v\verb+ = +expr,q_{tgt})$
+
+A read under TSO semantics will read the value of memory location $v$
+from memory, provided that the buffer of $p$ does not contain any
+write to $v$. If there is a write to $v$ in $\buf(p)$, then the value
+of the newest such write in $\buf(p)$ is read. 
+
+To formalise this, we define the function $read :
+((\vars\mapsto\mathbb{Z})\times buffer) \mapsto \vars \mapsto
+\mathbb{Z}$ as follows:
+
+\begin{displaymath}
+  \begin{array}{c}
+  read (\mem,b) v = \\
+  \\
+  \left\{\begin{array}{ll}
+  w  & \textrm{If for some $i\in\mathbb{Z}$}\sep
+  \left(\begin{array}{c}
+    b_i = (v,w)\\
+    \textrm{and}\\
+    \neg\exists 0 \leq j < i, w'\in\mathbb{Z} . b_j = (v,w')
+  \end{array}\right)\\
+  \mem(v) & \textrm{Otherwise}\\
+  \end{array}\right.\\
+  \end{array}
+\end{displaymath}
+
+Now we can define the transition rule:
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    read (\mem,\buf(p)) v = \regval(p)[expr]
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem,\regval,\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+\paragraph{Assigning Read} $t = (q_{src},\verb+read: +reg\verb+ := +v,q_{tgt})$
+
+An assigning read, reads the value of $v$ from memory or from
+$\buf(p)$ in the same manner as an asserting read, but then assigns
+the read value to the register $reg$.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src} \sep 
+      w \in domain(reg)\\
+      \regval' = \regval[p:=M_p']\\
+      \textrm{where}\\
+      w = read (\mem,\buf(p)) v\\
+      M_p' = \regval(p)[reg:=w]\\
+    \end{array}
+  }
+       {(\mem,\regval,\pc,\buf) \rightarrow_t (\mem,\regval',\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+\paragraph{Write} $t = (q_{src},\verb+write: +v\verb+ := +expr,q_{tgt})$
+
+A write instruction evaluates the value $w$ of the expression $expr$,
+and enqueues the write as $(v,w)$ in its buffer.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src} \sep w \in domain(v)\\
+      \buf' = \buf[p := (v,w)\cdot\buf(p)]\\
+      \textrm{where}\\
+      w = \regval(p)[expr]\\
+    \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem,\regval,\pc[p:=q_{tgt}],\buf')}
+\end{displaymath}
+
+\paragraph{Update} $t = update_p$
+
+An \emph{update} is not a transition in any process automaton. Instead
+it is an event that may happen at any time the buffer of process $p$
+is non-empty. When an update occurs, the oldest write $(v,w)$ in the
+buffer of process $p$ is dequeued, and the value of variable $v$ is
+assigned $w$.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \buf(p) = \langle \buf(p)_0,\cdots,\buf(p)_{n-1},(v,w)\rangle \\
+      \buf' = \buf[p:=\langle \buf(p)_0,\cdots,\buf(p)_{n-1}\rangle] \\
+    \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem[v:=w],\regval,\pc,\buf')}
+\end{displaymath}
+
+\paragraph{Locked Write} $t = (q_{src},\verb+locked write: +v\verb+ := +expr,q_{tgt})$
+
+A locked write acts as a write followed by a TSO fence. It requires
+the buffer of process $p$ to be empty before it is executed. Then it
+evaluates the value $w$ of $expr$ and writes $w$ directly to $v$ in
+memory without enqueueing the write in the buffer.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src} \sep \buf(p) = \langle\rangle\\
+      w \in domain(v)\\
+      \textrm{where}\\
+      w = \regval(p)[expr]\\
+    \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem[v:=w],\regval,\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+The locked write $\verb+locked write: +v\verb+ := +expr$ is syntactic
+sugar for \\\verb+locked{ write: +$v$\verb+ := +$expr$\verb+}+.
+
+\paragraph{CAS} $t = (q_{src},\verb+cas(+v\verb+,+expr\verb+,+expr'\verb+)+,q_{tgt})$
+
+A compare and swap instruction acts as a fence in that it requires the
+buffer of process $p$ to be empty before it can be executed. It then
+evaluates the values $w$ and $w'$ respectively for $expr$ and $expr'$,
+compares the value of $v$ in memory with $w$, if the values are equal
+then the value $w'$ is written to $v$ in memory, otherwise the
+instruction blocks. A compare and swap instruction does not enqueue
+any write to the buffer.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src} \sep \buf(p) = \langle\rangle\\
+      \mem(v) = w \sep w' \in domain(v)\\
+      \textrm{where}\\
+      w = \regval(p)[expr] \sep w' = \regval(p)[expr']\\
+    \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem[v:=w'],\regval,\pc[p:=q_{tgt}],\buf)}
+\end{displaymath}
+
+\paragraph{Locked Block}
+\verb+locked{+$s_0^0$\verb+;+$\cdots$\verb+;+$s_0^{m_0}$\verb+ or +$\cdots$\verb+ or +$s_n^0$\verb+;+$\cdots$\verb+;+$s_n^{m_n}$\verb+}+
+
+A locked block acts as a fence iff there is some $s_i^j$ that is a
+write. If so, then the whole locked block is enabled only if the
+buffer of process $p$ is empty. 
+
+When a locked block executes, it non-deterministically selects one
+sequence $s_i^0\verb+;+\cdots\verb+;+s_i^{m_i}$ and executing atomically
+all constituent instructions $s_i^j$ in order. When doing so each
+constituent instruction executes as it normally does, except for
+writes, which execute as locked writes.
+
+In order to formalise the above, we first define the functions $is\_write$ and $contains\_write$:
+
+\begin{displaymath}
+  is\_write(s) = \left(\exists v\in\vars, w\in\mathbb{Z} . s = \verb+write: +v\verb+ := +w\right)
+\end{displaymath}
+
+\begin{displaymath}
+  \begin{array}{c}
+  contains\_write(s) = \\
+  \\
+  \left(
+  \begin{array}{c}
+    is\_write(s)\\
+    \textrm{or}\\
+    \left(
+    \begin{array}{l}
+    \exists s_0^0, \cdots, s_0^m, \cdots, s_n^0, \cdots, s_n^l, i, j . \\
+    \sep s = \verb+locked{+s_0^0\verb+;+\cdots\verb+;+s_0^m\verb+ or +\cdots\verb+ or +s_n^0\verb+;+\cdots\verb+;+s_n^l\verb+}+\\
+    \sep \textrm{and}\\
+    \sep contains\_write(s_i^j)\\
+    \end{array}\right)\\
+  \end{array}
+  \right)\\
+  \end{array}
+\end{displaymath}
+
+Next we define the locked transition relation
+$\rightarrow_s^{locked}$, for instructions $s$ by the following two
+rules:
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \neg is\_write(s) \\ 
+      (\mem,\regval,\pc,\buf) \rightarrow_{(\pc(p),s,\pc(p))} (\mem',\regval',\pc',\buf')\\
+    \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_s^{locked} (\mem',\regval',\pc',\buf')}
+\end{displaymath}
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      is\_write(s) \\ 
+      (\mem,\regval,\pc,\buf) \rightarrow_{(\pc(p),s,\pc(p))} (\mem',\regval',\pc',\buf')\\
+      (\mem',\regval',\pc',\buf') \rightarrow_{update_p} (\mem'',\regval'',\pc'',\buf'')\\
+    \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_s^{locked} (\mem'',\regval'',\pc'',\buf'')}
+\end{displaymath}
+
+Now we are ready to define the transition rule for the locked block. Let $s = \verb+locked{+s_0^0\verb+;+\cdots\verb+;+s_0^{m_0}\verb+ or +\cdots\verb+ or +s_n^0\verb+;+\cdots\verb+;+s_n^{m_n}\verb+}+$.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src}\\
+      (contains\_write(s) \Rightarrow \buf(p) = \langle\rangle)\\
+      \begin{array}{l}
+        \exists 0 \leq i \leq n, c_0, \cdots, c_{m_i+1} .\\
+        \sep \begin{array}{l}
+          c_0 = (\mem,\regval,\pc,\buf) \\
+          c_{m_i+1} = (\mem',\regval',\pc,\buf')\\
+          \forall 0 \leq j \leq m_i . c_j \rightarrow_{s_i^j}^{locked} c_{j+1}\\
+        \end{array}\\
+      \end{array}\\
+      \end{array}
+  }{(\mem,\regval,\pc,\buf) \rightarrow_t (\mem',\regval',\pc[p:=q_{tgt}],\buf')}
+\end{displaymath}
+
+{\bf Important:} The locked block is a powerful construction meant to
+enable modellers to model the occasional more obscure machine
+instructions that may occur on their hardware. Its TSO semantics are
+quite complicated, and improper use is easy. It is therefore
+recommended to not explicitly use locked block unless absolutely
+necessary. It is recommended to limit use of locked blocks to implicit
+use by means of the two instructions \emph{locked write} and
+\emph{Compare \& Swap}.
+
+\subsection{Grammar}
+
+\verbatiminput{grammar.simplified.txt}
+
+\section{Abstractions}\label{sec:abstractions}
+\subsection{PB - Bounded Buffers with Predicate Abstraction}
+
+The PB abstraction is the implementation of \cite{AACLR12SAS}. It is
+an over approximation of TSO.
+
+The PB abstraction uses an over approximation of the TSO store
+buffers. For a positive integer $k$, it stores the $k$ most recent
+messages for each memory location and process. The information of
+older messages is dropped.
+
+Predicate abstraction is used to enable (infinite) integer domains for
+memory locations and registers.
+
+The reachability analysis is by backward state space exploration.
+
+If CEGAR is used, then the value of $k$ as well as the set of
+predicates for predicate abstraction is gradually refined. When CEGAR
+is used, analysis and fence insertion with PB is sound, but not
+complete. For fence insertion this means that any fence sets reported
+by \thetool are sufficient and minimal for preventing reachability of
+the forbidden states.
+
+For details about the PB abstraction, see~\cite{AACLR12SAS}.
+
+\subsection{SB - Single Buffer}
+
+The SB abstraction is a reimplementation of
+\cite{AACLR12}. Reachability analysis and fence insertion with SB is
+both sound and complete.
+
+The SB abstraction defines a program semantic which is equivalent to
+TSO with regards to control state reachability. For the SB semantics,
+the well-quasi ordering framework~\cite{ACJT96} is applicable and
+provides a sound and complete reachability analysis.
+
+The SB semantics replaces the TSO store buffers with a single, shared
+store buffer. Each message in the single store buffer contains a
+complete memory snapshot.
+
+The reachability analysis is by backward state space exploration.
+
+For details about the SB abstraction, see~\cite{AACLR12}.
+
+\phantomsection
+\addcontentsline{toc}{section}{References}
+\bibliography{biblio}
+\bibliographystyle{plain}
+
+\pagebreak
+\phantomsection
+\addcontentsline{toc}{section}{GNU Free Documentation License}
+\includepdf[pages=-]{fdl.pdf}
+
+\end{document}
+
+ - Problembeskrivning/introduktion
+ - Installering
+ - Beskrivning av användning av programmet
+   * CLI
+   * GUI
+ - Beskrivning av språket
+   * Grammatik
+   * Kontrollstrukturer (beskrivning av hur de översätts till tillståndsmaskiner?)
+   * TSO-semantik för instruktionerna
+ - Beskrivning av abstraktionerna
+   * SB
+   * PB
