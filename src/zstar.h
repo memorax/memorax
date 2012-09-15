@@ -17,6 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifndef __ZSTAR_H__
+#define __ZSTAR_H__
+
 /* The class ZStar represents the set Z union {STAR} where Z should be
  * some set of integers (e.g. int) and STAR is a wild-card value that
  * represents the notion of "any integer".
@@ -37,6 +40,7 @@ public:
   /* Returns the integer represented by this ZStar.
    * Undefined for STAR. */
   Z get_int() const throw();
+  operator int() const throw() { return get_int(); };
   /* Three synonymes for checking whether this ZStar is STAR. */
   bool is_wild() { return wild; };
   bool is_star() { return wild; };
@@ -137,4 +141,11 @@ private:
   Z z;  
 };
 
+template<class Z>
+inline std::ostream &operator<<(std::ostream &os, const ZStar<Z> &zs){
+  return os << zs.to_string();
+};
+
 #include "zstar.tcc"
+
+#endif

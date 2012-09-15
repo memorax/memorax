@@ -21,6 +21,7 @@
 #include "log.h"
 #include <functional>
 #include <sstream>
+#include "lang.h"
 
 template<class Z> const ZStar<Z> ZStar<Z>::STAR;
 
@@ -104,8 +105,8 @@ template<class Z> inline ZStar<Z>::Vector::Vector(const std::vector<ZStar<Z> > &
 
 template<class Z> inline ZStar<Z>::Vector::Vector(const ZStar<Z>::Vector &v){
   vec = v.vec;
-  vec[0] = vec[0] + 1;
-  assert(vec[0] > 1);
+  vec[0] = vec[0] + ZStar<Z>(1);
+  assert(int(vec[0]) > 1);
 };
 
 template<class Z> inline ZStar<Z>::Vector::Vector(int sz, std::function<ZStar(int)> &f){
@@ -120,12 +121,12 @@ template<class Z> inline ZStar<Z>::Vector::Vector(int sz, std::function<ZStar(in
 template<class Z> inline typename ZStar<Z>::Vector &
 ZStar<Z>::Vector::operator=(const ZStar<Z>::Vector &v){
   if(&v != this){
-    assert(vec[0] > 0);
-    assert(v.vec[0] > 0);
+    assert(int(vec[0]) > 0);
+    assert(int(v.vec[0]) > 0);
     release_vec();
     vec = v.vec;
-    vec[0] = vec[0] + 1;
-    assert(vec[0] > 1);
+    vec[0] = vec[0] + ZStar<Z>(1);
+    assert(int(vec[0]) > 1);
   }
   return *this;
 };
@@ -144,7 +145,7 @@ ZStar<Z>::Vector::assign(int i, const ZStar<Z> &val) const{
   for(int j = 0; j < size(); ++j){
     v.vec[j+2] = vec[j+2];
   }
-  v.vec[i+2] = v;
+  v.vec[i+2] = val;
   return v;
 };
 
@@ -190,9 +191,9 @@ template<class Z> inline int ZStar<Z>::Vector::compare(const ZStar<Z>::Vector &v
 
 template<class Z> inline void ZStar<Z>::Vector::release_vec(){
   assert(vec != 0);
-  assert(vec[0] > 0);
-  vec[0] = vec[0] - 1;
-  if(vec[0] == 0){
+  assert(int(vec[0]) > 0);
+  vec[0] = vec[0] - ZStar<Z>(1);
+  if(vec[0].get_int() == 0){
     delete[] vec;
   }
   vec = 0;
@@ -228,7 +229,7 @@ template<class Z> std::string ZStar<Z>::Vector::to_string() const throw(){
   return s+"]";
 };
 
-template<> int ZStar<int>::test(){
+template<class Z> int ZStar<Z>::test(){
   int res = 0;
   std::function<void(std::string,bool)> tst = 
     [&res](std::string t, bool r){
@@ -344,5 +345,21 @@ template<> int ZStar<int>::test(){
     tst("Assignment of vectors non-destructive",
         v0 == v22 && v2 == v22 && v0copy == v1 && v1 != v0);
   }
+
+  /* eval */
+  {
+    std::vector<ZStar<int> > vv;
+    vv.push_back(1);
+    vv.push_back(2);
+    vv.push_back(3);
+    vv.push_back(4);
+    ZStar<int>::Vector v(vv);
+    
+    Lang::Expr<int> e = Lang::Expr<int>::reg(1) + Lang::Expr<int>::reg(2);
+
+    tst("("+e.to_string(Lang::int_reg_to_string())+").eval("+v.to_string()+") == 5",
+        e.eval(v,v) == 5);
+  }
+
   return res;
 };

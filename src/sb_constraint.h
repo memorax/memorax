@@ -24,115 +24,15 @@
 #include "constraint.h"
 #include "machine.h"
 #include "vecset.h"
+#include "zstar.h"
 
 class SbConstraint : public Constraint{
 public:
   class Common;
 private:  
-  /* The type used to represent integer values in registers and memory
-   * locations. Contains a reserved value STAR, which represents "any
-   * value".
-   */
-  typedef int value_t;
-  static const value_t STAR;
-  /* A reference counted array of values. Used to represent valuations
-   * over memory locations or registers.
-   */
-  class Store {
-  public:
-    /* Constructs a new store with sz entries (apart from the
-     * reference counter). All entries will be set to STAR. */
-    Store(int sz){
-      store = new value_t[sz+2];
-      store[0] = 1;
-      store[1] = sz;
-      for(int i = 0; i < sz; i++){
-        store[i+2] = STAR;
-      }
-    };
-    /* Constructs a new store with v.size() entries where entry i has
-     * the value v[i].
-     */
-    Store(const std::vector<value_t> &v){
-      store = new value_t[v.size()+2];
-      store[0] = 1;
-      store[1] = v.size();
-      for(unsigned i = 0; i < v.size(); ++i){
-        store[i+2] = v[i];
-      }
-    };
-    Store(const Store &s){
-      store = s.store;
-      ++store[0];
-      assert(store[0] > 1);
-    };
-    Store &operator=(const Store &s){
-      if(&s != this){
-        assert(store[0] > 0);
-        assert(s.store[0] > 0);
-        release_store();
-        store = s.store;
-        ++store[0];
-        assert(store[0] > 1);
-      }
-      return *this;
-    };
-    ~Store(){
-      release_store();
-    };
-    const value_t &operator[](int i) const { return store[i+2]; };
-    /* Return a new store which is identical to this one, except that
-     * element i is set to val.
-     */
-    Store assign(int i, value_t val) const;
-    /* Return a new store which is identical to this one, except that
-     * for each pair (i,v) in assv, the i:th element of the store is
-     * assigned v.
-     */
-    Store assign(std::vector<std::pair<int,value_t> > assv) const;
-    /* If there is a least upper bound lub (by entailment_compare) of
-     * this store and s, then *unifiable is set to true and lub is
-     * returned. Otherwise *unifiable is set to false and an arbitrary
-     * store is returned.
-     *
-     * Pre: this->size() == s.size()
-     */
-    Store unify(const Store &s, bool *unifiable) const;
-    /* Returns the number of elements in this store. */
-    int size() const { return store[1]; };
-    /* Implements a total order over Stores. The order takes into
-     * account only values, reference counters are not considered.
-     *
-     * Returns -1 if this is smaller than st
-     * Returns 0 if this equals st
-     * Returns 1 if this is greater than st
-     */
-    int compare(const Store &st) const;
-    bool operator<(const Store &st) const { return compare(st) < 0; };
-    bool operator==(const Store &st) const { return compare(st) == 0; };
-    bool operator>(const Store &st) const { return compare(st) > 0; };
-    bool operator<=(const Store &st) const { return compare(st) <= 0; };
-    bool operator!=(const Store &st) const { return compare(st) != 0; };
-    bool operator>=(const Store &st) const { return compare(st) >= 0; };
-    std::string to_string() const;
-    Constraint::Comparison entailment_compare(const Store &s) const;
-  private:
-    /* store[0] is the reference counter. store[1] is the number of
-     * values in the store. All subsequent entries in store are
-     * values.
-     */
-    value_t *store;
-
-    void release_store(){
-      assert(store != 0);
-      assert(store[0] > 0);
-      --store[0];
-      if(store[0] == 0){
-        delete[] store;
-      }
-      store = 0;
-    };
-  };
+  
+  typedef ZStar<int> value_t;
+  typedef ZStar<int>::Vector Store;
 
   /* The class of SB channel messages. */
   class Msg{
