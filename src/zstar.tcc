@@ -21,7 +21,6 @@
 #include "log.h"
 #include <functional>
 #include <sstream>
-#include "lang.h"
 
 template<class Z> const ZStar<Z> ZStar<Z>::STAR;
 
@@ -95,6 +94,15 @@ template<class Z> inline ZStar<Z>::Vector::Vector(int sz){
 };
 
 template<class Z> inline ZStar<Z>::Vector::Vector(const std::vector<ZStar<Z> > &v){
+  vec = new ZStar<Z>[v.size()+2];
+  vec[0] = 1;
+  vec[1] = v.size();
+  for(unsigned i = 0; i < v.size(); ++i){
+    vec[i+2] = v[i];
+  }
+};
+
+template<class Z> inline ZStar<Z>::Vector::Vector(const std::vector<Z> &v){
   vec = new ZStar<Z>[v.size()+2];
   vec[0] = 1;
   vec[1] = v.size();
@@ -229,6 +237,133 @@ template<class Z> std::string ZStar<Z>::Vector::to_string() const throw(){
   return s+"]";
 };
 
+template<class Z>
+VecSet<typename ZStar<Z>::Vector> 
+ZStar<Z>::Vector::possible_regs(const Lang::Expr<int> &e, int value,
+                                const std::vector<Lang::VarDecl> &decls) const{
+  VecSet<Vector> res;
+
+  std::vector<Z> v(size());
+  for(int i = 0; i < size(); ++i){
+    if((*this)[i].is_wild()){
+      assert(decls[i].domain.is_finite());
+      v[i] = decls[i].domain.get_lower_bound();
+    }else{
+      v[i] = (*this)[i].get_int();
+    }
+  }
+
+  while(true){
+    if(e.eval<std::vector<Z>,int*>(v,0) == value){
+      res.insert(Vector(v));
+    }
+    /* Increase wild values in v */
+    int i = 0;
+    for(; i < size(); ++i){
+      if((*this)[i].is_wild()){
+        if(v[i] < decls[i].domain.get_upper_bound()){
+          v[i] = v[i] + 1;
+          break;
+        }else{
+          assert(v[i] == decls[i].domain.get_upper_bound());
+          v[i] = decls[i].domain.get_lower_bound();
+        }
+      }
+    }
+    if(i >= size()) break;
+  }
+
+  return res;
+};
+
+template<class Z>
+VecSet<typename ZStar<Z>::Vector> 
+ZStar<Z>::Vector::possible_regs(const Lang::BExpr<int> &b,
+                                const std::vector<Lang::VarDecl> &decls) const{
+  VecSet<Vector> res;
+
+  std::vector<Z> v(size());
+  for(int i = 0; i < size(); ++i){
+    if((*this)[i].is_wild()){
+      assert(decls[i].domain.is_finite());
+      v[i] = decls[i].domain.get_lower_bound();
+    }else{
+      v[i] = (*this)[i].get_int();
+    }
+  }
+
+  while(true){
+    if(b.eval<std::vector<Z>,int*>(v,0)){
+      res.insert(Vector(v));
+    }
+    /* Increase wild values in v */
+    int i = 0;
+    for(; i < size(); ++i){
+      if((*this)[i].is_wild()){
+        if(v[i] < decls[i].domain.get_upper_bound()){
+          v[i] = v[i] + 1;
+          break;
+        }else{
+          assert(v[i] == decls[i].domain.get_upper_bound());
+          v[i] = decls[i].domain.get_lower_bound();
+        }
+      }
+    }
+    if(i >= size()) break;
+  }
+
+  return res;
+};
+
+template<class Z>
+VecSet<Z> ZStar<Z>::Vector::possible_values(int i, const Lang::VarDecl &decl) const{
+  if((*this)[i].is_wild()){
+    VecSet<Z> vset;
+    for(auto it = decl.domain.begin(); it != decl.domain.end(); ++it){
+      vset.insert(*it);
+    }
+    return vset;
+  }else{
+    return VecSet<Z>::singleton((*this)[i].get_int());
+  }
+};
+
+template<class Z>
+VecSet<Z> ZStar<Z>::Vector::possible_values(const Lang::Expr<int> &e, 
+                                            const std::vector<Lang::VarDecl> &decls) const{
+  VecSet<Z> res;
+
+  std::vector<Z> v(size());
+  for(int i = 0; i < size(); ++i){
+    if((*this)[i].is_wild()){
+      assert(decls[i].domain.is_finite());
+      v[i] = decls[i].domain.get_lower_bound();
+    }else{
+      v[i] = (*this)[i].get_int();
+    }
+  }
+
+  while(true){
+    res.insert(e.eval<std::vector<Z>,int*>(v,0));
+    /* Increase wild values in v */
+    int i = 0;
+    for(; i < size(); ++i){
+      if((*this)[i].is_wild()){
+        if(v[i] < decls[i].domain.get_upper_bound()){
+          v[i] = v[i] + 1;
+          break;
+        }else{
+          assert(v[i] == decls[i].domain.get_upper_bound());
+          v[i] = decls[i].domain.get_lower_bound();
+        }
+      }
+    }
+    if(i >= size()) break;
+  }
+
+  return res;
+};
+
 template<class Z> int ZStar<Z>::test(){
   int res = 0;
   std::function<void(std::string,bool)> tst = 
@@ -359,6 +494,54 @@ template<class Z> int ZStar<Z>::test(){
 
     tst("("+e.to_string(Lang::int_reg_to_string())+").eval("+v.to_string()+") == 5",
         e.eval(v,v) == 5);
+  }
+
+  /* Non-deterministic evaluation */
+  {
+    /* Test #0 (typical use) */
+    std::vector<Lang::VarDecl> decls0;
+    decls0.push_back(Lang::VarDecl("r0",Lang::Value(),Lang::VarDecl::Domain(0,2)));
+    decls0.push_back(Lang::VarDecl("r1",Lang::Value(),Lang::VarDecl::Domain(0,2)));
+    decls0.push_back(Lang::VarDecl("r2",Lang::Value(),Lang::VarDecl::Domain(0,2)));
+    std::function<ZStar<int>(int)> v0f = 
+      [](int i){
+      if(i == 1) return ZStar<int>(1);
+      else return STAR;
+    };
+    ZStar<int>::Vector v0(3,v0f);
+    Lang::Expr<int> e0 = 
+      Lang::Expr<int>::reg(0) + 
+      Lang::Expr<int>::reg(1) +
+      Lang::Expr<int>::reg(2);
+    std::vector<ZStar<int> > v0rv(3);
+    v0rv[0] = 0; v0rv[1] = 1; v0rv[2] = 2;
+    ZStar<int>::Vector v0r0(v0rv);
+    v0rv[0] = 1; v0rv[2] = 1;
+    ZStar<int>::Vector v0r1(v0rv);
+    v0rv[0] = 2; v0rv[2] = 0;
+    ZStar<int>::Vector v0r2(v0rv);
+    VecSet<ZStar<int>::Vector> vset0;
+    vset0.insert(v0r0); vset0.insert(v0r1); vset0.insert(v0r2);
+    tst("Test non-deterministic evaluation (#0)",
+        v0.possible_regs(e0,3,decls0) == vset0);
+
+    /* Test #1 (Singleton domains) */
+    std::vector<Lang::VarDecl> decls1 = decls0;
+    decls1[0].domain = Lang::VarDecl::Domain(1,1);
+    decls1[2].domain = Lang::VarDecl::Domain(1,1);
+    VecSet<ZStar<int>::Vector> vset1;
+    vset1.insert(v0r1);
+    tst("Test non-deterministic evaluation (#1)",
+        v0.possible_regs(e0,3,decls1) == vset1);
+
+    /* Test #2 (No STARS) */
+    tst("Test non-deterministic evaluation (#2)",
+        v0r2.possible_regs(e0,3,decls0) == VecSet<ZStar<int>::Vector>::singleton(v0r2));
+
+    /* Test #3 (No solutions) */
+    tst("Test non-deterministic evaluation (#3)",
+        v0.possible_regs(e0,6,decls0) == VecSet<ZStar<int>::Vector>());
+    
   }
 
   return res;

@@ -28,6 +28,8 @@
  */
 
 #include "constraint.h"
+#include "lang.h"
+#include "vecset.h"
 
 template<class Z> class ZStar{
 public:
@@ -42,9 +44,9 @@ public:
   Z get_int() const throw();
   operator int() const throw() { return get_int(); };
   /* Three synonymes for checking whether this ZStar is STAR. */
-  bool is_wild() { return wild; };
-  bool is_star() { return wild; };
-  bool is_STAR() { return wild; };
+  bool is_wild() const throw() { return wild; };
+  bool is_star() const throw() { return wild; };
+  bool is_STAR() const throw() { return wild; };
   /* Comparisons */
   /* STAR is considered greater than all integers. */
   bool operator==(const ZStar &zs) const throw();
@@ -73,8 +75,10 @@ public:
     Vector(int sz);
     /* A new Vector with sz entries, where entry i has the value f(i). */
     Vector(int sz, std::function<ZStar(int)> &f);
-    /* A new Vector with sz entries, where entry i has the value v[i]. */
+    /* A new Vector with v.size() entries, where entry i has the value v[i]. */
     Vector(const std::vector<ZStar> &v);
+    /* A new Vector with v.size() entries, where entry i is the integer v[i]. */
+    Vector(const std::vector<Z> &v);
     /* A duplicate of v, sharing the same representation. */
     Vector(const Vector &v);
     /* Replaces this vector by v.
@@ -122,6 +126,52 @@ public:
     bool operator!=(const Vector &v) const { return compare(v) != 0; };
     bool operator>=(const Vector &v) const { return compare(v) >= 0; };
     std::string to_string() const throw();
+
+    /* Methods for non-deterministic evaluation */
+
+    /* Returns the set of vectors which are entailed by this vector
+     * and where the expression e evaluates to the unique value value,
+     * where (*this)[r] is the value of register r and decls[r] is the
+     * declaration of register r.
+     *
+     * Pre: For each register r, either (*this)[r] is not STAR or the
+     *      domain of register r in decls is finite.
+     *
+     * I.e. tries to instantiate any STAR in this vector such that e
+     * will evaluate to value.
+     */
+    VecSet<Vector> possible_regs(const Lang::Expr<int> &e, int value,
+                                 const std::vector<Lang::VarDecl> &decls) const;
+    /* Returns the set of vectors which are entailed by this vector
+     * and where the expression b evaluates to true, where (*this)[r]
+     * is the value of register r and decls[r] is the declaration of
+     * register r.
+     *
+     * Pre: For each register r, either (*this)[r] is not STAR or the
+     *      domain of register r in decls is finite.
+     *
+     * I.e. tries to instantiate any STAR in this vector such that b
+     * will evaluate to true.
+     */
+    VecSet<Vector> possible_regs(const Lang::BExpr<int> &b,
+                                 const std::vector<Lang::VarDecl> &decls) const;
+    /* Returns the set of possible values for (*this)[i] given that
+     * decl is the declaration for (*this)[i]. I.e. if (*this)[i] is
+     * an integer j, then {j} is returned, otherwise the domain given
+     * in decl is returned.
+     *
+     * Pre: Either (*this)[i] is not STAR or decl.domain is finite.
+     */
+    VecSet<Z> possible_values(int i, const Lang::VarDecl &decl) const;
+    /* Returs the set of possible values to which the expression e may
+     * valuate given that (*this)[r] is the value of register r, and
+     * that decls[r] is the declaration of register r.
+     *
+     * Pre: For each register r, either (*this)[r] is not STAR or
+     * decls[r] is finite.
+     */
+    VecSet<Z> possible_values(const Lang::Expr<int> &e, 
+                              const std::vector<Lang::VarDecl> &decls) const;
   private:
     /* vec[0] is the reference counter. vec[1] is the number of
      * values in the vector. All subsequent entries in store are

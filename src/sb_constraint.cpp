@@ -496,11 +496,11 @@ std::string SbConstraint::Msg::to_short_string(const SbConstraint::Common &commo
 };
 
 VecSet<int> SbConstraint::possible_values(const Store &mem, const Lang::NML &nml) const{
-  throw new std::logic_error("SbConstraint::possible_values: Not implemented");
+  return mem.possible_values(common.index(nml),common.machine.get_var_decl(nml));
 };
 
 VecSet<int> SbConstraint::possible_values(const Store &reg_store, int pid, const Lang::Expr<int> &e) const{
-  throw new std::logic_error("SbConstraint::possible_values: Not implemented");
+  return reg_store.possible_values(e,common.machine.regs[pid]);
 };
 
 bool SbConstraint::possibly_holds(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
@@ -509,12 +509,12 @@ bool SbConstraint::possibly_holds(const Store &reg_store, int pid, const Lang::B
 
 VecSet<SbConstraint::Store> 
 SbConstraint::possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const{
-  throw new std::logic_error("SbConstraint::possible_reg_stores: Not implemented");
+  return reg_store.possible_regs(e,value,common.machine.regs[pid]);
 };
 
 VecSet<SbConstraint::Store> 
 SbConstraint::possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
-  throw new std::logic_error("SbConstraint::possible_reg_stores: Not implemented");
+  return reg_store.possible_regs(b,common.machine.regs[pid]);
 };
 
 int SbConstraint::index_of_read(Lang::NML nml, int pid) const{

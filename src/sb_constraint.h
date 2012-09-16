@@ -208,20 +208,20 @@ private:
    * unique valuation given by mem, or if mem maps nml to STAR, the
    * whole domain of nml.
    */
-  VecSet<int> possible_values(const Store &mem, const Lang::NML &nml) const;
+  VecSet<int> inline possible_values(const Store &mem, const Lang::NML &nml) const;
   /* Returns the set of values that e can evaluate to when its
    * accessed registers are valuated as indicated by reg_store.
    *
    * pid should be the process evaluating e, i.e., the owner of reg_store.
    */
-  VecSet<int> possible_values(const Store &reg_store, int pid, const Lang::Expr<int> &e) const;
+  VecSet<int> inline possible_values(const Store &reg_store, int pid, const Lang::Expr<int> &e) const;
   /* Returns true iff there is some assignment to the registers
    * accessed by b that is admitted by reg_store, and which satisfies
    * b.
    *
    * pid should be the process evaluating b, i.e., the owner of reg_store.
    */
-  bool possibly_holds(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const;
+  bool inline possibly_holds(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const;
   /* Returns the set of stores which are entailed by reg_store and
    * where the expression e of process pid evaluates to the unique
    * value value.
@@ -229,11 +229,11 @@ private:
    * I.e. tries to instantiate any STAR in reg_store such that e will
    * evaluate to value.
    */
-  VecSet<Store> possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const;
+  VecSet<Store> inline possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const;
   /* Returns the set of stores which are entailed by reg_store and
    * where the expression b of process pid evaluates to true.
    */
-  VecSet<Store> possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const;
+  VecSet<Store> inline possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const;
   /* Returns the index into channel of the message from which process
    * pid would read the value of memory location nml if it were to
    * read in this constraint.
