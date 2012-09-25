@@ -687,6 +687,19 @@ namespace Lang {
     template<class RegId2> Stmt<RegId2> 
     convert(std::function<RegId2(const RegId&)> &rc,
             std::function<MemLoc<RegId2>(const MemLoc<RegId>&)> &mlc) const;
+    /* Returns an Stmt equal to this one, but if this Stmt is a locked
+     * statement, then the contained tree-structure has been flattened
+     * as follows:
+     *
+     * The returned locked statement has a sequence of unique
+     * alternatives a0,...,an, such that no ai contains a locked
+     * statement. Sequences ai = {s0,...,{s0',...,sk'},...,sm} are
+     * flattened into {s0,...,s0',...,sk',...sm}. Sequences ai = {s0}
+     * are replaced by s0.
+     *
+     * Pre: This Stmt is an instruction.
+     */
+    Stmt flatten() const;
     /* Returns a string representation of this statement.
      * 
      * Registers r and memory locations ml will be represented with
@@ -772,6 +785,7 @@ namespace Lang {
      * Then fills them with reads and writes that are in stmts.
      * reads and writes will be sorted and distinct */
     void populate_reads_writes();
+    std::vector<std::vector<Stmt> > flatten_aux() const;
   };
 
   template<class RegId> inline std::ostream &operator<<(std::ostream &os,Expr<RegId> &e){
