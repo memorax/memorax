@@ -41,6 +41,7 @@
 #include "sb_constraint.h"
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
+#include "test.h"
 #include <config.h>
 
 struct Flag{
@@ -592,6 +593,10 @@ int main(int argc, char *argv[]){
       break;
     case DOTIFY: 
       retval = dotify(flags,*input_stream);
+      break;
+    case TEST:
+      Test::add_all_tests();
+      retval = Test::run_tests();
       break;
     default: 
       break;
