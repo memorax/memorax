@@ -595,7 +595,7 @@ int main(int argc, char *argv[]){
       retval = dotify(flags,*input_stream);
       break;
     case TEST:
-      Test::add_all_tests();
+      Test::add_test("Test",Test::test_testing);
       retval = Test::run_tests();
       break;
     default: 

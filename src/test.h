@@ -34,10 +34,6 @@ public:
   static void add_test(std::string suitename,
                        const std::function<void()> &suite);
 
-  static void add_all_tests(){
-    add_test("Test",test_testing);
-  };
-
   static void test_testing(){
     inner_test("Testing works?",true);
   };
