@@ -19,56 +19,7 @@
  */
 
 #include "reachability.h"
-
-Reachability::Timer::Timer(){
-  running = false;
-  offset = 0.0;
-};
-
-void Reachability::Timer::start(){
-  if(!running){
-    start_time = time(0);
-    start_time_c = clock();
-    running = true;
-  }
-};
-
-void Reachability::Timer::stop(){
-  if(running){
-    int stop_time = time(0);
-    clock_t stop_time_c = clock();
-    if(stop_time - start_time > 2){
-      offset += stop_time - start_time;
-    }else{
-      offset += double(stop_time_c - start_time_c) / CLOCKS_PER_SEC;
-    }
-    running = false;
-  }
-};
-
-void Reachability::Timer::reset(){
-  offset = 0.0;
-  start_time = time(0);
-  start_time_c = clock();
-};
-
-double Reachability::Timer::get_time() const{
-  if(running){
-    int stop_time = time(0);
-    clock_t stop_time_c = clock();
-    if(stop_time - start_time > 2){
-      return offset + double(stop_time - start_time);
-    }else{
-      return offset + double(stop_time_c - start_time_c) / CLOCKS_PER_SEC;
-    }
-  }else{
-    return offset;
-  }
-};
-
-bool Reachability::Timer::is_running() const {
-  return running;
-};
+#include <iomanip>
 
 Reachability::Result::Result(const Machine &m)
   : result(FAILURE), trace(0), generated_constraints(0), stored_constraints(0), machine(m){
@@ -86,7 +37,7 @@ std::string Reachability::Result::to_string() const{
      << "  Reachable:             " << reach << "\n"
      << "  Generated constraints: " << generated_constraints << "\n"
      << "  Size of visited set:   " << stored_constraints << "\n"
-     << "  Time consumption:      " << timer.get_time() << " s\n";
+     << "  Time consumption:      " << std::setprecision(1) << std::fixed << timer.get_time() << " s\n";
   return ss.str();
 };
 
