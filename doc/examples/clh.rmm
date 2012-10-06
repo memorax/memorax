@@ -13,24 +13,12 @@ registers
   $p = 0 : [0:2]
 text
 L0:
-  either{
-     assume: $i = 0; write: m0 := 1
-  or assume: $i = 1; write: m1 := 1
-  or assume: $i = 2; write: m2 := 1
-  };
+  write: [$i] := 1;
   read: $p := lock;
   cas(lock,$p,$i);
-  either{
-     assume: $p = 0; read: m0 = 0
-  or assume: $p = 1; read: m1 = 0
-  or assume: $p = 2; read: m2 = 0 
-  };
+  read: [$p] = 0;
 CS:
-  either{
-     assume: $i = 0; write: m0 := 0
-  or assume: $i = 1; write: m1 := 0
-  or assume: $i = 2; write: m2 := 0
-  };
+  write: [$i] := 0;
   $i := $p;
   goto L0
 
@@ -40,24 +28,12 @@ registers
   $p = 1 : [0:2]
 text
 L0:
-  either{
-     assume: $i = 0; write: m0 := 1
-  or assume: $i = 1; write: m1 := 1
-  or assume: $i = 2; write: m2 := 1
-  };
+  write: [$i] := 1;
   read: $p := lock;
   cas(lock,$p,$i);
-  either{
-     assume: $p = 0; read: m0 = 0
-  or assume: $p = 1; read: m1 = 0
-  or assume: $p = 2; read: m2 = 0 
-  };
+  read: [$p] = 0;
 CS:
-  either{
-     assume: $i = 0; write: m0 := 0
-  or assume: $i = 1; write: m1 := 0
-  or assume: $i = 2; write: m2 := 0
-  };
+  write: [$i] := 0;
   $i := $p;
   goto L0
 

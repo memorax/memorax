@@ -24,6 +24,7 @@
 #include <set>
 #include <vector>
 #include "log.h"
+#include <functional>
 
 namespace Parser{
   typedef std::string rettype;
@@ -37,11 +38,14 @@ namespace Parser{
   bexpr_t p_bexpr_and_r(Lexer&,const bexpr_t&);
   bexpr_t p_bexpr_atom(Lexer&);
   bexpr_t p_bexpr_atom_r(Lexer&,const expr_t&);
-  stmt_t::labeled_stmt_t p_lstmt(Lexer&);
-  stmt_t p_stmt_list(Lexer&); // Returns a Lang::SequenceStatement.
+  stmt_t::labeled_stmt_t p_lstmt(Lexer&,const Context&);
+  stmt_t p_stmt_list(Lexer&,const Context&); // Returns a Lang::SequenceStatement.
+  stmt_t resolve_pointer(const memloc_or_pointer_t&,
+                         const std::function<stmt_t(const memloc_t&)>&,
+                         const Context&);
   Lang::label_t p_label(Lexer&);
-  std::pair<Proc,int> p_proc(Lexer&); // Returns (process,multiplier)
-  std::vector<Proc> p_proc_list(Lexer&);
+  std::pair<Proc,int> p_proc(Lexer&,const Context&); // Returns (process,multiplier)
+  std::vector<Proc> p_proc_list(Lexer&,const Context&);
   enum declaration_type{
     DCL_ML, // declaration for memory location
     DCL_REG // declaration for register
@@ -145,7 +149,7 @@ Parser::expr_t Parser::p_expr(Lexer &lex)
   }
 }
 
-Parser::stmt_t Parser::p_stmt_list(Lexer &lex){
+Parser::stmt_t Parser::p_stmt_list(Lexer &lex,const Context &ctx){
   Lexer::Token tok;
   Lexer::TokenPos pos0;
 
@@ -155,11 +159,11 @@ Parser::stmt_t Parser::p_stmt_list(Lexer &lex){
 
   std::vector<stmt_t::labeled_stmt_t> seq;
 
-  seq.push_back(p_lstmt(lex));
+  seq.push_back(p_lstmt(lex,ctx));
   
   lex >> tok;
   while(tok.type == Lexer::SEMICOLON){
-    seq.push_back(p_lstmt(lex));
+    seq.push_back(p_lstmt(lex,ctx));
     lex >> tok;
   }
   lex.putback(tok);
@@ -167,7 +171,7 @@ Parser::stmt_t Parser::p_stmt_list(Lexer &lex){
   return stmt_t::sequence(seq,pos0);
 }
 
-Parser::stmt_t::labeled_stmt_t Parser::p_lstmt(Lexer &lex){
+Parser::stmt_t::labeled_stmt_t Parser::p_lstmt(Lexer &lex,const Context &ctx){
   Lexer::Token tok;
   lex >> tok;
 
@@ -179,10 +183,51 @@ Parser::stmt_t::labeled_stmt_t Parser::p_lstmt(Lexer &lex){
     lex.putback(tok);
     lbl = "";
   }
-  return stmt_t::labeled_stmt_t(lbl,p_stmt(lex));
+  return stmt_t::labeled_stmt_t(lbl,p_stmt(lex,ctx));
 }
 
-Parser::stmt_t Parser::p_stmt(Lexer &lex) 
+Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
+                                       const std::function<stmt_t(const memloc_t&)> &f,
+                                       const Context &ctx){
+  if(ml.is_pointer){
+    const expr_t &e = ml.pointer;
+    if(e.is_integer()){
+      if(e.get_integer() >= 0 && e.get_integer() < int(ctx.global_vars.size())){
+        return f(memloc_t::global(ctx.global_vars[e.get_integer()].name));
+      }else{
+        throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+".",ml.pos);
+      }
+    }else{
+      std::vector<stmt_t> v;
+      for(unsigned i = 0; i < ctx.global_vars.size(); ++i){
+        stmt_t s = f(memloc_t::global(ctx.global_vars[i].name));
+        std::vector<stmt_t::labeled_stmt_t> seq;
+        seq.push_back(stmt_t::assume(bexpr_t::eq(e,expr_t::integer(i)),s.get_pos()));
+        seq.push_back(s);
+        if(s.is_fence()){
+          std::vector<stmt_t> vv;
+          vv.push_back(stmt_t::sequence(seq,s.get_pos()));
+          v.push_back(stmt_t::locked_block(vv,s.get_pos()));
+        }else{
+          v.push_back(stmt_t::sequence(seq,s.get_pos()));
+        }
+      }
+      if(v.size() == 0){
+        throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+".",ml.pos);
+      }else{
+        if(v[0].get_writes().size() == 0 || v[0].is_fence()){
+          return stmt_t::locked_block(v,v[0].get_pos());
+        }else{
+          return stmt_t::either(v,v[0].get_pos());
+        }
+      }
+    }
+  }else{
+    return f(ml.memloc);
+  }
+};
+
+Parser::stmt_t Parser::p_stmt(Lexer &lex,const Context &ctx) 
   throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*){
   Lexer::Token tok,tok1,tok2;
   lex >> tok;
@@ -196,31 +241,41 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
       lex >> tok1;
       if(tok1.type == Lexer::REG){
         force(lex,Lexer::ASSIGNMENT);
-        return stmt_t::read_assign(tok1.value,p_memloc(lex),tok.pos);
+        return resolve_pointer(p_memloc(lex,ctx),[&tok1,&tok](const memloc_t &ml){ 
+            return stmt_t::read_assign(tok1.value,ml,tok.pos);
+          },ctx);
       }else{
         lex.putback(tok1);
-        Parser::memloc_t ml = p_memloc(lex);
+        Parser::memloc_or_pointer_t ml = p_memloc(lex,ctx);
         force(lex,Lexer::EQ);
-        return stmt_t::read_assert(ml,p_expr(lex),tok.pos);
+        expr_t e = p_expr(lex);
+        return resolve_pointer(ml,[&e,&tok](const memloc_t &ml){
+            return stmt_t::read_assert(ml,e,tok.pos);
+          },ctx);
       }
     }
   case Lexer::WRITE:
     {
       force(lex,Lexer::COLON);
-      Parser::memloc_t ml = p_memloc(lex);
+      Parser::memloc_or_pointer_t ml = p_memloc(lex,ctx);
       force(lex,Lexer::ASSIGNMENT);
-      return stmt_t::write(ml,p_expr(lex),tok.pos);
+      expr_t e = p_expr(lex);
+      return resolve_pointer(ml,[&e,&tok](const memloc_t &ml){
+          return stmt_t::write(ml,e,tok.pos);
+        },ctx);
     }
   case Lexer::CAS: 
     {
       force(lex,Lexer::LPAREN);
-      Parser::memloc_t ml = p_memloc(lex);
+      Parser::memloc_or_pointer_t ml = p_memloc(lex,ctx);
       force(lex,Lexer::COMMA);
       expr_t v0(p_expr(lex));
       force(lex,Lexer::COMMA);
       expr_t v1(p_expr(lex));
       force(lex,Lexer::RPAREN);
-      return stmt_t::cas(ml,v0,v1,tok.pos);
+      return resolve_pointer(ml,[&v0,&v1,&tok](const memloc_t &ml){
+          return stmt_t::cas(ml,v0,v1,tok.pos);
+        },ctx);
     }
   case Lexer::REG: 
     {
@@ -232,10 +287,10 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
       bexpr_t b(p_bexpr(lex));
 
       force(lex,Lexer::THEN);
-      stmt_t::labeled_stmt_t s0 = p_lstmt(lex);
+      stmt_t::labeled_stmt_t s0 = p_lstmt(lex,ctx);
       lex >> tok1;
       if(tok1.type == Lexer::ELSE){
-        stmt_t::labeled_stmt_t s1 = p_lstmt(lex);
+        stmt_t::labeled_stmt_t s1 = p_lstmt(lex,ctx);
         return stmt_t::if_stmt(b,s0,s1,tok.pos);
       }else{
         lex.putback(tok1);
@@ -246,7 +301,7 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
     {
       bexpr_t b(p_bexpr(lex));
       force(lex,Lexer::DO);
-      return stmt_t::while_stmt(b,p_lstmt(lex),tok.pos);
+      return stmt_t::while_stmt(b,p_lstmt(lex,ctx),tok.pos);
     }
   case Lexer::GOTO:
     {
@@ -262,10 +317,10 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
       lex.putback(lctok);
       force(lex,Lexer::LCURL);
 
-      seq.push_back(p_stmt_list(lex));
+      seq.push_back(p_stmt_list(lex,ctx));
       lex >> tok;
       while(tok.type == Lexer::EITHER_OR){
-        seq.push_back(p_stmt_list(lex));
+        seq.push_back(p_stmt_list(lex,ctx));
         lex >> tok;
       }
       lex.putback(tok);
@@ -283,14 +338,17 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
       lex >> lctok;
       if(lctok.type == Lexer::WRITE){
         force(lex,Lexer::COLON);
-        Parser::memloc_t ml = p_memloc(lex);
+        Parser::memloc_or_pointer_t ml = p_memloc(lex,ctx);
         force(lex,Lexer::ASSIGNMENT);
-        return stmt_t::locked_write(ml,p_expr(lex),pos0);
+        expr_t e = p_expr(lex);
+        return resolve_pointer(ml,[&e,&pos0](const memloc_t &ml){
+            return stmt_t::locked_write(ml,e,pos0);
+          },ctx);
       }else{
         lex.putback(lctok);
         force(lex,Lexer::LCURL);
 
-        stmt_t s = p_stmt_list(lex);
+        stmt_t s = p_stmt_list(lex,ctx);
         std::string cmt;
         if(!stmt_t::check_locked_invariant(s,&cmt)){
           throw new SyntaxError("Error in locked block at "+lctok.pos.to_long_string()+": "+cmt,lctok.pos);
@@ -298,7 +356,7 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
         seq.push_back(s);
         lex >> tok;
         while(tok.type == Lexer::EITHER_OR){
-          s = p_stmt_list(lex);
+          s = p_stmt_list(lex,ctx);
           if(!stmt_t::check_locked_invariant(s,&cmt)){
             throw new SyntaxError("Error in locked block at "+tok.pos.to_long_string()+": "+cmt,tok.pos);
           }
@@ -314,7 +372,7 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex)
     }
   case Lexer::LCURL:
     {
-      stmt_t sl = p_stmt_list(lex);
+      stmt_t sl = p_stmt_list(lex,ctx);
       force(lex,Lexer::RCURL,"Expected '}' at "," to match '{' at "+
             tok.pos.to_long_string()+".");
       return sl;
@@ -438,7 +496,7 @@ Parser::bexpr_t Parser::p_bexpr_atom_r(Lexer &lex,const expr_t &left){
   }
 }
 
-Parser::memloc_t Parser::p_memloc(Lexer &lex) 
+Parser::memloc_or_pointer_t Parser::p_memloc(Lexer &lex, const Context &ctx) 
   throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*){
   Lexer::Token tok0, tok1, tok2, tok3;
   lex >> tok0;
@@ -452,7 +510,7 @@ Parser::memloc_t Parser::p_memloc(Lexer &lex)
         if(tok2.type == Lexer::MY){
           lex >> tok3;
           if(tok3.type == Lexer::RBRAK){
-            return Lang::MemLoc<std::string>::local(tok0.value);
+            return memloc_or_pointer_t(Lang::MemLoc<std::string>::local(tok0.value),tok0.pos);
           }else{
             throw new SyntaxError("Expected ']' at "+tok3.pos.to_long_string()+
                                   " to match '[' at "+tok1.pos.to_long_string()+".",tok3.pos);
@@ -464,7 +522,7 @@ Parser::memloc_t Parser::p_memloc(Lexer &lex)
             std::stringstream ss;
             ss << tok2.value;
             ss >> i;
-            return Lang::MemLoc<std::string>::local(tok0.value,i);
+            return memloc_or_pointer_t(Lang::MemLoc<std::string>::local(tok0.value,i),tok0.pos);
           }else{
             throw new SyntaxError("Expected ']' at "+tok3.pos.to_long_string()+
                                   " to match '[' at "+tok1.pos.to_long_string()+".",tok3.pos);
@@ -475,43 +533,16 @@ Parser::memloc_t Parser::p_memloc(Lexer &lex)
         }
       }else{
         lex.putback(tok1);
-        return Lang::MemLoc<std::string>::global(tok0.value);
+        return memloc_or_pointer_t(Lang::MemLoc<std::string>::global(tok0.value),tok0.pos);
       }
     }
   case Lexer::LBRAK:
     {
       lex >> tok1;
-      if(tok1.type == Lexer::AT){
-        lex >> tok2;
-        if(tok2.type == Lexer::NAT){
-          lex >> tok3;
-          if(tok3.type == Lexer::RBRAK){
-            int i;
-            std::stringstream ss;
-            ss << tok2.value;
-            ss >> i;
-            return Lang::MemLoc<std::string>::int_deref(i);
-          }else{
-            throw new SyntaxError("Expected ']' at "+tok3.pos.to_long_string()+
-                                  " to match '[' at "+tok0.pos.to_long_string()+".",tok3.pos);
-          }
-        }else{
-          throw new SyntaxError("Expected natural number (pointer value) at "+
-                                tok2.pos.to_long_string()+".",tok2.pos);
-        }
-      }else if(tok1.type == Lexer::REG){
-        lex >> tok2;
-        if(tok2.type == Lexer::RBRAK){
-          std::string reg = tok1.value;
-          return Lang::MemLoc<std::string>::reg_deref(reg);
-        }else{
-          throw new SyntaxError("Expected ']' at "+tok2.pos.to_long_string()+
-                                " to match '[' at "+tok0.pos.to_long_string()+".",tok2.pos);
-        }
-      }else{
-        throw new SyntaxError("Expected literal pointer or register at "+
-                              tok1.pos.to_long_string()+".",tok1.pos);
-      }
+      lex.putback(tok1);
+      expr_t e = p_expr(lex);
+      force(lex,Lexer::RBRAK);
+      return memloc_or_pointer_t(e,tok0.pos);
     }
   default:
     throw new SyntaxError("Expected memory location at "+tok0.pos.to_long_string()+".",tok0.pos);
@@ -528,7 +559,7 @@ Lang::label_t Parser::p_label(Lexer &lex){
   throw new SyntaxError("Expected label at "+tok.pos.to_long_string()+".",tok.pos);
 }
 
-std::pair<Parser::Proc,int> Parser::p_proc(Lexer &lex){
+std::pair<Parser::Proc,int> Parser::p_proc(Lexer &lex, const Context &ctx){
   force(lex,Lexer::PROCESS);
   Lexer::Token tok0,tok1,tok2;
   lex >> tok0;
@@ -570,14 +601,14 @@ std::pair<Parser::Proc,int> Parser::p_proc(Lexer &lex){
 
   force(lex,Lexer::TEXT);
 
-  return std::pair<Proc,int>(Proc(vi,ri,p_stmt_list(lex)),proc_count);
+  return std::pair<Proc,int>(Proc(vi,ri,p_stmt_list(lex,ctx)),proc_count);
 }
 
-std::vector<Parser::Proc> Parser::p_proc_list(Lexer &lex){
+std::vector<Parser::Proc> Parser::p_proc_list(Lexer &lex, const Context &ctx){
 
   std::vector<Proc> vec;
 
-  std::pair<Proc,int> p = p_proc(lex);
+  std::pair<Proc,int> p = p_proc(lex,ctx);
   for(int i = 0; i < p.second; i++)
     vec.push_back(p.first);
   
@@ -585,7 +616,7 @@ std::vector<Parser::Proc> Parser::p_proc_list(Lexer &lex){
   lex >> tok;
   while(tok.type == Lexer::PROCESS){
     lex.putback(tok);
-    std::pair<Proc,int> p = p_proc(lex);
+    std::pair<Proc,int> p = p_proc(lex,ctx);
     for(int i = 0; i < p.second; i++)
       vec.push_back(p.first);
     lex >> tok;
@@ -818,11 +849,11 @@ Parser::Test Parser::p_test(Lexer &lex) throw(SyntaxError*,Lang::Exception*,Lexe
   lex >> tok;
   lex.putback(tok);
   if(tok.type == Lexer::PROCESS){
-    test.processes = p_proc_list(lex);
+    test.processes = p_proc_list(lex,Context());
   }else{
     force(lex,Lexer::DATA);
     test.global_vars = p_var_decl_list(lex,DCL_ML);
-    test.processes = p_proc_list(lex);
+    test.processes = p_proc_list(lex,Context(test.global_vars));
   }
 
   force(lex,Lexer::TOKEOF);
