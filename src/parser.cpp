@@ -216,7 +216,7 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
         throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+".",ml.pos);
       }else{
         if(v[0].get_writes().size() == 0 || v[0].is_fence()){
-          return stmt_t::locked_block(v,v[0].get_pos());
+          return stmt_t::locked_block(v,v[0].get_pos()).flatten();
         }else{
           return stmt_t::either(v,v[0].get_pos());
         }
