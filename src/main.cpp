@@ -41,6 +41,7 @@
 #include "sb_constraint.h"
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
+#include "zstar.h"
 #include <config.h>
 
 struct Flag{
@@ -119,6 +120,31 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
     }
   }
 };
+
+int test(const std::map<std::string,Flag> flags){
+  inform_ignore<char**>(0,0,flags);
+  int result = 0;
+
+  std::function<void(std::string,int)> tst = 
+    [&result](std::string t, int r){
+    if(r){
+      result = 1;
+      Log::msg << t << ": FAILURE\n";
+    }else{
+      Log::msg << t << ": Ok\n";
+    }
+  };
+
+  tst("ZStar<int>",ZStar<int>::test());
+
+  if(result){
+    Log::result << "Test summary: FAILURE\n";
+  }else{
+    Log::result << "Test summary: Ok\n";
+  }
+
+  return result;
+}
 
 int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
   std::string used_flags[] = {"a","k","cegar","max-refinements","only-one","rff"};
@@ -592,6 +618,9 @@ int main(int argc, char *argv[]){
       break;
     case DOTIFY: 
       retval = dotify(flags,*input_stream);
+      break;
+    case TEST:
+      retval = test(flags);
       break;
     default: 
       break;

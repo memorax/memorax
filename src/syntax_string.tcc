@@ -117,7 +117,7 @@ template<class Var> SyntaxString<Var> &SyntaxString<Var>::operator=(const Syntax
   return *this;
 }
 
-template<class Var> template<class Var2> SyntaxString<Var2> SyntaxString<Var>::convert(std::function<Var2(const Var&)> &vc) const throw(){
+template<class Var> template<class Var2> SyntaxString<Var2> SyntaxString<Var>::convert(std::function<Var2(const Var&)> &vc) const{
   SyntaxString<Var2> ss(symbol_count,const_count,arg_count);
 
   int *const_map = new int[const_count];

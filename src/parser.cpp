@@ -25,6 +25,7 @@
 #include <vector>
 #include "log.h"
 #include <functional>
+#include "zstar.h"
 
 namespace Parser{
   typedef std::string rettype;
@@ -198,22 +199,37 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
         throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+".",ml.pos);
       }
     }else{
+      std::function<int(const std::string&)> regids = 
+        [&ctx,&ml](const std::string &s){
+        for(unsigned i = 0; i < ctx.regs.size(); ++i){
+          if(ctx.regs[i].name == s){
+            return int(i);
+          }
+        }
+        throw new SyntaxError("Undeclared register '"+s+"' in pointer at "+ml.pos.to_long_string()+".",ml.pos);
+      };
+      Lang::Expr<int> e_i = e.convert(regids);
+      ZStar<int>::Vector regstars(ctx.regs.size());
+      
       std::vector<stmt_t> v;
       for(unsigned i = 0; i < ctx.global_vars.size(); ++i){
-        stmt_t s = f(memloc_t::global(ctx.global_vars[i].name));
-        std::vector<stmt_t::labeled_stmt_t> seq;
-        seq.push_back(stmt_t::assume(bexpr_t::eq(e,expr_t::integer(i)),s.get_pos()));
-        seq.push_back(s);
-        if(s.is_fence()){
-          std::vector<stmt_t> vv;
-          vv.push_back(stmt_t::sequence(seq,s.get_pos()));
-          v.push_back(stmt_t::locked_block(vv,s.get_pos()));
-        }else{
-          v.push_back(stmt_t::sequence(seq,s.get_pos()));
+        /* Check whether this variable can be pointed to by e */
+        if(regstars.possible_values(e_i,ctx.regs).count(i) > 0){
+          stmt_t s = f(memloc_t::global(ctx.global_vars[i].name));
+          std::vector<stmt_t::labeled_stmt_t> seq;
+          seq.push_back(stmt_t::assume(bexpr_t::eq(e,expr_t::integer(i)),s.get_pos()));
+          seq.push_back(s);
+          if(s.is_fence()){
+            std::vector<stmt_t> vv;
+            vv.push_back(stmt_t::sequence(seq,s.get_pos()));
+            v.push_back(stmt_t::locked_block(vv,s.get_pos()));
+          }else{
+            v.push_back(stmt_t::sequence(seq,s.get_pos()));
+          }
         }
       }
       if(v.size() == 0){
-        throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+".",ml.pos);
+        throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+". (Cannot point to any memory location.)",ml.pos);
       }else{
         if(v[0].get_writes().size() == 0 || v[0].is_fence()){
           return stmt_t::locked_block(v,v[0].get_pos()).flatten();
@@ -599,9 +615,11 @@ std::pair<Parser::Proc,int> Parser::p_proc(Lexer &lex, const Context &ctx){
   }
   lex.putback(tok0);
 
+  Context pctx(ctx.global_vars,ri);
+
   force(lex,Lexer::TEXT);
 
-  return std::pair<Proc,int>(Proc(vi,ri,p_stmt_list(lex,ctx)),proc_count);
+  return std::pair<Proc,int>(Proc(vi,ri,p_stmt_list(lex,pctx)),proc_count);
 }
 
 std::vector<Parser::Proc> Parser::p_proc_list(Lexer &lex, const Context &ctx){

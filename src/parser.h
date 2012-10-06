@@ -95,9 +95,14 @@ namespace Parser{
    */
   struct Context{
     Context() {};
-    Context(const std::vector<Lang::VarDecl> &gvars) : global_vars(gvars) {};
+    Context(const std::vector<Lang::VarDecl> &gvars) 
+      : global_vars(gvars) {};
+    Context(const std::vector<Lang::VarDecl> &gvars, const std::vector<Lang::VarDecl> &regs) 
+      : global_vars(gvars), regs(regs) {};
     /* Declarations for all global variables. */
     std::vector<Lang::VarDecl> global_vars;
+    /* Declarations for all registers of the currently parsed process */
+    std::vector<Lang::VarDecl> regs;
   };
 
   /***************************************/

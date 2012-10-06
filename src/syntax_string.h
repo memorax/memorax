@@ -77,7 +77,7 @@ public:
 
   /* Converts all constants c and arguments a to respectively vc(c)
    * and vc(a). */
-  template<class Var2> SyntaxString<Var2> convert(std::function<Var2(const Var&)> &vc) const throw();
+  template<class Var2> SyntaxString<Var2> convert(std::function<Var2(const Var&)> &vc) const;
 
   /* Evaluates this expression. Constant variables v are evaluated to
    * c[v]. Arguments v are evaluated to A[v]. If this expression is
