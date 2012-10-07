@@ -28,6 +28,7 @@
 class Lexer{
 public:
   Lexer(std::istream&);
+  virtual ~Lexer();
 
   enum TokenType {
     UNDEF, 
@@ -70,17 +71,18 @@ public:
 
   class BadToken : public std::exception{
     std::string value;
+    std::string msg;
     TokenPos pos;
   public:
     BadToken(std::string,TokenPos);
     virtual ~BadToken() throw() {};
     std::string to_string() const;
-    const char *what() const throw(){ return to_string().c_str(); };
+    const char *what() const throw(){ return msg.c_str(); };
   };
 
-  Lexer& operator>>(Token&) throw(BadToken*);
-  Lexer& putback(Token&);
-  operator bool() const;
+  virtual Lexer& operator>>(Token&) throw(BadToken*);
+  virtual Lexer& putback(Token&);
+  virtual operator bool() const;
 private:
   class PosIStream{
     std::istream &is;

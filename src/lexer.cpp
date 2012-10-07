@@ -21,6 +21,9 @@
 #include "lexer.h"
 #include <sstream>
 
+Lexer::~Lexer(){
+};
+
 Lexer::PosIStream::PosIStream(std::istream &iss) : is(iss) {
   cur_pos.lineno = 1;
   cur_pos.charno = 0;
@@ -126,10 +129,12 @@ std::ostream& operator<<(std::ostream& os, const Lexer::Token& tok){
   return os;
 }
 
-Lexer::BadToken::BadToken(std::string s, TokenPos p) : value(s), pos(p) {}
+Lexer::BadToken::BadToken(std::string s, TokenPos p) : value(s), pos(p) {
+  msg = "Bad token "+(value != "" ? "'"+value+"' " : "")+"at "+pos.to_long_string();
+}
 
 std::string Lexer::BadToken::to_string() const{
-  return "Bad token "+(value != "" ? "'"+value+"' " : "")+"at "+pos.to_long_string();
+  return msg;
 }
 
 std::ostream& operator<<(std::ostream& os, const Lexer::BadToken& btok){

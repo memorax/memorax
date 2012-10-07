@@ -21,6 +21,7 @@
 
 #include <iostream>
 #include "lexer.h"
+#include "preprocessor.h"
 #include "machine.h"
 #include "shellcmd.h"
 #include <stdexcept>
@@ -77,7 +78,7 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
  * before returning it.
  */
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  Lexer lex(input_stream);
+  PPLexer lex(input_stream);
   Machine *m0 = new Machine(Parser::p_test(lex));
   if(flags.count("rff")){
     Machine *m1 = m0->remove_registers();
