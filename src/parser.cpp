@@ -211,10 +211,19 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
       Lang::Expr<int> e_i = e.convert(regids);
       ZStar<int>::Vector regstars(ctx.regs.size());
       
+      /* Check if e contains unbounded registers */
+      bool e_has_unbounded_reg = false;
+      std::set<int> regs = e_i.get_registers();
+      for(auto it = regs.begin(); !e_has_unbounded_reg && it != regs.end(); ++it){
+        if(ctx.regs[*it].domain.is_int()){
+          e_has_unbounded_reg = true;
+        }
+      }
+      
       std::vector<stmt_t> v;
       for(unsigned i = 0; i < ctx.global_vars.size(); ++i){
         /* Check whether this variable can be pointed to by e */
-        if(regstars.possible_values(e_i,ctx.regs).count(i) > 0){
+        if(e_has_unbounded_reg || regstars.possible_values(e_i,ctx.regs).count(i) > 0){
           stmt_t s = f(memloc_t::global(ctx.global_vars[i].name));
           std::vector<stmt_t::labeled_stmt_t> seq;
           seq.push_back(stmt_t::assume(bexpr_t::eq(e,expr_t::integer(i)),s.get_pos()));
