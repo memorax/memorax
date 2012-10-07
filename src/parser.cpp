@@ -219,23 +219,13 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
           std::vector<stmt_t::labeled_stmt_t> seq;
           seq.push_back(stmt_t::assume(bexpr_t::eq(e,expr_t::integer(i)),s.get_pos()));
           seq.push_back(s);
-          if(s.is_fence()){
-            std::vector<stmt_t> vv;
-            vv.push_back(stmt_t::sequence(seq,s.get_pos()));
-            v.push_back(stmt_t::locked_block(vv,s.get_pos()));
-          }else{
-            v.push_back(stmt_t::sequence(seq,s.get_pos()));
-          }
+          v.push_back(stmt_t::sequence(seq,s.get_pos()));
         }
       }
       if(v.size() == 0){
         throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+". (Cannot point to any memory location.)",ml.pos);
       }else{
-        if(v[0].get_writes().size() == 0 || v[0].is_fence()){
-          return stmt_t::locked_block(v,v[0].get_pos()).flatten();
-        }else{
-          return stmt_t::either(v,v[0].get_pos());
-        }
+        return stmt_t::either(v,v[0].get_pos());
       }
     }
   }else{

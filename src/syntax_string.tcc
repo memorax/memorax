@@ -229,7 +229,7 @@ template<class Var> std::string SyntaxString<Var>::to_inner_string(int i, const 
   case FALSE:
     return "false";
   case EQ:
-    return to_inner_string(i+2,vts,arg_names)+" == "+to_inner_string(i+(symbols[i+1]),vts,arg_names);
+    return to_inner_string(i+2,vts,arg_names)+" = "+to_inner_string(i+(symbols[i+1]),vts,arg_names);
   case NEQ:
     return to_inner_string(i+2,vts,arg_names)+" != "+to_inner_string(i+(symbols[i+1]),vts,arg_names);
   case LT:
