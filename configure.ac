@@ -38,7 +38,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <list>]],
                   [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile auto-typed declaration. Does your compiler support C++0x?])])
 AC_MSG_CHECKING([for gmpxx])
 OLDLIBS=$LIBS
-LIBS="$LIBS -lgmpxx"
+LIBS="$LIBS -lgmpxx -lgmp"
 AC_LINK_IFELSE([AC_LANG_PROGRAM(
                     [[#include <gmpxx.h>
                       #include <iostream>]],
@@ -54,7 +54,7 @@ if test xxx$HAVE_LIBGMPXX = xxxyes ; then
    AC_CHECK_HEADER([gmp.h],
                    [],
                    [AC_MSG_FAILURE([Could not find header file gmp.h.])])
-   LIBS="$LIBS -lmathsat"
+   LIBS="$OLDLIBS -lmathsat -lgmpxx -lgmp"
    AC_CHECK_HEADER([mathsat.h],
                    [HAVE_MATHSAT_H='yes'],
                    [HAVE_MATHSAT_H='no';
