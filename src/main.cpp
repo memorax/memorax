@@ -42,6 +42,8 @@
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
 #include <config.h>
+#include "timer.h"
+#include <iomanip>
 
 struct Flag{
   Flag() {};
@@ -135,10 +137,8 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
 
   int retval;
 
-  int start_time, stop_time;
-  clock_t start_time_c, stop_time_c;
-  start_time = time(0);
-  start_time_c = clock();
+  Timer fencins_timer;
+  fencins_timer.start();
 
   if(flags.find("a")->second.argument == "pb"){
     Machine *tmp_machine = machine.release();
@@ -234,12 +234,13 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
   }
-  stop_time = time(0);
-  stop_time_c = clock();
-  if(stop_time - start_time < 2){
-    Log::result << "Total time to insert fences: " << double(stop_time_c - start_time_c) / CLOCKS_PER_SEC << "s.\n";
-  }else{
-    Log::result << "Total time to insert fences: " << stop_time - start_time << "s.\n";
+
+  {
+    fencins_timer.stop();
+    std::stringstream ss;
+    ss << "Total time to insert fences: "
+       << std::setprecision(1) << std::fixed << fencins_timer.get_time() << " s\n";
+    Log::result << ss.str();
   }
 
   return retval;

@@ -23,6 +23,7 @@
 
 #include "trace.h"
 #include "machine.h"
+#include "timer.h"
 
 /* Reachability is an abstract class that should be inherited by
  * classes implementing reachability analysis.
@@ -35,31 +36,6 @@ public:
     REACHABLE,
     UNREACHABLE,
     FAILURE
-  };
-
-  /* A stop-watch-like timer.
-   * Used to measure the time consumption of reachability analysis.
-   */
-  class Timer{
-  public:
-    Timer();
-    /* Start the timer 
-     * If the timer is already running, do nothing */
-    void start();
-    /* Stop the timer
-     * If the timer is not running, do nothing */
-    void stop();
-    /* Set the timer to 0.0 */
-    void reset();
-    /* Get the current time of the timer */
-    double get_time() const;
-    /* Is the timer running? */
-    bool is_running() const;
-  private:
-    int start_time; // Start time in seconds since the Epoch
-    clock_t start_time_c; // Start time as used CPU time in clocks
-    double offset; // The complete time consumption measured at the last stopping of the timer
-    bool running; // Is the timer running?
   };
 
   /* A Result object expresses the result of a reachability
