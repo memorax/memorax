@@ -10,6 +10,7 @@
 \usepackage{cleveref}
 \usepackage{cite}
 \usepackage{verbatim}
+\usepackage{fancyvrb}
 \usepackage{tikz}
 \usetikzlibrary{backgrounds,calc}
 
@@ -27,7 +28,7 @@
 
 \pagebreak
 
-\begin{verbatim}
+\begin{Verbatim}[fontsize=\small]
 Copyright (C)  2012  Carl Leonardsson
 Permission is granted to copy, distribute and/or modify this document
 under the terms of the GNU Free Documentation License, Version 1.3
@@ -35,7 +36,7 @@ or any later version published by the Free Software Foundation;
 with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
 A copy of the license is included in the section entitled ``GNU
 Free Documentation License''.
-\end{verbatim}
+\end{Verbatim}
 
 \pagebreak
 
@@ -582,7 +583,8 @@ again. We get the following result:
 
 \noindent
 \begin{verbatim}
-$ /path/to/memorax/build/bin/memorax fencins --json -v --abstraction sb
+$ /path/to/memorax/build/bin/memorax fencins --json -v \
+    --abstraction sb
 Currently examining fence set:
   (No fences)
 
