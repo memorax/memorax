@@ -93,6 +93,7 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
   Log::result << "Found " << fence_sets.size() << " fence set";
   if(fence_sets.size() == 0){
     Log::result << "s.\n";
+    Log::result << "\nNOTICE: This means that the program is unsafe regardless of fences!\n\n";
   }else{
     if(fence_sets.size() == 1){
       Log::result << ":\n";
@@ -103,7 +104,8 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
     for(auto it = fence_sets.begin(); it != fence_sets.end(); it++){
       Log::result << "Fence set #" << ctr << ":\n";
       if(it->get_writes().empty()){
-        Log::result << "  (No fences)\n\n";
+        Log::result << "  (No fences)\n";
+        Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
       }else{
         const std::set<Machine::PTransition> &writes = it->get_writes();
         for(auto wit = writes.begin(); wit != writes.end(); wit++){
