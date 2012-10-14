@@ -911,7 +911,12 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         num = 0
         if self.output_sel.get() == "output":
             for lnk in self.fence_links:
-                pos0 = "{0}.0".format(lnk['output_line'])
+                # Avoid spaces at the beginning of the line
+                c = 0
+                while (self.wg_output.get("{0}.{1}".format(lnk['output_line'],c),
+                                          "{0}.{1}".format(lnk['output_line'],c+1)) == " "):
+                    c = c + 1
+                pos0 = "{0}.{1}".format(lnk['output_line'],c)
                 pos1 = "{0}.end".format(lnk['output_line'])
                 tag = "fence_link{0}".format(num)
                 num = num + 1
@@ -924,12 +929,14 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                 self.wg_output.tag_bind(tag,"<Button-1>",lambda evt, start=start: self.wg_code.see(start))
 
     def unset_highlights_in_code(self):
+        self.wg_output.config(cursor="xterm")
         for t in self.wg_code.tag_names():
             if t.startswith("highlight"):
                 self.wg_code.tag_delete(t)
 
     def set_highlight_in_code(self,start,end):
         self.unset_highlights_in_code()
+        self.wg_output.config(cursor="hand2")
         num = 0
         while "highlight{0}".format(num) in self.wg_code.tag_names():
             num = num + 1

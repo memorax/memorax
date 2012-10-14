@@ -113,6 +113,9 @@ namespace TsoFencins{
       switch(result->result){
       case Reachability::REACHABLE:
         {
+          Log::debug << " *** Error Trace (TSO) ***\n";
+          result->trace->print(Log::debug,Log::extreme,Log::json,queue.front().get_atomized_machine());
+          Log::debug << "\n";
           std::list<cycle_t> cycs = find_cycles(*result->trace);
           for(auto cycit = cycs.begin(); cycit != cycs.end(); cycit++){
             std::set<Machine::PTransition> cws = get_critical_writes(*cycit,*result->trace,queue.front().get_atomized_machine());
