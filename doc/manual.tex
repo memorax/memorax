@@ -13,9 +13,8 @@
 \usepackage{tikz}
 \usetikzlibrary{backgrounds,calc}
 
-\newcommand{\tool}{Memorax} % Name of the tool
-\newcommand{\thetool}{the Memorax tool} % variation
-\newcommand{\Thetool}{The Memorax tool} % variation
+\newcommand{\memorax}{\textsc{Memorax}}
+\newcommand{\rmm}{\textsc{Rmm}}
 \newcommand{\binary}{memorax} % Name of the command line executable
 \newcommand{\gui}{memorax-gui} % Name of the GUI executable
 
@@ -44,7 +43,7 @@ Free Documentation License''.
 
 \section{Introduction}
 
-\tool{} is a tool for verification of safety properties in programs
+\memorax\ is a tool for verification of safety properties in programs
 running under relaxed memory models, and for automatic inference of
 memory fences that are necessary in order to guarantee satisfaction of
 those safety properties.
@@ -60,10 +59,10 @@ finite state space if executed under SC. For this reason, explicit
 state space analysis is impossible. The problem can be handled by
 using under approximation, over approximation or by using exact,
 infinite state analysis methods such as the well-quasi ordering
-method \cite{ACJT96}. \Thetool{} is built to accommodate different
+method \cite{ACJT96}. \memorax\ is built to accommodate different
 approaches. 
 
-Currently \tool{} supports two approaches for verification/fence
+Currently \memorax\ supports two approaches for verification/fence
 insertion of programs executed under the TSO memory model. Details are
 given in \cref{sec:abstractions}.
 
@@ -89,8 +88,8 @@ Leonardsson ({\tt carl.leonardsson@it.uu.se}).
      higher.
 
   \item For predicate abstraction the MathSAT SMT solver as well as the
-     library gmpxx are required. \tool supports MathSAT 4 and 
-     MathSAT 5. MathSAT 4 is recommended. \tool can be compiled without
+     library gmpxx are required. \memorax\ supports MathSAT 4 and 
+     MathSAT 5. MathSAT 4 is recommended. \memorax\ can be compiled without
      MathSAT and gmpxx, but will then not support predicate
      abstraction.
 
@@ -99,7 +98,7 @@ Leonardsson ({\tt carl.leonardsson@it.uu.se}).
 
 \subsection{Basic Installation}
 
-   In the simplest case, \tool can be installed with the following
+   In the simplest case, \memorax\ can be installed with the following
    commands:
 
 \begin{verbatim}
@@ -118,7 +117,7 @@ $ make install
 
 \paragraph{Changing Installation Directory}
 
-   The command '\verb+make install+' will install \tool, its graphical
+   The command '\verb+make install+' will install \memorax, its graphical
    interface and its documentation in the directories which are
    standard on your system. To override this behaviour add the switch
    \verb+--prefix+ to the '\verb+./configure+' command:
@@ -129,7 +128,7 @@ $ ./configure --prefix=/your/desired/install/path
 
 \paragraph{Compiling with Predicate Abstraction Support}
 
-   To support predicate abstraction, \tool must be compiled with
+   To support predicate abstraction, \memorax\ must be compiled with
    MathSAT and gmpxx. Their header files and shared libraries must
    reside where they can be found by the compilation. If they are
    installed in non-standard locations, then the compilation can be
@@ -143,7 +142,7 @@ $ ./configure CXXFLAGS='-I/path/to/mathsat/include' \
 \end{verbatim}
 
    If MathSAT and/or gmpxx are not found by the configure script, then
-   \tool will be installed without support for predicate abstraction.
+   \memorax\ will be installed without support for predicate abstraction.
 
 \paragraph{Specifying Compiler}
 
@@ -171,19 +170,19 @@ Error: MSatFailure: Program is not compiled with MathSAT.
 \end{verbatim}
 
    In order to use predicate abstraction, (e.g. the PB abstraction)
-   \tool needs to be compiled with MathSAT. To solve the problem,
-   install MathSAT on your system and then reinstall \tool. In case the
-   installation fails to find MathSAT (see the output from the
+   \memorax\ needs to be compiled with MathSAT. To solve the problem,
+   install MathSAT on your system and then reinstall \memorax. In case
+   the installation fails to find MathSAT (see the output from the
    configure script), then try the instructions in the paragraph
    "Compiling with Predicate Abstraction Support" above.
 
 \section{Usage}\label{sec:usage}
 
-\Thetool{} provides a command line interface, as well as a graphical
+\memorax\ provides a command line interface, as well as a graphical
 interface. It has three main modes of operation (henceforth
 ``\emph{commands}''): reachability checking, automatic fence inference
 and graphical representation of programs as automata. In all three
-modes \thetool{} works on parallel programs given in the RMM language
+modes \memorax\ works on parallel programs given in the \rmm\ language
 (See \cref{sec:rmm:language}.).
 
 The algorithms used for reachability and automatic fence inference
@@ -193,14 +192,14 @@ analysed program and how the reachability analysis works. Abstractions
 can be over or under approximations of the semantics given in
 \cref{sec:semantics}. They can alternatively be exact, or even an
 approximation that is neither an over approximation nor an under
-approximation. \Thetool{} currently supports two abstractions: SB and
+approximation. \memorax\ currently supports two abstractions: SB and
 PB. See \cref{sec:abstractions} for details.
 
 \paragraph{Reachability checking}
- In this mode, \thetool{} will attempt to determine whether or not
+ In this mode, \memorax\ will attempt to determine whether or not
  certain (``\emph{forbidden}'') configurations are reachable when the
- RMM program is executed. The forbidden configurations are specified
- in the RMM program as combinations of control states; one for each
+ \rmm\ program is executed. The forbidden configurations are specified
+ in the \rmm\ program as combinations of control states; one for each
  process. Any configuration where the processes are each in a control
  state such that they together satisfy such a combination is
  considered forbidden. 
@@ -209,10 +208,10 @@ PB. See \cref{sec:abstractions} for details.
  depends on what abstraction is chosen.
 
 \paragraph{Automatic fence inference}
-In this mode, \thetool{} will perform repeated reachability checks,
+In this mode, \memorax\ will perform repeated reachability checks,
 while gradually adding memory fences that turn out to be necessary in
 order to guarantee the non-reachability of the forbidden control
-states. \Thetool{} will report a collection $C$ of sets $S$ of memory
+states. \memorax\ will report a collection $C$ of sets $S$ of memory
 fences such that for every set $S$, the memory fences in $S$ are
 sufficient to guarantee the non-reachability of the forbidden control
 states. Furthermore each fence in $S$ is necessary, in the sense that
@@ -227,16 +226,16 @@ number of refinements) guarantee that the reported fences are both
 necessary and sufficient.
 
 For the TSO memory model, reported fences are identified with write
-instructions. Adding the fence to the RMM program corresponds to
+instructions. Adding the fence to the \rmm\ program corresponds to
 making that write instruction into a locked write instruction. In the
 actual machine code/assembly code that implements the program runnable
 on real hardware, this corresponds to adding memory fence immediately
 after the writing instruction. On x86, one can alternatively change
 the writing instruction into a LOCK'd version of the same instruction.
 
-\paragraph{Graphical representation of RMM programs}
-In this mode, \thetool{} produces a PDF file containing a graphical
-representation of automata corresponding to the given RMM
+\paragraph{Graphical representation of \rmm\ programs}
+In this mode, \memorax\ produces a PDF file containing a graphical
+representation of automata corresponding to the given \rmm\ 
 program. There will be one automaton per process in the program. 
 
 \subsection{Using the Command Line Interface}
@@ -253,18 +252,18 @@ A call to the command line interface is on the following form:
 The {\tt [command]} part indicates the mode of operation. It should be
 given as one of {\tt reach} (indicating reachability analysis), {\tt
   fencins} (indicating automatic fence inference) and {\tt dotify}
-(indicating graphical representation of the RMM program).
+(indicating graphical representation of the \rmm\ program).
 
 The {\tt [options]} part is optional and gives details about how the
 command should be executed. Accepted options are listed and explained
 below.
 
 The {\tt [program]} part should be the path to a text file containing
-an RMM program. The program path can be left out of the command line
-invocation, in which case \thetool{} will expect the RMM program via
+an \rmm\ program. The program path can be left out of the command line
+invocation, in which case \memorax\ will expect the \rmm\ program via
 the standard input.
 
-\newcommand{\explainrff}{Converting an RMM program to register free
+\newcommand{\explainrff}{Converting an \rmm\ program to register free
   form, means to rewrite it such that the values of the registers are
   encoded in the control states, and all registers are replaced by the
   corresponding integer literals wherever they occur in
@@ -283,7 +282,7 @@ the standard input.
 \item {\tt -a <abstraction>} or {\tt --abstraction <abstraction>}
   \\ Use abstraction {\tt <abstraction>}. The abstraction should be
   one of {\tt pb} and {\tt sb}. If no abstraction is specified, then
-  \thetool{} will default to using the SB abstraction.
+  \memorax\ will default to using the SB abstraction.
 
 \item {\tt -k <int>}\\ Use {\tt k} as buffer bound. The TSO buffers in
   the PB abstraction will not be allowed to grow larger than this many
@@ -297,7 +296,7 @@ the standard input.
 
 \item {\tt --max-refinements <int>}\\ Perform at most {\tt <int>} many
   refinements in the CEGAR loop. If more refinements are necessary,
-  then \thetool{} will terminate with an error message.
+  then \memorax\ will terminate with an error message.
 
 \item {\tt -v} or {\tt --verbose}\\
   Print output verbosely.
@@ -323,10 +322,10 @@ interface is installed as {\tt \gui{}}.
 The GUI window contains, from top to bottom:
 
 \begin{itemize}
-\item A menu bar, allowing to load and save RMM programs and output,
+\item A menu bar, allowing to load and save \rmm\ programs and output,
   and to configure the behaviour of the GUI.
 \item A \emph{command area} containing a number of buttons, check buttons etc.
-\item A \emph{code area} where an RMM program may be loaded, edited
+\item A \emph{code area} where an \rmm\ program may be loaded, edited
   and saved. All commands executed with the GUI will act on the
   program displayed here.
 \item An \emph{output area} where text output from the underlying CLI
@@ -337,7 +336,7 @@ The GUI window contains, from top to bottom:
 At the top of the command area are radio buttons allowing the user to
 chose a command: ``Reachability'' (indicating reachability analysis),
 ``Fence insertion'' (indicating automatic fence inference) and ``Draw
-automata'' (indicating graphical representation of the RMM program).
+automata'' (indicating graphical representation of the \rmm\ program).
 
 For all commands, the user may specify a level of output verbosity
 ranging from ``Only Results'' (least output) to ``Extreme'' (most
@@ -354,25 +353,25 @@ For commands ``Reachability'' and ``Fence Insertion'', the user may
 chose what abstraction should be used: SB or PB. (See
 \cref{sec:abstractions}.) Whether CEGAR should be used for
 automatically refining the PB abstraction. Also the user may chose to
-convert the RMM program into \emph{register free form} before
+convert the \rmm\ program into \emph{register free form} before
 analysing it. \explainrff
 
 When the command ``Fence Insertion'' finds a set of fences, they are
 indicated in the output by textual representation of the writing
-transitions in the RMM automata which should be changed into locked
+transitions in the \rmm\ automata which should be changed into locked
 writes. Mouse-over will highlight the corresponding lines of code in
 the code area, and clicking them will center the code area over those
 lines.
 
 For the command ``Draw Automata'', the user should specify a path,
-where a PDF file displaying the RMM program will be created. When the
+where a PDF file displaying the \rmm\ program will be created. When the
 ``Draw Automata'' command is used, the PDF file will be immediately
 displayed, provided that the user has specified a PDF viewer in the
 GUI configuration (Misc$\rightarrow$Configuration).
 
 \section{Tutorial}
 
-This section gives a short tutorial to usage of \thetool.
+This section gives a short tutorial to usage of \memorax.
 
 Start the GUI.
 
@@ -381,7 +380,7 @@ Start the GUI.
 $ memorax-gui &
 \end{verbatim}
 
-The GUI window shows an example RMM program that can be analysed, an
+The GUI window shows an example \rmm\ program that can be analysed, an
 output area showing the version of the GUI, and a number of controls
 that allow the user to select a command and options.
 
@@ -391,7 +390,7 @@ example program: Select the command ``Reachability'', the abstraction
 ``SB'' and the verbosity ``Messages''. Press the ``Run'' button to
 start the analysis.
 
-In case the GUI is unable to find the \tool CLI, then you will receive
+In case the GUI is unable to find the \memorax\ CLI, then you will receive
 an error message:
 
 \noindent
@@ -403,7 +402,7 @@ Interrupted
 \end{verbatim}
 
 If so, enter Misc$\rightarrow$Configuration and setup the correct path
-to where you have installed the \tool CLI.
+to where you have installed the \memorax\ CLI.
 
 If the GUI finds the CLI, you should instead receive a screenful of
 text describing the result. The most important part is the last
@@ -424,7 +423,7 @@ You will also receive a ``witness trace'' showing \emph{how} the
 forbidden states can be reached in the SB semantics.
 
 \paragraph{Fence inference}
-Now, let us see how \thetool can be used to automatically infer the
+Now, let us see how \memorax\ can be used to automatically infer the
 fences that are necessary to make the example program safe. Select the
 command ``Fence insertion''. Keep the abstraction ``SB'' and verbosity
 ``Messages''. Press the ``Run'' button. 
@@ -513,7 +512,7 @@ memory fences are ``{\tt L13 P0: write: x := 1}'' and ``{\tt L22 P1:
 {\tt L13 P0: write: x := 1} is the writing instruction of process 0
 that occurs at line 13 in the code. The corresponding fence, which is
 suggested by the inference procedure, should be placed immediately
-after this writing transition. In the RMM language, inserting the
+after this writing transition. In the \rmm\ language, inserting the
 fence is done by changing {\tt write: x := 1} into {\tt locked write:
   x := 1} in the code.
 
@@ -583,7 +582,7 @@ again. We get the following result:
 
 \noindent
 \begin{verbatim}
-$ /home/claerulf/memorax/build/bin/memorax fencins --json -v --abstraction sb
+$ /path/to/memorax/build/bin/memorax fencins --json -v --abstraction sb
 Currently examining fence set:
   (No fences)
 
@@ -603,17 +602,17 @@ Total time to insert fences: 0s.
 It tells us that the fence inference procedure starts with no fences
 (no fences except the ones that are explicitly part of the
 program). It runs the reachability analysis and finds that the
-forbidden states are not reachable; the program is safe. \Thetool
+forbidden states are not reachable; the program is safe. \memorax\ 
 concludes by telling us that it found exactly one memory fence set
 that is necessary and sufficient: the empty set. I.e. as expected, the
 program is safe and requires no additional fences.
 
-\section{The RMM language}\label{sec:rmm:language}
+\section{The \rmm\ language}\label{sec:rmm:language}
 
-The RMM language allows to model a parallel program and specify safety
+The \rmm\ language allows to model a parallel program and specify safety
 properties that should hold.
 
-The sometimes assembly-like syntax of the RMM language is motivated by
+The sometimes assembly-like syntax of the \rmm\ language is motivated by
 the necessity, when analysing programs under relaxed memory models, of
 unambiguously specifying the order of memory accesses, and whether
 variables are stored in memory or in registers. Note that for
@@ -622,12 +621,12 @@ ordering, register allocations, reuse of common sub-expressions and the
 like depend on the compiler (and compiler switches). Therefore, when
 trying to verify an implementation written in a high level language,
 it may be necessary to examine the machine code after compilation, or
-use inline assembly, to be certain that the model, written in RMM, and
+use inline assembly, to be certain that the model, written in \rmm, and
 the compiled program, written in some high level language, correspond.
 
-This section will start by introducing the RMM language by giving an
+This section will start by introducing the \rmm\ language by giving an
 example together with explanation. Then we continue by explaining the
-abstract machine on which an RMM program runs. We introduce control
+abstract machine on which an \rmm\ program runs. We introduce control
 structures and informally explain about instructions under the
 Sequentially Consistent memory model. Finally we give formally and
 informally, the semantics of all instructions under the TSO memory
@@ -635,7 +634,7 @@ model.
 
 \subsection{Machine Model and Memory Addressing}\label{sec:abstmachinememaddr}
 
-This section describes the abstract machine on which an RMM program is
+This section describes the abstract machine on which an \rmm\ program is
 executed. 
 
 \newcommand{\vars}{\mathcal{X}} % The set of memory locations
@@ -668,7 +667,7 @@ $p$. The set $\pcstates{p} = \{0,\cdots\}$ is the set of control
 states of the automaton. The set $\ptransitions{p}$ is the set of
 transitions of the automaton. A transition $(q_0,instr,q_1)$ consists
 of a source control state $q_0$, a target control state $q_1$ and an
-RMM \emph{instruction}. Instructions will be defined and given
+\rmm\ \emph{instruction}. Instructions will be defined and given
 semantics in later sections.
 
 \paragraph{Registers} 
@@ -766,6 +765,26 @@ and if $owner(v) = 5$ then \verb+x[4]+ would be the correct address.
   \label{tbl:locvarnames}
 \end{table}
 
+\paragraph{Pointers}
+As a third way of addressing memory, pointer expressions are allowed
+in \rmm. The syntax is {\tt [$e$]}, where $e$ is an arithmetic
+expression over literal integers and register values. A pointer {\tt
+  [$e$]} occurring in a statement $stmt(${\tt [$e$]}$)$ in \rmm\ is
+really syntactic sugar for the following composed statement:
+
+\noindent
+{\tt either\{}\\
+{\tt \rule{5pt}{0pt} assume: $e$ = 0; $stmt(v_0)$}\\
+{\tt or}\\
+{\tt \rule{5pt}{0pt} $\cdots$}\\
+{\tt or}\\
+{\tt \rule{5pt}{0pt} assume: $e$ = $n$; $stmt(v_n)$}\\
+{\tt \}}\\
+
+Here $v_0 \cdots v_n$ are all {\em global} memory locations in the
+program, in the order they were declared. Local memory locations
+cannot be accessed through pointers.
+
 \subsection{An Example}
 
 \begin{figure}[ht]
@@ -836,17 +855,17 @@ and if $owner(v) = 5$ then \verb+x[4]+ would be the correct address.
 \end{verbatim}
 }
 \end{minipage}
-\caption{RMM model of two processes using Dijkstra's mutual exclusion protocol\cite{LP93}}\label{fig:code:dijkstra.rmm}
+\caption{\rmm\ model of two processes using Dijkstra's mutual exclusion protocol\cite{LP93}}\label{fig:code:dijkstra.rmm}
 \end{figure}
 
-\Cref{fig:code:dijkstra.rmm} shows an RMM model of two processes using
+\Cref{fig:code:dijkstra.rmm} shows an \rmm\ model of two processes using
 Dijkstra's mutual exclusion protocol. We will explain the format line
 by line.
 
 The first line is a comment. Everything starting with \verb+/*+
 continuing until \verb+*/+ is ignored by the parser.
 
-Lines 2 and 3 declare the safety property. Every RMM file must start
+Lines 2 and 3 declare the safety property. Every \rmm\ file must start
 with such a declaration. The word \verb+forbidden+ is a reserved
 word. Line 3 tells us that the declared safety property states that at
 no time may simultaneously process 0 be at its control state labelled
@@ -910,7 +929,7 @@ way of addressing local memory locations is described in
 Lines 9 to 11 declare the registers of process 0. Registers are
 similar to memory locations. They correspond to processor registers,
 so they are accessible only to the process owning them, and they are
-not affected by the memory model. In RMM, registers have
+not affected by the memory model. In \rmm, registers have
 alphanumerical names preceded by a single \verb+$+ character.
 
 The word \verb+text+ on line 12 informs that the program code begins. 
@@ -948,7 +967,7 @@ by $LBL$.
 \subsection{Semantics}\label{sec:semantics}
 \subsubsection{Statements}
 
-In the RMM language a process's automaton is defined by a statement
+In the \rmm\ language a process's automaton is defined by a statement
 that follows the keyword \verb+text+ in the process
 declaration. Statements come in two kinds: \emph{instructions} and
 \emph{control structures}. 
@@ -958,14 +977,14 @@ transition in an automaton, and be executed atomically. An instruction
 corresponds loosely to a machine language instruction on an actual
 piece of hardware. But there are differences: Some composed operations
 that would require many machine language instructions can be performed
-in a single RMM instruction. This is the case for local operations,
+in a single \rmm\ instruction. This is the case for local operations,
 such as evaluation of arithmetic expressions over private registers,
 where the non-atomicity of the operation on actual hardware is not
 observable. Furthermore, some instructions on hardware architectures,
 such as e.g. un-LOCK'd INC on Intel x86, appear as a single
 instruction in the machine language but executes equivalently to
 multiple subsequent and non-atomic memory accesses. Such instructions
-are not included in RMM.
+are not included in \rmm.
 
 A \emph{control structure} is a statement that affects the structure
 of the process automaton. Control structures themselves cannot occur
@@ -973,7 +992,7 @@ as labels for individual transitions, but control structures may
 contain instructions and define a sub-automaton with transitions
 labelled by those instructions.
 
-\Cref{tbl:allstatements} lists all types of RMM statements.
+\Cref{tbl:allstatements} lists all types of \rmm\ statements.
 
 \begin{table}
   \begin{center}
@@ -1049,7 +1068,7 @@ labelled by those instructions.
   \end{tabular}
   }
   \end{center}
-  \caption{RMM statements}\label{tbl:allstatements}
+  \caption{\rmm\ statements}\label{tbl:allstatements}
 \end{table}
 
 \subsubsection{Arithmetical and Boolean Expressions}
@@ -1068,7 +1087,7 @@ locations cannot be used in expressions!
 
 \subsubsection{Instructions Informally}
 
-This section gives an informal description of the semantics of RMM
+This section gives an informal description of the semantics of \rmm\ 
 instructions under the SC memory model.
 
 In the below, we use the following conventions: Registers are named
@@ -1165,7 +1184,7 @@ for
 
 \newcommand{\tikzq}[3]{\node (#1) at (#2) [circle,draw=black,inner sep=0pt,minimum size=25pt] {$#3$}}
 
-This section describes how control structures in the RMM language are
+This section describes how control structures in the \rmm\ language are
 used to shape the process automata of a machine. This is done by
 describing the sub-automata corresponding to each type of control
 structure.
@@ -1173,7 +1192,7 @@ structure.
 Below we use the following conventions: The described sub-automaton is
 a part of the automaton $\pautomaton{p}$ corresponding to process
 $p$. The initial state of the sub-automaton is $q_{src}$. The control
-state that corresponds to the position in the RMM code immediately
+state that corresponds to the position in the \rmm\ code immediately
 after the control structure is named $q_{tgt}$.
 
 \paragraph{Instructions} $s$
@@ -1325,7 +1344,7 @@ in the constituents $s_i^j$).
 \subsubsection{TSO Semantics}
 
 This section describes the TSO semantics of the instructions in the
-RMM language. This is done formally and informally in parallel.
+\rmm\ language. This is done formally and informally in parallel.
 
 \newcommand{\mem}{M}
 \newcommand{\regval}{M_{reg}}
@@ -1654,7 +1673,7 @@ If CEGAR is used, then the value of $k$ as well as the set of
 predicates for predicate abstraction is gradually refined. When CEGAR
 is used, analysis and fence insertion with PB is sound, but not
 complete. For fence insertion this means that any fence sets reported
-by \thetool are sufficient and minimal for preventing reachability of
+by \memorax\ are sufficient and minimal for preventing reachability of
 the forbidden states.
 
 For details about the PB abstraction, see~\cite{AACLR12SAS}.
