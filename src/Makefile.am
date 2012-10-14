@@ -37,7 +37,8 @@ tso_cycle.cpp tso_cycle.h \
 tso_cycle_lock.cpp tso_cycle_lock.h \
 tso_fencins.cpp tso_fencins.h \
 tso_var.cpp tso_var.h \
-vecset.h vecset.tcc
+vecset.h vecset.tcc \
+zstar.h zstar.tcc
 memorax_gui_SOURCES = gui.py
 
 memorax-gui$(EXEEXT): $(srcdir)/gui.py

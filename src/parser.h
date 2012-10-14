@@ -46,6 +46,16 @@ namespace Parser{
   typedef Lang::BExpr<std::string> bexpr_t;
   typedef Lang::MemLoc<std::string> memloc_t;
   typedef Lang::Stmt<std::string> stmt_t;
+  struct memloc_or_pointer_t{
+    memloc_or_pointer_t(const expr_t &e, const Lexer::TokenPos &p) 
+      : is_pointer(true), memloc(memloc_t::global("")), pointer(e), pos(p) {};
+    memloc_or_pointer_t(const memloc_t &ml, const Lexer::TokenPos &p)
+      : is_pointer(false), memloc(ml), pointer(expr_t::integer(0)), pos(p) {};
+    bool is_pointer;
+    memloc_t memloc;
+    expr_t pointer;
+    Lexer::TokenPos pos;
+  };
 
   typedef Predicates::Predicate<Predicates::DummyVar> predicate_t;
   /* Each element v in a forbidden_t is a vector specifying an illegal
@@ -80,13 +90,28 @@ namespace Parser{
     std::vector<predicate_t> predicates;
   };
 
+  /* Contains various information that may be necessary while parsing
+   * statements.
+   */
+  struct Context{
+    Context() {};
+    Context(const std::vector<Lang::VarDecl> &gvars) 
+      : global_vars(gvars) {};
+    Context(const std::vector<Lang::VarDecl> &gvars, const std::vector<Lang::VarDecl> &regs) 
+      : global_vars(gvars), regs(regs) {};
+    /* Declarations for all global variables. */
+    std::vector<Lang::VarDecl> global_vars;
+    /* Declarations for all registers of the currently parsed process */
+    std::vector<Lang::VarDecl> regs;
+  };
+
   /***************************************/
   /*          parsing functions          */
   /***************************************/
   expr_t p_expr(Lexer&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
   bexpr_t p_bexpr(Lexer&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
-  memloc_t p_memloc(Lexer&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
-  stmt_t p_stmt(Lexer&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
+  memloc_or_pointer_t p_memloc(Lexer&,const Context&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
+  stmt_t p_stmt(Lexer&,const Context&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
   Test p_test(Lexer&) throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*);
 };
 
