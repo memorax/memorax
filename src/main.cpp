@@ -304,7 +304,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     }
   }else if(flags.find("a")->second.argument == "sb"){
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
-    reach = new ExactBwd();
+    reach = new SbTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
