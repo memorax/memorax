@@ -61,13 +61,23 @@ Lexer::Token PPLexer::get_next(){
     }
     if(macro_stack.size()){
       tok = macro_stack.back().macro.tokens[macro_stack.back().next_tok];
+      assert(tok.pos.pos.size() == 1);
+      for(int i = int(macro_stack.size()) - 1; i >= 0; --i){
+        tok.pos.push_call(macro_stack[i].called_from);
+      }
       ++macro_stack.back().next_tok;
       if(tok.type == ID && macro_stack.back().args.count(tok.value)){
         /* Parameter */
         const std::vector<Token> &arg = macro_stack.back().args[tok.value];
         assert(arg.size());
         for(int i = int(arg.size())-1; i >= 0; --i){
-          prefix.push_back(arg[i]);
+          assert(arg[i].pos.pos.size() == 1);
+          Token tk = arg[i];
+          tk.pos.push_call(tok.pos.pos[0]);
+          for(int i = int(macro_stack.size()) - 1; i >= 0; --i){
+            tk.pos.push_call(macro_stack[i].called_from);
+          }
+          prefix.push_back(tk);
         }
         tok = prefix.back();
         prefix.pop_back();
@@ -150,7 +160,8 @@ void PPLexer::read_macro(){
 void PPLexer::call_macro(){
   Token tok = get_next();
   assert(tok.type == ID && macros.count(tok.value));
-  TokenPos call_pos = tok.pos;
+  TokenPos::LineChar call_pos(-1,-1);
+  if(tok.pos.known_pos()) call_pos = tok.pos.pos[0];
   const macro_t &macro = macros[tok.value];
   /* Check if we are looping */
   for(unsigned i = 0; i < macro_stack.size(); ++i){
@@ -159,7 +170,7 @@ void PPLexer::call_macro(){
     }
   }
 
-  macro_frame_t frame(macro);
+  macro_frame_t frame(macro,call_pos);
   /* Read arguments */
   tok = get_next();
   if(tok.type != LPAREN) throw new BadToken("Expected '('.",tok.pos);
@@ -170,6 +181,7 @@ void PPLexer::call_macro(){
     bool allow_end = true;
     while(paren_nesting > 0){
       tok = get_next();
+      tok.pos.pos.resize(1);
       if(tok.type == LPAREN){
         allow_end = true;
         ++paren_nesting;

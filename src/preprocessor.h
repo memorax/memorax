@@ -44,10 +44,12 @@ private:
   Token get_next();
   std::vector<Token> prefix;
   struct macro_frame_t{
-    macro_frame_t(const macro_t &m) : macro(m), next_tok(0) {};
+    macro_frame_t(const macro_t &m, const Lexer::TokenPos::LineChar &cf)
+      : macro(m), next_tok(0), called_from(cf) {};
     const macro_t &macro;
     std::map<std::string,std::vector<Token> > args;
     unsigned next_tok;
+    Lexer::TokenPos::LineChar called_from;
   };
   std::vector<macro_frame_t> macro_stack;
   static const std::string macro_start;
