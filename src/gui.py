@@ -701,9 +701,9 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                 if l.startswith("json: "):
                     j = json.loads(l[6:len(l)])
                     if j["action"] == "Syntax Error":
-                        self.mark_error_in_code("{0}.{1}".format(j["pos"]["lineno"],j["pos"]["charno"]))
+                        self.mark_error_in_code("{0}.{1}".format(j["pos"][0]["lineno"],j["pos"][0]["charno"]))
                     elif j["action"] == "Link Fence":
-                        self.link_fence(j["pos"]["lineno"],j["pos"]["charno"])
+                        self.link_fence(j["pos"]);
                     else:
                         self.perror("Unknown JSON: "+l)
                         self.wg_output.see("end")
@@ -885,11 +885,9 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         for t in self.wg_code.tag_names():
             if t.startswith("error_tag"):
                 self.wg_code.tag_delete(t)
-
-    # Add a link from the currenty last line of output to the statement at position lineno.charno in the code
-    def link_fence(self,lineno,charno):
-        self.fence_links.append({'code_lineno':lineno,
-                                 'code_start_charno':charno,
+ 
+    def link_fence(self,pos):
+        self.fence_links.append({'pos':pos,
                                  'output_line':len(self.output_text.split('\n'))-1
                                  })
         self.update_fence_link_marks()
@@ -908,25 +906,42 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
     # Update the marks in output to point to the right locations in the code
     def update_fence_link_marks(self):
         self.clear_fence_link_marks_in_output()
-        num = 0
         if self.output_sel.get() == "output":
             for lnk in self.fence_links:
-                # Avoid spaces at the beginning of the line
                 c = 0
-                while (self.wg_output.get("{0}.{1}".format(lnk['output_line'],c),
-                                          "{0}.{1}".format(lnk['output_line'],c+1)) == " "):
-                    c = c + 1
-                pos0 = "{0}.{1}".format(lnk['output_line'],c)
+                for p in lnk['pos']:
+                    c = self.update_fence_link_mark(lnk,p,c)
+                c = self.update_fence_link_mark(lnk,lnk['pos'][0],c)
+
+    def update_fence_link_mark(self, lnk, pos, c):
+        s = self.wg_output.get("{0}.0".format(lnk['output_line']),
+                               "{0}.end".format(lnk['output_line']));
+        # Avoid spaces at the beginning of the link
+        while(s[c] == ' '):
+            c = c + 1
+        ln = "L{0}".format(pos['lineno'])
+        pos0 = "{0}.{1}".format(lnk['output_line'],c)
+        try:
+            if(s[c:c+len(ln)] == ln):
+                pos1 = "{0}.{1}".format(lnk['output_line'],c+len(ln))
+            else:
                 pos1 = "{0}.end".format(lnk['output_line'])
-                tag = "fence_link{0}".format(num)
-                num = num + 1
-                self.wg_output.tag_add(tag,pos0,pos1)
-                self.wg_output.tag_config(tag,foreground="#00aa00",underline=True)
-                start = "{0}.{1}".format(lnk['code_lineno'],lnk['code_start_charno'])
-                end = "{0}.{1}".format(lnk['code_lineno'],lnk['code_start_charno']+5)
-                self.wg_output.tag_bind(tag,"<Enter>",lambda evt, start=start, end=end: self.set_highlight_in_code(start,end))
-                self.wg_output.tag_bind(tag,"<Leave>",lambda evt: self.unset_highlights_in_code())
-                self.wg_output.tag_bind(tag,"<Button-1>",lambda evt, start=start: self.wg_code.see(start))
+        except:
+            pos1 = "{0}.end".format(lnk['output_line'])
+        start = "{0}.{1}".format(pos['lineno'],pos['charno'])
+        end = "{0}.{1}".format(pos['lineno'],pos['charno']+5)
+        tag = "fence_link{0}".format(len(self.wg_output.tag_names()))
+        self.wg_output.tag_add(tag,pos0,pos1)
+        self.wg_output.tag_config(tag,foreground="#00aa00",underline=True)
+        self.wg_output.tag_bind(tag,"<Enter>",lambda evt, start=start, end=end: self.set_highlight_in_code(start,end))
+        self.wg_output.tag_bind(tag,"<Leave>",lambda evt: self.unset_highlights_in_code())
+        self.wg_output.tag_bind(tag,"<Button-1>",lambda evt, start=start: self.wg_code.see(start))
+        # Increase c to the index of the next linkable item (line number or transition)
+        while(c < len(s) and s[c] != ' '):
+            c = c + 1;
+        if(s[c:c+4] == ' by '):
+            c = c+4
+        return c
 
     def unset_highlights_in_code(self):
         self.wg_output.config(cursor="xterm")

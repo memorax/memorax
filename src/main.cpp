@@ -21,6 +21,7 @@
 
 #include <iostream>
 #include "lexer.h"
+#include "preprocessor.h"
 #include "machine.h"
 #include "shellcmd.h"
 #include <stdexcept>
@@ -79,7 +80,7 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
  * before returning it.
  */
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  Lexer lex(input_stream);
+  PPLexer lex(input_stream);
   Machine *m0 = new Machine(Parser::p_test(lex));
   if(flags.count("rff")){
     Machine *m1 = m0->remove_registers();
@@ -113,10 +114,7 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
         const std::set<Machine::PTransition> &writes = it->get_writes();
         for(auto wit = writes.begin(); wit != writes.end(); wit++){
           Log::result << "  " << wit->to_string(machine) << "\n";
-          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":{"
-                    << "\"lineno\":" << wit->instruction.get_pos().lineno
-                    << ", \"charno\":" << wit->instruction.get_pos().charno
-                    << "}}\n";
+          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":" << wit->instruction.get_pos().to_json() << "}\n";
         }
         Log::result << "\n";
       }
@@ -630,9 +628,7 @@ int main(int argc, char *argv[]){
     }
   }catch(Parser::SyntaxError *exc){
     Log::warning << "Error: " << exc->what() << std::endl << std::flush;
-    Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":{"
-              << "\"lineno\":" << exc->get_pos().lineno << ","
-              << "\"charno\":" << exc->get_pos().charno << "}}\n";
+    Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":" << exc->get_pos().to_json() << "}\n";
     retval = 1;
     delete exc;
   }catch(std::exception *exc){

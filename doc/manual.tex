@@ -1655,6 +1655,77 @@ use by means of the two instructions \emph{locked write} and
 
 \verbatiminput{grammar.simplified.txt}
 
+\subsection{Macros}
+
+The parsing of \rmm\ code involves a preprocessing step, where macros
+can be defined and called. This allows for example, to define a
+process as a macro, then instantiate it multiple times with different
+arguments, to avoid typing similar processes definitions multiple
+times.
+
+The syntax of macro definition is as follows, where $mname$ is some
+identifier which is the name of the defined macro, $p_0,\cdots,p_n$
+are identifiers which are the formal parameters of the macro, and
+$mbody$ is some \rmm\ code that may contain $p_0,\cdots,p_n$ at any
+point as a replacement for some sequence of symbols. The body $mbody$
+may not contain the keyword {\tt endmacro}.
+
+\vspace{15pt}
+
+\noindent
+{\tt macro }$mname${\tt (}$p_0${\tt ,}$\cdots${\tt ,}$p_n${\tt)}\\
+$mbody(p_0,\cdots,p_n)$\\
+{\tt endmacro}\\
+
+\vspace{15pt}
+
+A macro call may occur at any position in an \rmm\ code, after the
+called macro has been completely defined. A macro call has the
+following syntax, where $mname$ is the name of some defined macro of
+arity $n+1$, and each $a_i$ is some sequence of symbols.
+
+\vspace{15pt}
+
+\noindent
+$mname${\tt (}$a_0${\tt ,}$\cdots${\tt ,}$a_n${\tt )}\\
+
+\vspace{15pt}
+
+Each sequence of symbols $a_i$ must be well-formed with respect to
+{\tt (} and {\tt )}, and may not contain a comma ({\tt ,}) except if
+it is within some nesting of {\tt (} and {\tt )}. Cyclic macro calls
+are not allowed.
+
+\Cref{fig:macro:example} shows an example of macro usage.
+
+\begin{figure}
+  \begin{center}
+    \begin{tabular}{l|l}
+      {\tt forbidden}                            & {\tt forbidden}\\
+      \rule{5pt}{0pt}{\tt CS CS}                 & \rule{5pt}{0pt}{\tt CS CS}\\
+      \\
+      {\tt data}                                       & {\tt data}\\
+      \rule{5pt}{0pt}{\tt cs0 = 0 : [0:1]}             & \rule{5pt}{0pt}{\tt cs0 = 0 : [0:1]}\\
+      \rule{5pt}{0pt}{\tt cs1 = 0 : [0:1]}             & \rule{5pt}{0pt}{\tt cs1 = 0 : [0:1]}\\
+      \rule{5pt}{0pt}{\tt x = 0 \hphantom{s1}: [0:1]}  & \rule{5pt}{0pt}{\tt x = 0 \hphantom{s1}: [0:1]}\\
+      \rule{5pt}{0pt}{\tt y = 0 \hphantom{s1}: [0:1]}  & \rule{5pt}{0pt}{\tt y = 0 \hphantom{s1}: [0:1]}\\
+      \\
+      {\tt macro p(x,y,pid)}                     & {\tt process}\\
+      {\tt process}                              & {\tt text}\\
+      {\tt text}                                 & \rule{5pt}{0pt}{\tt write: x := 1;}\\
+      \rule{5pt}{0pt}{\tt write: x := 1;}        & \rule{5pt}{0pt}{\tt read: y = 0;}\\
+      \rule{5pt}{0pt}{\tt read: y = 0;}          & \rule{5pt}{0pt}{\tt CS: write: cs0 := 1}\\
+      \rule{5pt}{0pt}{\tt CS: write: [pid] := 1}\\
+      {\tt endmacro}                             & {\tt process}\\
+                                                 & {\tt text}\\
+      {\tt p(x,y,0)}                             & \rule{5pt}{0pt}{\tt write: y := 1;}\\
+      {\tt p(y,x,1)}                             & \rule{5pt}{0pt}{\tt read: x = 0;}\\
+                                                 &  \rule{5pt}{0pt}{\tt CS: write: cs1 := 1}\\
+    \end{tabular}
+  \end{center}
+  \caption{Left: \rmm\ code using macros. Right: Equivalent, expanded code.}\label{fig:macro:example}
+\end{figure}
+
 \section{Abstractions}\label{sec:abstractions}
 \subsection{PB - Bounded Buffers with Predicate Abstraction}
 

@@ -157,8 +157,8 @@ public:
         ss << "P" << pid << ": " << Automaton::Transition::to_string(regts,mlts);
         break;
       case SS_LINE_NUMBERS:
-        if(instruction.get_pos().lineno >= 0){
-          ss << "L" << instruction.get_pos().lineno << " ";
+        if(instruction.get_pos().get_line_no() >= 0){
+          ss << instruction.get_pos().to_short_line_string() << " ";
         }// Else no line number given, write nothing
         ss << "P" << pid << ": " << instruction.to_string(regts,mlts);
         break;

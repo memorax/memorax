@@ -21,6 +21,9 @@
 #include "lexer.h"
 #include <sstream>
 
+Lexer::~Lexer(){
+};
+
 Lexer::PosIStream::PosIStream(std::istream &iss) : is(iss) {
   cur_pos.lineno = 1;
   cur_pos.charno = 0;
@@ -126,10 +129,12 @@ std::ostream& operator<<(std::ostream& os, const Lexer::Token& tok){
   return os;
 }
 
-Lexer::BadToken::BadToken(std::string s, TokenPos p) : value(s), pos(p) {}
+Lexer::BadToken::BadToken(std::string s, TokenPos p) : value(s), pos(p) {
+  msg = "Bad token "+(value != "" ? "'"+value+"' " : "")+"at "+pos.to_long_string();
+}
 
 std::string Lexer::BadToken::to_string() const{
-  return "Bad token "+(value != "" ? "'"+value+"' " : "")+"at "+pos.to_long_string();
+  return msg;
 }
 
 std::ostream& operator<<(std::ostream& os, const Lexer::BadToken& btok){
@@ -367,18 +372,100 @@ Lexer::Token Lexer::read_op(){
   return tok;
 }
 
-std::string Lexer::TokenPos::to_short_string() const{
+std::string Lexer::TokenPos::LineChar::to_short_string() const{
   std::stringstream ss;
 
-  ss << "(" << lineno << "," << charno << ")";
+  if(lineno >= 0 && charno >= 0){
+    ss << "(" << lineno << "," << charno << ")";
+  }else{
+    ss << "(?,?)";
+  }
+
 
   return ss.str();
 }
+
+std::string Lexer::TokenPos::LineChar::to_long_string() const{
+  std::stringstream ss;
+
+  if(lineno >= 0 && charno >= 0){
+    ss << "line " << lineno << ", character " << charno;
+  }else{
+    ss << "line ?, character ?";
+  }
+
+  return ss.str();
+}
+
+int Lexer::TokenPos::LineChar::compare(const LineChar &lc) const{
+  if(lineno < lc.lineno ||
+     (lineno == lc.lineno && charno < lc.charno)){
+    return -1;
+  }else if(lineno == lc.lineno && charno == lc.charno){
+    return 0;
+  }else{
+    return 1;
+  }
+}
+
+std::string Lexer::TokenPos::to_short_string() const{
+  if(pos.size() == 0){
+    return "(?,?)";
+  }else if(pos.size() == 1){
+    return pos[0].to_short_string();
+  }else{
+    std::string s = "[";
+    for(unsigned i = 0; i < pos.size(); ++i){
+      if(i != 0) s += ",";
+      s += pos[i].to_short_string();
+    }
+    s += "]";
+    return s;
+  }
+};
+
+std::string Lexer::TokenPos::to_short_line_string() const{
+  if(pos.size() == 0){
+    return "L?";
+  }else{
+    std::stringstream ss;
+    ss << "L" << pos[0].lineno;
+    for(unsigned i = 1; i < pos.size(); ++i){
+      ss << " by L" << pos[i].lineno;
+    }
+    return ss.str();
+  }
+};
 
 std::string Lexer::TokenPos::to_long_string() const{
+  if(pos.size() == 0){
+    return "line ?, character ?";
+  }else{
+    std::string s = pos[0].to_long_string();
+    for(unsigned i = 1; i < pos.size(); ++i){
+      s += ", called from "+pos[i].to_long_string();
+    }
+    return s;
+  }
+};
+
+std::string Lexer::TokenPos::to_json() const{
   std::stringstream ss;
-
-  ss << "line " << lineno << ", character " << charno;
-
+  ss << "[";
+  for(unsigned i = 0; i < pos.size(); ++i){
+    if(i != 0) ss << ",";
+    ss << "{\"lineno\":" << pos[i].lineno << ", \"charno\":" << pos[i].charno << "}";
+  }
+  ss << "]";
   return ss.str();
-}
+};
+
+int Lexer::TokenPos::compare(const TokenPos &tp) const{
+  if(pos < tp.pos){
+    return -1;
+  }else if(pos == tp.pos){
+    return 0;
+  }else{
+    return 1;
+  }
+};
