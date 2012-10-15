@@ -127,12 +127,12 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
     }
   }
 
-  Log::debug << " *** SB trace ***\n";
-  trace->print(Log::debug,Log::debug,Log::json,common->machine);
-  Log::debug << "\n\n";
-  Log::debug << " *** TSO trace ***\n";
-  tso_trace->print(Log::debug,Log::debug,Log::json,common->machine);
-  Log::debug << "\n";
+  Log::extreme << " *** SB trace ***\n";
+  trace->print(Log::extreme,Log::extreme,Log::json,common->machine);
+  Log::extreme << "\n\n";
+  Log::extreme << " *** TSO trace ***\n";
+  tso_trace->print(Log::extreme,Log::extreme,Log::json,common->machine);
+  Log::extreme << "\n";
 
   return tso_trace;
 };

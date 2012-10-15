@@ -79,6 +79,7 @@ public:
     std::string to_short_string() const;
     std::string to_short_line_string() const;
     std::string to_long_string() const;
+    std::string to_json() const;
     int get_line_no() const { 
       if(pos.size()) return pos[0].lineno;
       return -1;

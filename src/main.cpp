@@ -95,6 +95,7 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
   Log::result << "Found " << fence_sets.size() << " fence set";
   if(fence_sets.size() == 0){
     Log::result << "s.\n";
+    Log::result << "\nNOTICE: This means that the program is unsafe regardless of fences!\n\n";
   }else{
     if(fence_sets.size() == 1){
       Log::result << ":\n";
@@ -105,15 +106,13 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
     for(auto it = fence_sets.begin(); it != fence_sets.end(); it++){
       Log::result << "Fence set #" << ctr << ":\n";
       if(it->get_writes().empty()){
-        Log::result << "  (No fences)\n\n";
+        Log::result << "  (No fences)\n";
+        Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
       }else{
         const std::set<Machine::PTransition> &writes = it->get_writes();
         for(auto wit = writes.begin(); wit != writes.end(); wit++){
           Log::result << "  " << wit->to_string(machine) << "\n";
-          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":{"
-                    << "\"lineno\":" << wit->instruction.get_pos().get_line_no()
-                    << ", \"charno\":" << wit->instruction.get_pos().get_char_no()
-                    << "}}\n";
+          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":" << wit->instruction.get_pos().to_json() << "}\n";
         }
         Log::result << "\n";
       }
@@ -331,7 +330,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     }
   }else if(flags.find("a")->second.argument == "sb"){
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
-    reach = new ExactBwd();
+    reach = new SbTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
@@ -628,9 +627,7 @@ int main(int argc, char *argv[]){
     }
   }catch(Parser::SyntaxError *exc){
     Log::warning << "Error: " << exc->what() << std::endl << std::flush;
-    Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":{"
-              << "\"lineno\":" << exc->get_pos().get_line_no() << ","
-              << "\"charno\":" << exc->get_pos().get_char_no() << "}}\n";
+    Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":" << exc->get_pos().to_json() << "}\n";
     retval = 1;
     delete exc;
   }catch(std::exception *exc){

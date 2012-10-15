@@ -449,6 +449,17 @@ std::string Lexer::TokenPos::to_long_string() const{
   }
 };
 
+std::string Lexer::TokenPos::to_json() const{
+  std::stringstream ss;
+  ss << "[";
+  for(unsigned i = 0; i < pos.size(); ++i){
+    if(i != 0) ss << ",";
+    ss << "{\"lineno\":" << pos[i].lineno << ", \"charno\":" << pos[i].charno << "}";
+  }
+  ss << "]";
+  return ss.str();
+};
+
 int Lexer::TokenPos::compare(const TokenPos &tp) const{
   if(pos < tp.pos){
     return -1;

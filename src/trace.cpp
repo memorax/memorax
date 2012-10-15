@@ -105,10 +105,7 @@ std::string Trace::to_string(std::function<std::string(Machine::PTransition*)> &
     s += ind+tts(trace_vec[i].trans)+"\n";
     if(trans_os) (*trans_os) << ind << tts(trace_vec[i].trans) << "\n";
     if(trans_os && *trans_os->os && json_os && trace_vec[i].trans->instruction.get_pos().get_line_no() >= 0){
-      (*json_os) << "json: {\"action\":\"Link Fence\", \"pos\":{"
-                 << "\"lineno\":" << trace_vec[i].trans->instruction.get_pos().get_line_no()
-                 << ", \"charno\":" << trace_vec[i].trans->instruction.get_pos().get_char_no()
-                 << "}}\n";
+      (*json_os) << "json: {\"action\":\"Link Fence\", \"pos\":" << trace_vec[i].trans->instruction.get_pos().to_json() << "}\n";
     }
     if(include_constraints && trace_vec[i].constr){
       std::string t = trace_vec[i].constr->to_string();
