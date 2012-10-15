@@ -1,4 +1,4 @@
-AC_INIT([Memorax], [0.1.0], [carl.leonardsson@it.uu.se])
+AC_INIT([Memorax], [0.1.1], [carl.leonardsson@it.uu.se])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 : {$CXXFLAGS=""}
 AC_PROG_CXX
