@@ -56,11 +56,11 @@ Lexer::Token PPLexer::get_next(){
     prefix.pop_back();
   }else{
     /* Remove finished macro frames */
-    while(macro_stack.size() && macro_stack.back().next_tok >= macro_stack.back().macro.tokens.size()){
+    while(macro_stack.size() && macro_stack.back().next_tok >= macro_stack.back().macro->tokens.size()){
       macro_stack.pop_back();
     }
     if(macro_stack.size()){
-      tok = macro_stack.back().macro.tokens[macro_stack.back().next_tok];
+      tok = macro_stack.back().macro->tokens[macro_stack.back().next_tok];
       assert(tok.pos.pos.size() == 1);
       for(int i = int(macro_stack.size()) - 1; i >= 0; --i){
         tok.pos.push_call(macro_stack[i].called_from);
@@ -165,7 +165,7 @@ void PPLexer::call_macro(){
   const macro_t &macro = macros[tok.value];
   /* Check if we are looping */
   for(unsigned i = 0; i < macro_stack.size(); ++i){
-    if(macro_stack[i].macro.name == macro.name){
+    if(macro_stack[i].macro->name == macro.name){
       throw new BadToken("Cyclic call to macro \""+macro.name+"\".",tok.pos);
     }
   }

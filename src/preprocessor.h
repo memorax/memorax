@@ -45,8 +45,8 @@ private:
   std::vector<Token> prefix;
   struct macro_frame_t{
     macro_frame_t(const macro_t &m, const Lexer::TokenPos::LineChar &cf)
-      : macro(m), next_tok(0), called_from(cf) {};
-    const macro_t &macro;
+      : macro(&m), next_tok(0), called_from(cf) {};
+    const macro_t *macro;
     std::map<std::string,std::vector<Token> > args;
     unsigned next_tok;
     Lexer::TokenPos::LineChar called_from;
