@@ -111,8 +111,8 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
         for(auto wit = writes.begin(); wit != writes.end(); wit++){
           Log::result << "  " << wit->to_string(machine) << "\n";
           Log::json << "json: {\"action\":\"Link Fence\", \"pos\":{"
-                    << "\"lineno\":" << wit->instruction.get_pos().lineno
-                    << ", \"charno\":" << wit->instruction.get_pos().charno
+                    << "\"lineno\":" << wit->instruction.get_pos().get_line_no()
+                    << ", \"charno\":" << wit->instruction.get_pos().get_char_no()
                     << "}}\n";
         }
         Log::result << "\n";
@@ -629,8 +629,8 @@ int main(int argc, char *argv[]){
   }catch(Parser::SyntaxError *exc){
     Log::warning << "Error: " << exc->what() << std::endl << std::flush;
     Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":{"
-              << "\"lineno\":" << exc->get_pos().lineno << ","
-              << "\"charno\":" << exc->get_pos().charno << "}}\n";
+              << "\"lineno\":" << exc->get_pos().get_line_no() << ","
+              << "\"charno\":" << exc->get_pos().get_char_no() << "}}\n";
     retval = 1;
     delete exc;
   }catch(std::exception *exc){

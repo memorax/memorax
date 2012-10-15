@@ -372,18 +372,89 @@ Lexer::Token Lexer::read_op(){
   return tok;
 }
 
-std::string Lexer::TokenPos::to_short_string() const{
+std::string Lexer::TokenPos::LineChar::to_short_string() const{
   std::stringstream ss;
 
-  ss << "(" << lineno << "," << charno << ")";
+  if(lineno >= 0 && charno >= 0){
+    ss << "(" << lineno << "," << charno << ")";
+  }else{
+    ss << "(?,?)";
+  }
+
 
   return ss.str();
 }
+
+std::string Lexer::TokenPos::LineChar::to_long_string() const{
+  std::stringstream ss;
+
+  if(lineno >= 0 && charno >= 0){
+    ss << "line " << lineno << ", character " << charno;
+  }else{
+    ss << "line ?, character ?";
+  }
+
+  return ss.str();
+}
+
+int Lexer::TokenPos::LineChar::compare(const LineChar &lc) const{
+  if(lineno < lc.lineno ||
+     (lineno == lc.lineno && charno < lc.charno)){
+    return -1;
+  }else if(lineno == lc.lineno && charno == lc.charno){
+    return 0;
+  }else{
+    return 1;
+  }
+}
+
+std::string Lexer::TokenPos::to_short_string() const{
+  if(pos.size() == 0){
+    return "(?,?)";
+  }else if(pos.size() == 1){
+    return pos[0].to_short_string();
+  }else{
+    std::string s = "[";
+    for(unsigned i = 0; i < pos.size(); ++i){
+      if(i != 0) s += ",";
+      s += pos[i].to_short_string();
+    }
+    s += "]";
+    return s;
+  }
+};
+
+std::string Lexer::TokenPos::to_short_line_string() const{
+  if(pos.size() == 0){
+    return "L?";
+  }else{
+    std::stringstream ss;
+    ss << "L" << pos[0].lineno;
+    for(unsigned i = 1; i < pos.size(); ++i){
+      ss << " by L" << pos[i].lineno;
+    }
+    return ss.str();
+  }
+};
 
 std::string Lexer::TokenPos::to_long_string() const{
-  std::stringstream ss;
+  if(pos.size() == 0){
+    return "line ?, character ?";
+  }else{
+    std::string s = pos[0].to_long_string();
+    for(unsigned i = 1; i < pos.size(); ++i){
+      s += ", called from "+pos[i].to_long_string();
+    }
+    return s;
+  }
+};
 
-  ss << "line " << lineno << ", character " << charno;
-
-  return ss.str();
-}
+int Lexer::TokenPos::compare(const TokenPos &tp) const{
+  if(pos < tp.pos){
+    return -1;
+  }else if(pos == tp.pos){
+    return 0;
+  }else{
+    return 1;
+  }
+};

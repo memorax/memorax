@@ -668,10 +668,9 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
 };
 
 template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt) const throw(){
-  if(pos.lineno < stmt.pos.lineno || (pos.lineno == stmt.pos.lineno && pos.charno < stmt.pos.charno)){
-    return -1;
-  }else if(pos.lineno > stmt.pos.lineno || (pos.lineno == stmt.pos.lineno && pos.charno > stmt.pos.charno)){
-    return 1;
+  {
+    int c = pos.compare(stmt.pos);
+    if(c != 0) return c;
   }
   if(type < stmt.type){
     return -1;
