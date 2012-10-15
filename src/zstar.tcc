@@ -409,23 +409,23 @@ template<class Z> int ZStar<Z>::test(){
     Vector v1(v1v);
     std::function<ZStar<int>(int)> v2f = [](int i){
       if(i == 1) return ZStar<int>(1);
-      else return ZStar<int>::STAR;
+      else return ZStar<int>();
     };
     Vector v2(3,v2f);
     std::function<ZStar<int>(int)> v3f = [](int i){
       if(i == 2) return ZStar<int>(2);
-      else return ZStar<int>::STAR;
+      else return ZStar<int>();
     };
     Vector v3(3,v3f);
     std::function<ZStar<int>(int)> v2u3f = [](int i){
       if(i == 1) return ZStar<int>(1);
       else if(i == 2) return ZStar<int>(2);
-      else return ZStar<int>::STAR;
+      else return ZStar<int>();
     };
     Vector v2u3(3,v2u3f);
     std::function<ZStar<int>(int)> v4f = [](int i){
       if(i == 2) return ZStar<int>(4);
-      else return ZStar<int>::STAR;
+      else return ZStar<int>();
     };
     Vector v4(3,v4f);
     
@@ -506,7 +506,7 @@ template<class Z> int ZStar<Z>::test(){
     std::function<ZStar<int>(int)> v0f = 
       [](int i){
       if(i == 1) return ZStar<int>(1);
-      else return STAR;
+      else return ZStar<int>();
     };
     ZStar<int>::Vector v0(3,v0f);
     Lang::Expr<int> e0 = 
