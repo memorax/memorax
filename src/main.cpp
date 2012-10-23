@@ -195,7 +195,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       }
       PbCegar pbc;
       TsoFencins::reach_arg_init_t pbc_arg_init = 
-        [&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res){
+        [&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res)->Reachability::Arg*{
         if(prev_res){
           const PbCegar::Result *pres = static_cast<const PbCegar::Result*>(prev_res);
           const ExactBwd::Result *eres = static_cast<const ExactBwd::Result*>(pres->last_result);
@@ -229,7 +229,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       ExactBwd reach;
       PbConstraint::pred_set preds = PbConstraint::extract_predicates(*machine);
       TsoFencins::reach_arg_init_t arg_init = 
-        [&preds,k](const Machine &m,const Reachability::Result *){
+        [&preds,k](const Machine &m,const Reachability::Result *)->Reachability::Arg*{
         PbConstraint::pred_set preds_copy;
         for(unsigned i = 0; i < preds.size(); i++){
           preds_copy.push_back(new Predicates::Predicate<TsoVar>(*preds[i]));
@@ -249,7 +249,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     std::list<TsoFencins::FenceSet> fence_sets;
     SbTsoBwd reach;
     TsoFencins::reach_arg_init_t arg_init =
-      [](const Machine &m, const Reachability::Result *){
+      [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
       SbConstraint::Common *common = new SbConstraint::Common(m);
       return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
     };

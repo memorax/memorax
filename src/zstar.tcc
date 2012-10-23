@@ -407,23 +407,23 @@ template<class Z> int ZStar<Z>::test(){
     v1v.push_back(1);
     v1v.push_back(2);
     Vector v1(v1v);
-    std::function<ZStar<int>(int)> v2f = [](int i){
+    std::function<ZStar<int>(int)> v2f = [](int i)->ZStar<int>{
       if(i == 1) return ZStar<int>(1);
       else return ZStar<int>();
     };
     Vector v2(3,v2f);
-    std::function<ZStar<int>(int)> v3f = [](int i){
+    std::function<ZStar<int>(int)> v3f = [](int i)->ZStar<int>{
       if(i == 2) return ZStar<int>(2);
       else return ZStar<int>();
     };
     Vector v3(3,v3f);
-    std::function<ZStar<int>(int)> v2u3f = [](int i){
+    std::function<ZStar<int>(int)> v2u3f = [](int i)->ZStar<int>{
       if(i == 1) return ZStar<int>(1);
       else if(i == 2) return ZStar<int>(2);
       else return ZStar<int>();
     };
     Vector v2u3(3,v2u3f);
-    std::function<ZStar<int>(int)> v4f = [](int i){
+    std::function<ZStar<int>(int)> v4f = [](int i)->ZStar<int>{
       if(i == 2) return ZStar<int>(4);
       else return ZStar<int>();
     };
@@ -504,7 +504,7 @@ template<class Z> int ZStar<Z>::test(){
     decls0.push_back(Lang::VarDecl("r1",Lang::Value(),Lang::VarDecl::Domain(0,2)));
     decls0.push_back(Lang::VarDecl("r2",Lang::Value(),Lang::VarDecl::Domain(0,2)));
     std::function<ZStar<int>(int)> v0f = 
-      [](int i){
+      [](int i)->ZStar<int>{
       if(i == 1) return ZStar<int>(1);
       else return ZStar<int>();
     };

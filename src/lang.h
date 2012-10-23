@@ -43,7 +43,7 @@ namespace Lang {
   class Exception : public std::exception{
   public:
     Exception(std::string m) : msg(m) {};
-    virtual const char *what(){ return msg.c_str(); };
+    virtual const char *what() const throw() { return msg.c_str(); };
     virtual ~Exception() throw() {};
   private:
     std::string msg;
@@ -188,7 +188,7 @@ namespace Lang {
   };
 
   inline std::function<std::string(const int&)> int_reg_to_string(){
-    return [](const int &i){
+    return [](const int &i)->std::string{
       std::stringstream ss;
       ss << "$reg:" << i;
       return ss.str();
@@ -280,8 +280,14 @@ namespace Lang {
     };
 
     /* Constructors */
-    static BExpr tt;
-    static BExpr ff;
+    static BExpr tt(){
+      static BExpr<RegId> t(SyntaxString<RegId>::tt());
+      return t;
+    };
+    static BExpr ff(){
+      static BExpr<RegId> f(SyntaxString<RegId>::ff());
+      return f;
+    };
     static BExpr eq(const Expr<RegId> &a, const Expr<RegId> &b){
       return BExpr(SyntaxString<RegId>::eq(a,b));
     };

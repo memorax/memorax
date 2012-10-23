@@ -830,14 +830,14 @@ Machine *Machine::add_domain_assumes() const{
 
   /* Returns a BExpr asserting that the expression e is within the finite domain dom. */
   std::function<Lang::BExpr<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> in_domain = 
-    [](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom){
+    [](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::BExpr<int>{
     assert(dom.is_finite());
     return Lang::BExpr<int>::leq(Lang::Expr<int>::integer(dom.get_lower_bound()),e) &&
     Lang::BExpr<int>::leq(e,Lang::Expr<int>::integer(dom.get_upper_bound()));
   };
   /* Wraps in_domain(e,dom) in an assume statement. */
   std::function<Lang::Stmt<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> assume_in_domain = 
-    [&in_domain](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom){
+    [&in_domain](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::Stmt<int>{
     return Lang::Stmt<int>::assume(in_domain(e,dom));
   };
 
@@ -960,14 +960,14 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
 
   /* Returns a BExpr asserting that the expression e is within the finite domain dom. */
   std::function<Lang::BExpr<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> in_domain = 
-    [](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom){
+    [](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::BExpr<int>{
     assert(dom.is_finite());
     return Lang::BExpr<int>::leq(Lang::Expr<int>::integer(dom.get_lower_bound()),e) &&
     Lang::BExpr<int>::leq(e,Lang::Expr<int>::integer(dom.get_upper_bound()));
   };
   /* Wraps in_domain(e,dom) in an assume statement. */
   std::function<Lang::Stmt<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> assume_in_domain = 
-    [&s,&in_domain](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom){
+    [&s,&in_domain](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::Stmt<int>{
     return Lang::Stmt<int>::assume(in_domain(e,dom),s.get_pos());
   };
 

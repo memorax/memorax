@@ -126,7 +126,7 @@ public:
       return (pid > pt.pid) ||
         (pid == pt.pid && Automaton::Transition::operator>(pt));
     };
-    virtual int compare(const PTransition &pt) const throw(){
+    int compare(const PTransition &pt) const throw(){
       if(pid < pt.pid){
         return -1;
       }else if(pid > pt.pid){
@@ -142,6 +142,10 @@ public:
       SS_CONTROL_STATES, // Write as "Pp: (src,instr,tgt)"
       SS_LINE_NUMBERS    // Write as "Lln: Pp: instr"
     };
+    virtual std::string to_string(const std::function<std::string(const int&)> &regts, 
+                                  const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const throw(){
+      return to_string(regts,mlts,SS_LINE_NUMBERS);
+    };
     virtual std::string to_raw_string(str_style_t style = SS_CONTROL_STATES) const throw(){
       return to_string(Lang::int_reg_to_string(),[](const Lang::MemLoc<int> &ml){ return ml.to_string(); }, style);
     };
@@ -150,7 +154,7 @@ public:
     };
     virtual std::string to_string(const std::function<std::string(const int&)> &regts, 
                                   const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
-                                  str_style_t style = SS_LINE_NUMBERS) const throw(){
+                                  str_style_t style) const throw(){
       std::stringstream ss;
       switch(style){
       case SS_CONTROL_STATES:

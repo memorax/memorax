@@ -86,7 +86,7 @@ public:
     virtual bool operator==(const Transition &t) const throw(){ return compare(t) == 0; };
     virtual bool operator<(const Transition &t) const throw(){ return compare(t) < 0; };
     virtual bool operator>(const Transition &t) const throw(){ return compare(t) > 0; }
-    virtual int compare(const Transition &t) const throw(){
+    int compare(const Transition &t) const throw(){
       if(source < t.source){
         return -1;
       }else if(source > t.source){

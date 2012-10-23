@@ -45,8 +45,14 @@ public:
   static SyntaxString minus(const SyntaxString &t); // Unary minus
 
   /* Predicate constructors */
-  static SyntaxString tt;
-  static SyntaxString ff;
+  static SyntaxString tt(){
+    static SyntaxString t(true);
+    return t;
+  };
+  static SyntaxString ff(){
+    static SyntaxString f(false);
+    return f;
+  };
   static SyntaxString eq(const SyntaxString &a, const SyntaxString &b);
   static SyntaxString neq(const SyntaxString &a, const SyntaxString &b);
   static SyntaxString lt(const SyntaxString &a, const SyntaxString &b);

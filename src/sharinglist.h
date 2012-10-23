@@ -31,6 +31,7 @@ private:
   class consbox;
 public:
   typedef size_t size_type;
+  class const_iterator;
   class SharingListError : public std::exception{
   public: 
     SharingListError(std::string m) : msg("SharingListError: "+m) {};

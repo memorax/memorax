@@ -200,7 +200,7 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
       }
     }else{
       std::function<int(const std::string&)> regids = 
-        [&ctx,&ml](const std::string &s){
+        [&ctx,&ml](const std::string &s)->int{
         for(unsigned i = 0; i < ctx.regs.size(); ++i){
           if(ctx.regs[i].name == s){
             return int(i);
@@ -464,9 +464,9 @@ Parser::bexpr_t Parser::p_bexpr_atom(Lexer &lex){
 
   switch(tok.type){
   case Lexer::TRUE:
-    return bexpr_t::tt;
+    return bexpr_t::tt();
   case Lexer::FALSE:
-    return bexpr_t::ff;
+    return bexpr_t::ff();
   case Lexer::LBRAK:
     {
       bexpr_t b(p_bexpr(lex));
@@ -843,7 +843,7 @@ Parser::Test Parser::p_test(Lexer &lex) throw(SyntaxError*,Lang::Exception*,Lexe
 
     std::map<std::string,int> m;
     std::function<int(const std::string&)> rc = 
-      [&m](const std::string &s){
+      [&m](const std::string &s)->int{
       if(m.count(s) == 0){
         int i = m.size();
         m[s] = i;

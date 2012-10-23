@@ -1219,7 +1219,7 @@ void SbConstraint::test_comparison(){
     Common common(dummy_machine);
 
     std::function<bool(std::string,bool)> test = 
-      [](std::string name, bool result){
+      [](std::string name, bool result)->bool{
       if(result){
         std::cout << name << ": Success!\n";
       }else{
@@ -1229,7 +1229,7 @@ void SbConstraint::test_comparison(){
     };
 
     std::function<std::string(const SbConstraint &)> char_to_string =
-      [](const SbConstraint &sbc){
+      [](const SbConstraint &sbc)->std::string{
       std::vector<MsgCharacterization> chr = sbc.characterize_channel();
       std::stringstream ss;
       ss << "[";

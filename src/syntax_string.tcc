@@ -403,9 +403,6 @@ template<class Var> SyntaxString<Var> SyntaxString<Var>::minus(const SyntaxStrin
   return combine(MINUS,a,b);
 };
 
-template<class Var> SyntaxString<Var> SyntaxString<Var>::tt(true);
-template<class Var> SyntaxString<Var> SyntaxString<Var>::ff(false);
-
 template<class Var> SyntaxString<Var> SyntaxString<Var>::eq(const SyntaxString<Var> &a, const SyntaxString<Var> &b){
   return combine(EQ,a,b);
 };
@@ -756,13 +753,13 @@ template<class Var> SyntaxString<Var> SyntaxString<Var>::drive_in_negations(bool
     if(sign){
       return *this;
     }else{
-      return ff;
+      return ff();
     }
   case FALSE:
     if(sign){
       return *this;
     }else{
-      return tt;
+      return tt();
     }
   case EQ:
     if(sign){
@@ -1168,9 +1165,9 @@ SyntaxString<Var>::from_msat_term(MSat::msat_env &env, MSat::msat_term t,
                                   const std::function<Var(const std::string&)> &stv){
 
   if(msat_query(MSat::msat_term_is_true, env, t)){
-    return tt;
+    return tt();
   }else if(msat_query(MSat::msat_term_is_false,env,t)){
-    return ff;
+    return ff();
   }else if(msat_query(MSat::msat_term_is_number, env, t)){
     char *s = MSat::msat_term_repr(t);
     int i;

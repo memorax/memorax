@@ -47,9 +47,6 @@ Lang::BExpr<RegId2> Lang::BExpr<RegId>::convert(std::function<RegId2(const RegId
   return BExpr<RegId2>(SyntaxString<RegId>::template convert<RegId2>(rc));
 };
 
-template<class RegId> Lang::BExpr<RegId> Lang::BExpr<RegId>::tt(SyntaxString<RegId>::tt);
-template<class RegId> Lang::BExpr<RegId> Lang::BExpr<RegId>::ff(SyntaxString<RegId>::ff);
-
 template<class Id> Lang::MemLoc<Id> Lang::MemLoc<Id>::change_caller(int old_caller, int new_caller) const throw(){
   switch(type){
   case GLOBAL_ID:
