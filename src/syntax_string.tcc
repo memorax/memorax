@@ -117,7 +117,7 @@ template<class Var> SyntaxString<Var> &SyntaxString<Var>::operator=(const Syntax
   return *this;
 }
 
-template<class Var> template<class Var2> SyntaxString<Var2> SyntaxString<Var>::convert(std::function<Var2(const Var&)> &vc) const throw(){
+template<class Var> template<class Var2> SyntaxString<Var2> SyntaxString<Var>::convert(std::function<Var2(const Var&)> &vc) const{
   SyntaxString<Var2> ss(symbol_count,const_count,arg_count);
 
   int *const_map = new int[const_count];
@@ -229,7 +229,7 @@ template<class Var> std::string SyntaxString<Var>::to_inner_string(int i, const 
   case FALSE:
     return "false";
   case EQ:
-    return to_inner_string(i+2,vts,arg_names)+" == "+to_inner_string(i+(symbols[i+1]),vts,arg_names);
+    return to_inner_string(i+2,vts,arg_names)+" = "+to_inner_string(i+(symbols[i+1]),vts,arg_names);
   case NEQ:
     return to_inner_string(i+2,vts,arg_names)+" != "+to_inner_string(i+(symbols[i+1]),vts,arg_names);
   case LT:
@@ -402,9 +402,6 @@ template<class Var> SyntaxString<Var> SyntaxString<Var>::plus(const SyntaxString
 template<class Var> SyntaxString<Var> SyntaxString<Var>::minus(const SyntaxString<Var> &a, const SyntaxString<Var> &b){
   return combine(MINUS,a,b);
 };
-
-template<class Var> SyntaxString<Var> SyntaxString<Var>::tt(true);
-template<class Var> SyntaxString<Var> SyntaxString<Var>::ff(false);
 
 template<class Var> SyntaxString<Var> SyntaxString<Var>::eq(const SyntaxString<Var> &a, const SyntaxString<Var> &b){
   return combine(EQ,a,b);
@@ -756,13 +753,13 @@ template<class Var> SyntaxString<Var> SyntaxString<Var>::drive_in_negations(bool
     if(sign){
       return *this;
     }else{
-      return ff;
+      return ff();
     }
   case FALSE:
     if(sign){
       return *this;
     }else{
-      return tt;
+      return tt();
     }
   case EQ:
     if(sign){
@@ -1168,9 +1165,9 @@ SyntaxString<Var>::from_msat_term(MSat::msat_env &env, MSat::msat_term t,
                                   const std::function<Var(const std::string&)> &stv){
 
   if(msat_query(MSat::msat_term_is_true, env, t)){
-    return tt;
+    return tt();
   }else if(msat_query(MSat::msat_term_is_false,env,t)){
-    return ff;
+    return ff();
   }else if(msat_query(MSat::msat_term_is_number, env, t)){
     char *s = MSat::msat_term_repr(t);
     int i;

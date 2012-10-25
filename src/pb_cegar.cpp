@@ -270,7 +270,7 @@ PbConstraint::Predicate PbCegar::interpolate(const Trace &trace,
     }
     assert(rs.size() == 1);
     PbConstraint *exact_range = static_cast<PbConstraint*>(rs.front());
-    Predicate pred = Predicate::tt;
+    Predicate pred = Predicate::tt();
     for(std::list<AppliedPredicate>::const_iterator it = exact_range->ap_list.begin();
         it != exact_range->ap_list.end(); it++){
       pred = pred && it->get_predicate()->bind(it->get_argv());

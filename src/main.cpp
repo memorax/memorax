@@ -21,6 +21,7 @@
 
 #include <iostream>
 #include "lexer.h"
+#include "preprocessor.h"
 #include "machine.h"
 #include "shellcmd.h"
 #include <stdexcept>
@@ -42,7 +43,10 @@
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
 #include "test.h"
+#include "zstar.h"
 #include <config.h>
+#include "timer.h"
+#include <iomanip>
 
 struct Flag{
   Flag() {};
@@ -77,7 +81,7 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
  * before returning it.
  */
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  Lexer lex(input_stream);
+  PPLexer lex(input_stream);
   Machine *m0 = new Machine(Parser::p_test(lex));
   if(flags.count("rff")){
     Machine *m1 = m0->remove_registers();
@@ -94,6 +98,7 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
   Log::result << "Found " << fence_sets.size() << " fence set";
   if(fence_sets.size() == 0){
     Log::result << "s.\n";
+    Log::result << "\nNOTICE: This means that the program is unsafe regardless of fences!\n\n";
   }else{
     if(fence_sets.size() == 1){
       Log::result << ":\n";
@@ -104,15 +109,13 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
     for(auto it = fence_sets.begin(); it != fence_sets.end(); it++){
       Log::result << "Fence set #" << ctr << ":\n";
       if(it->get_writes().empty()){
-        Log::result << "  (No fences)\n\n";
+        Log::result << "  (No fences)\n";
+        Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
       }else{
         const std::set<Machine::PTransition> &writes = it->get_writes();
         for(auto wit = writes.begin(); wit != writes.end(); wit++){
           Log::result << "  " << wit->to_string(machine) << "\n";
-          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":{"
-                    << "\"lineno\":" << wit->instruction.get_pos().lineno
-                    << ", \"charno\":" << wit->instruction.get_pos().charno
-                    << "}}\n";
+          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":" << wit->instruction.get_pos().to_json() << "}\n";
         }
         Log::result << "\n";
       }
@@ -136,10 +139,8 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
 
   int retval;
 
-  int start_time, stop_time;
-  clock_t start_time_c, stop_time_c;
-  start_time = time(0);
-  start_time_c = clock();
+  Timer fencins_timer;
+  fencins_timer.start();
 
   if(flags.find("a")->second.argument == "pb"){
     Machine *tmp_machine = machine.release();
@@ -170,7 +171,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       }
       PbCegar pbc;
       TsoFencins::reach_arg_init_t pbc_arg_init = 
-        [&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res){
+        [&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res)->Reachability::Arg*{
         if(prev_res){
           const PbCegar::Result *pres = static_cast<const PbCegar::Result*>(prev_res);
           const ExactBwd::Result *eres = static_cast<const ExactBwd::Result*>(pres->last_result);
@@ -204,7 +205,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       ExactBwd reach;
       PbConstraint::pred_set preds = PbConstraint::extract_predicates(*machine);
       TsoFencins::reach_arg_init_t arg_init = 
-        [&preds,k](const Machine &m,const Reachability::Result *){
+        [&preds,k](const Machine &m,const Reachability::Result *)->Reachability::Arg*{
         PbConstraint::pred_set preds_copy;
         for(unsigned i = 0; i < preds.size(); i++){
           preds_copy.push_back(new Predicates::Predicate<TsoVar>(*preds[i]));
@@ -224,7 +225,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     std::list<TsoFencins::FenceSet> fence_sets;
     SbTsoBwd reach;
     TsoFencins::reach_arg_init_t arg_init =
-      [](const Machine &m, const Reachability::Result *){
+      [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
       SbConstraint::Common *common = new SbConstraint::Common(m);
       return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
     };
@@ -235,12 +236,13 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
   }
-  stop_time = time(0);
-  stop_time_c = clock();
-  if(stop_time - start_time < 2){
-    Log::result << "Total time to insert fences: " << double(stop_time_c - start_time_c) / CLOCKS_PER_SEC << "s.\n";
-  }else{
-    Log::result << "Total time to insert fences: " << stop_time - start_time << "s.\n";
+
+  {
+    fencins_timer.stop();
+    std::stringstream ss;
+    ss << "Total time to insert fences: "
+       << std::setprecision(1) << std::fixed << fencins_timer.get_time() << " s\n";
+    Log::result << ss.str();
   }
 
   return retval;
@@ -305,7 +307,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     }
   }else if(flags.find("a")->second.argument == "sb"){
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
-    reach = new ExactBwd();
+    reach = new SbTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
@@ -596,6 +598,7 @@ int main(int argc, char *argv[]){
       break;
     case TEST:
       Test::add_test("Test",Test::test_testing);
+      Test::add_test("ZStar",ZStar<int>::test);
       retval = Test::run_tests();
       break;
     default: 
@@ -603,9 +606,7 @@ int main(int argc, char *argv[]){
     }
   }catch(Parser::SyntaxError *exc){
     Log::warning << "Error: " << exc->what() << std::endl << std::flush;
-    Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":{"
-              << "\"lineno\":" << exc->get_pos().lineno << ","
-              << "\"charno\":" << exc->get_pos().charno << "}}\n";
+    Log::json << "json: {\"action\":\"Syntax Error\", \"pos\":" << exc->get_pos().to_json() << "}\n";
     retval = 1;
     delete exc;
   }catch(std::exception *exc){

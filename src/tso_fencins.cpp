@@ -113,6 +113,9 @@ namespace TsoFencins{
       switch(result->result){
       case Reachability::REACHABLE:
         {
+          Log::debug << " *** Error Trace (TSO) ***\n";
+          result->trace->print(Log::debug,Log::extreme,Log::json,queue.front().get_atomized_machine());
+          Log::debug << "\n";
           std::list<cycle_t> cycs = find_cycles(*result->trace);
           for(auto cycit = cycs.begin(); cycit != cycs.end(); cycit++){
             std::set<Machine::PTransition> cws = get_critical_writes(*cycit,*result->trace,queue.front().get_atomized_machine());
@@ -170,8 +173,10 @@ namespace TsoFencins{
         pending_writes[pid].push_back(trans);
         break;
       case Lang::UPDATE:
-        assert(pending_writes[pid].size() > 0);
-        assert(pending_writes[pid].front()->instruction.get_memloc() == s.get_memloc());
+        if(pending_writes[pid].size() == 0 ||
+           pending_writes[pid].front()->instruction.get_memloc() != s.get_memloc()){
+          throw new std::logic_error("TsoFencins: FAILURE: The given trace is not valid under TSO. (Try CEGAR?)");
+        }
         pairs[pending_writes[pid].front()] = trans;
         pending_writes[pid].pop_front();
         break;
@@ -180,11 +185,11 @@ namespace TsoFencins{
         break;
       }
     }
-#ifndef NDEBUG
     for(unsigned p = 0; p < pending_writes.size(); p++){
-      assert(pending_writes[p].empty());
+      if(!pending_writes[p].empty()){
+        throw new std::logic_error("TsoFencins: FAILURE: The given trace is not valid under TSO. (Try CEGAR?)");
+      }
     }
-#endif
     return pairs;
   }
 
@@ -356,43 +361,6 @@ namespace TsoFencins{
     return true;
    
   };
-
-  std::set<Machine::PTransition>
-  get_critical_writes_old(const cycle_t &cycle, const Trace &trace, const Machine &m){
-    std::list<std::pair<const Machine::PTransition*,const Machine::PTransition*> > cps = cycle.cycle.get_critical_pairs();
-    std::set<Machine::PTransition> cws;
-    std::map<const Machine::PTransition*,const Machine::PTransition*> wrupdates = pair_writes_with_updates(trace);
-    std::map<const Machine::PTransition*,const Machine::PTransition*> upwrites; // wrupdates reversed
-    for(auto uit = wrupdates.begin(); uit != wrupdates.end(); uit++){
-      upwrites[uit->second] = uit->first;
-    }
-
-    for(auto it = cps.begin(); it != cps.end(); it++){
-      int wi = 0;
-      int ri = 0;
-      for(int i = 1; i <= trace.size(); i++){
-        if(trace[i] == it->first){
-          assert(wi == 0);
-          wi = i;
-        }
-        if(trace[i] == it->second){
-          assert(ri == 0);
-          ri = i;
-        }
-      }
-      assert(wi != 0);
-      assert(ri != 0);
-      if(can_overtake(trace,m,wi,ri)){
-        if(it->first->instruction.get_type() == Lang::UPDATE){
-          cws.insert(*upwrites[it->first]);
-        }else{
-          cws.insert(*it->first);
-        }
-      }
-    }
-    return cws;
-  };
-
   
   std::set<Machine::PTransition>
   get_critical_writes(const cycle_t &cycle, const Trace &trace, const Machine &m){

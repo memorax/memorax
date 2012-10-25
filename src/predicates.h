@@ -125,8 +125,14 @@ namespace Predicates {
     /* A predicate (of no arguments) stating that b holds for process
      * pid. */
     static Predicate from_bexpr(const Lang::BExpr<int> &b, int pid);
-    static Predicate tt; // true
-    static Predicate ff; // false
+    static Predicate tt(){ // true
+      static Predicate t(SyntaxString<Var>::tt());
+      return t;
+    };
+    static Predicate ff(){ // false
+      static Predicate f(SyntaxString<Var>::ff());
+      return f;
+    };
     static Predicate eq(const Term<Var> &a, const Term<Var> &b) { return Predicate(SyntaxString<Var>::eq(a,b)); };
     static Predicate neq(const Term<Var> &a, const Term<Var> &b) { return Predicate(SyntaxString<Var>::neq(a,b)); };
     static Predicate lt(const Term<Var> &a, const Term<Var> &b) { return Predicate(SyntaxString<Var>::lt(a,b)); };

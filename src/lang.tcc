@@ -47,9 +47,6 @@ Lang::BExpr<RegId2> Lang::BExpr<RegId>::convert(std::function<RegId2(const RegId
   return BExpr<RegId2>(SyntaxString<RegId>::template convert<RegId2>(rc));
 };
 
-template<class RegId> Lang::BExpr<RegId> Lang::BExpr<RegId>::tt(SyntaxString<RegId>::tt);
-template<class RegId> Lang::BExpr<RegId> Lang::BExpr<RegId>::ff(SyntaxString<RegId>::ff);
-
 template<class Id> Lang::MemLoc<Id> Lang::MemLoc<Id>::change_caller(int old_caller, int new_caller) const throw(){
   switch(type){
   case GLOBAL_ID:
@@ -668,10 +665,9 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
 };
 
 template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt) const throw(){
-  if(pos.lineno < stmt.pos.lineno || (pos.lineno == stmt.pos.lineno && pos.charno < stmt.pos.charno)){
-    return -1;
-  }else if(pos.lineno > stmt.pos.lineno || (pos.lineno == stmt.pos.lineno && pos.charno > stmt.pos.charno)){
-    return 1;
+  {
+    int c = pos.compare(stmt.pos);
+    if(c != 0) return c;
   }
   if(type < stmt.type){
     return -1;
@@ -988,4 +984,79 @@ VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const 
   default:
     throw new std::logic_error("Lang::Stmt::get_write_sets: Unsupported type of statement.");
   }
+};
+
+template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::flatten() const{
+  switch(get_type()){
+  case LOCKED:
+    {
+      std::vector<std::vector<Stmt> > ss = flatten_aux();
+      VecSet<Stmt> vs;
+      for(unsigned i = 0; i < ss.size(); ++i){
+        if(ss[i].size() == 0){
+          vs.insert(nop(get_pos()));
+        }else if(ss[i].size() == 1){
+          vs.insert(ss[i][0]);
+        }else{
+          std::vector<labeled_stmt_t> lss;
+          for(unsigned j = 0; j < ss[i].size(); ++j){
+            lss.push_back(ss[i][j]);
+          }
+          vs.insert(sequence(lss,get_pos()));
+        }
+      }
+      return locked_block(vs.get_vector(),get_pos());
+    }
+  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
+    return *this;
+  case IF: case WHILE: case EITHER: case SEQUENCE: case GOTO:
+  default:
+    throw new std::logic_error("Lang::Stmt::flatten: Not an instruction.");
+  }
+};
+
+template<class RegId>
+std::vector<std::vector<Lang::Stmt<RegId> > > Lang::Stmt<RegId>::flatten_aux() const{
+  VecSet<std::vector<Stmt> > res;
+  
+  switch(get_type()){
+  case LOCKED:
+    {
+      for(int i = 0; i < get_statement_count(); ++i){
+        std::vector<std::vector<Stmt> > resi = get_statement(i)->flatten_aux();
+        for(unsigned j = 0; j < resi.size(); ++j){
+          res.insert(resi[j]);
+        }
+      }
+      break;
+    }
+  case SEQUENCE:
+    {
+      res.insert(std::vector<Stmt>());
+      for(int i = 0; i < get_statement_count(); ++i){
+        std::vector<std::vector<Stmt> > resi = get_statement(i)->flatten_aux();
+        VecSet<std::vector<Stmt> > res2;
+        for(unsigned j = 0; j < resi.size(); ++j){
+          for(auto it = res.begin(); it != res.end(); ++it){
+            std::vector<Stmt> ss = *it;
+            ss.insert(ss.end(),resi[j].begin(),resi[j].end());
+            res2.insert(ss);
+          }
+        }
+        res = res2;
+      }
+      break;
+    }
+  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
+    {
+      res.insert(std::vector<Stmt>(1,*this));
+      break;
+    }
+  case IF: case WHILE: case EITHER:case GOTO:
+  default:
+    throw new std::logic_error("Lang::Stmt::flatten: Not an instruction.");
+  }
+
+  return res.get_vector();
 };

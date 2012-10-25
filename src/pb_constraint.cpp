@@ -199,7 +199,7 @@ std::string PbConstraint::Common::to_string() const throw(){
 }
 
 PbConstraint::AppliedPredicate PbConstraint::Common::build_is_init(const Machine &machine){
-  Predicate is_init_p(Predicate::tt);
+  Predicate is_init_p(Predicate::tt());
 
   // Global variables
   for(unsigned i = 0; i < machine.gvars.size(); i++){
@@ -274,7 +274,7 @@ PbConstraint::Common::AbstractionResult PbConstraint::Common::abstract(const std
 
   std::map<std::list<AppliedPredicate>, AbstractionResult>::iterator aplit = abstraction_cache.find(apl);
   if(aplit == abstraction_cache.end()){
-    Predicate pred = Predicate::tt;
+    Predicate pred = Predicate::tt();
     std::list<AppliedPredicate> apl_copy;
     for(std::list<AppliedPredicate>::const_iterator it = apl.begin();
         it != apl.end(); it++){
@@ -1178,7 +1178,7 @@ std::list<Constraint*> PbConstraint::post(const Machine::PTransition &t, bool lo
     return result;
   }
 
-  Predicate thisstate = ap_list.empty() ? Predicate::tt : ap_list.front().get_predicate()->bind(ap_list.front().get_argv());
+  Predicate thisstate = ap_list.empty() ? Predicate::tt() : ap_list.front().get_predicate()->bind(ap_list.front().get_argv());
   {
     auto apit = ap_list.begin();
     if(apit != ap_list.end()){

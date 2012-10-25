@@ -24,10 +24,12 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <vector>
 
 class Lexer{
 public:
   Lexer(std::istream&);
+  virtual ~Lexer();
 
   enum TokenType {
     UNDEF, 
@@ -50,12 +52,50 @@ public:
 
   class TokenPos{
   public:
-    TokenPos() : lineno(0), charno(0) {};
-    TokenPos(int ln,int cn) : lineno(ln), charno(cn) {};
-    int lineno;
-    int charno;
+    class LineChar{
+    public:
+      LineChar() : lineno(0), charno(0) {};
+      LineChar(int ln,int cn) : lineno(ln), charno(cn) {};
+      int lineno;
+      int charno;
+      std::string to_short_string() const;
+      std::string to_long_string() const;
+      /* Implements a total order on LineChar */
+      int compare(const LineChar&) const;
+      bool operator<(const LineChar &lc) const { return compare(lc) < 0; };
+      bool operator>(const LineChar &lc) const { return compare(lc) > 0; };
+      bool operator==(const LineChar &lc) const { return compare(lc) == 0; };
+      bool operator<=(const LineChar &lc) const { return compare(lc) <= 0; };
+      bool operator>=(const LineChar &lc) const { return compare(lc) >= 0; };
+      bool operator!=(const LineChar &lc) const { return compare(lc) != 0; };
+    };
+    TokenPos(){ pos.push_back(LineChar()); };
+    TokenPos(int ln, int cn){ pos.push_back(LineChar(ln,cn)); };
+    TokenPos(const LineChar &lc){ pos.push_back(lc); };
+    std::vector<LineChar> pos;
+    void push_call(const LineChar &lc) { pos.push_back(lc); };
+    void push_call(int ln, int cn) { pos.push_back(LineChar(ln,cn)); };
+    bool known_pos() const { return get_line_no() >= 0 && get_char_no() >= 0; };
     std::string to_short_string() const;
+    std::string to_short_line_string() const;
     std::string to_long_string() const;
+    std::string to_json() const;
+    int get_line_no() const { 
+      if(pos.size()) return pos[0].lineno;
+      return -1;
+    };
+    int get_char_no() const { 
+      if(pos.size()) return pos[0].charno;
+      return -1;
+    };
+    /* Implements a total order on TokenPos */
+    int compare(const TokenPos&) const;
+    bool operator<(const TokenPos &tp) const { return compare(tp) < 0; };
+    bool operator>(const TokenPos &tp) const { return compare(tp) > 0; };
+    bool operator==(const TokenPos &tp) const { return compare(tp) == 0; };
+    bool operator<=(const TokenPos &tp) const { return compare(tp) <= 0; };
+    bool operator>=(const TokenPos &tp) const { return compare(tp) >= 0; };
+    bool operator!=(const TokenPos &tp) const { return compare(tp) != 0; };
   };
 
   class Token{
@@ -70,21 +110,22 @@ public:
 
   class BadToken : public std::exception{
     std::string value;
+    std::string msg;
     TokenPos pos;
   public:
     BadToken(std::string,TokenPos);
     virtual ~BadToken() throw() {};
     std::string to_string() const;
-    const char *what() const throw(){ return to_string().c_str(); };
+    const char *what() const throw(){ return msg.c_str(); };
   };
 
-  Lexer& operator>>(Token&) throw(BadToken*);
-  Lexer& putback(Token&);
-  operator bool() const;
+  virtual Lexer& operator>>(Token&) throw(BadToken*);
+  virtual Lexer& putback(Token&);
+  virtual operator bool() const;
 private:
   class PosIStream{
     std::istream &is;
-    TokenPos cur_pos;
+    TokenPos::LineChar cur_pos;
     std::list<int> line_lengths;
   public:
     PosIStream(std::istream&);

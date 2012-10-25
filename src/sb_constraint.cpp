@@ -33,8 +33,6 @@ const bool SbConstraint::use_limit_other_updates = true;
 
 /*****************/
 
-const SbConstraint::value_t SbConstraint::STAR = std::numeric_limits<SbConstraint::value_t>::max();
-
 SbConstraint::Common::Common(const Machine &m)
   : machine(m)
 {
@@ -336,31 +334,6 @@ std::list<Constraint*> SbConstraint::Common::get_bad_states(){
   return l;
 };
 
-SbConstraint::Store SbConstraint::Store::assign(int i, value_t v) const{
-  Store st(size());
-  for(int j = 0; j < size(); ++j){
-    st.store[j+2] = store[j+2];
-  }
-  st.store[i+2] = v;
-  return st;
-};
-
-int SbConstraint::Store::compare(const Store &st) const{
-  if(store[1] < st.store[1]){
-    return -1;
-  }else if(store[1] > st.store[1]){
-    return 1;
-  }
-  for(int i = 0; i < store[1]; ++i){
-    if(store[i+2] < st.store[i+2]){
-      return -1;
-    }else if(store[i+2] > st.store[i+2]){
-      return 1;
-    }
-  }
-  return 0;
-};
-
 SbConstraint::SbConstraint(std::vector<int> pcs, const Common::MsgHdr &msg, Common &c)
   : common(c), pcs(pcs) {
   /* Initialize the channel with a single STAR filled message. */
@@ -390,16 +363,16 @@ bool SbConstraint::is_init_state() const{
   const Store &str = channel[0].store;
   for(unsigned i = 0; i < common.machine.gvars.size(); ++i){
     assert(common.index(Lang::NML::global(i)) == int(i));
-    if(str[i] != STAR && !common.machine.gvars[i].value.is_wild() &&
-       str[i] != common.machine.gvars[i].value.get_value()){
+    if(str[i] != value_t::STAR && !common.machine.gvars[i].value.is_wild() &&
+       str[i].get_int() != common.machine.gvars[i].value.get_value()){
       return false;
     }
   }
   for(unsigned p = 0; p < pcs.size(); ++p){
     for(unsigned i = 0; i < common.machine.lvars[p].size(); ++i){
       int ix = common.index(Lang::NML::local(i,p));
-      if(str[ix] != STAR && !common.machine.lvars[p][i].value.is_wild() &&
-         str[ix] != common.machine.lvars[p][i].value.get_value()){
+      if(str[ix] != value_t::STAR && !common.machine.lvars[p][i].value.is_wild() &&
+         str[ix].get_int() != common.machine.lvars[p][i].value.get_value()){
         return false;
       }
     }
@@ -407,8 +380,8 @@ bool SbConstraint::is_init_state() const{
   /* Check all registers against their intended initial values */
   for(unsigned p = 0; p < reg_stores.size(); ++p){
     for(int i = 0; i < common.reg_count[p]; ++i){
-      if(reg_stores[p][i] != STAR && !common.machine.regs[p][i].value.is_wild() &&
-         reg_stores[p][i] != common.machine.regs[p][i].value.get_value()){
+      if(reg_stores[p][i] != value_t::STAR && !common.machine.regs[p][i].value.is_wild() &&
+         reg_stores[p][i].get_int() != common.machine.regs[p][i].value.get_value()){
         return false;
       }
     }
@@ -446,7 +419,7 @@ std::string SbConstraint::to_string() const throw(){
     ss << "P" << p << " @Q" << pcs[p] << " {cpointer=" << cpointers[p];
     for(int r = 0; r < common.reg_count[p]; ++r){
       ss << ", " << common.machine.regs[p][r].name << "=";
-      if(reg_stores[p][r] == STAR){
+      if(reg_stores[p][r] == value_t::STAR){
         ss << "*";
       }else{
         ss << reg_stores[p][r];
@@ -500,7 +473,7 @@ std::string SbConstraint::Msg::to_short_string(const SbConstraint::Common &commo
     if(!first_var) ss << ", ";
     first_var = false;
     ss << common.machine.gvars[i].name << "=";
-    if(store[common.index(Lang::NML::global(i))] == STAR){
+    if(store[common.index(Lang::NML::global(i))] == value_t::STAR){
       ss << "*";
     }else{
       ss << store[common.index(Lang::NML::global(i))];
@@ -511,7 +484,7 @@ std::string SbConstraint::Msg::to_short_string(const SbConstraint::Common &commo
       if(!first_var) ss << ", ";
       first_var = false;
       ss << common.machine.lvars[p][i].name << "[P" << p << "]=";
-      if(store[common.index(Lang::NML::local(i,p))] == STAR){
+      if(store[common.index(Lang::NML::local(i,p))] == value_t::STAR){
         ss << "*";
       }else{
         ss << store[common.index(Lang::NML::local(i,p))];
@@ -522,249 +495,26 @@ std::string SbConstraint::Msg::to_short_string(const SbConstraint::Common &commo
   return ss.str();
 };
 
-std::string SbConstraint::Store::to_string() const{
-  std::stringstream ss;
-  ss << "[";
-  for(int i = 0; i < store[1]; ++i){
-    if(i != 0) ss << ", ";
-    if(store[i+2] == STAR){
-      ss << "*";
-    }else{
-      ss << store[i+2];
-    }
-  }
-  ss << "]";
-  return ss.str();
-}
-
 VecSet<int> SbConstraint::possible_values(const Store &mem, const Lang::NML &nml) const{
-  value_t mv = mem[common.index(nml)];
-  if(mv == STAR){
-    const Lang::VarDecl::Domain *dom;
-    if(nml.is_global()){
-      dom = &common.machine.gvars[nml.get_id()].domain;
-    }else{
-      dom = &common.machine.lvars[nml.get_owner()][nml.get_id()].domain;
-    }
-    std::vector<int> v(dom->get_upper_bound() - dom->get_lower_bound() + 1);
-    for(int i = dom->get_lower_bound(); i <= dom->get_upper_bound(); i++){
-      v[i-dom->get_lower_bound()] = i;
-    }
-    return VecSet<int>(v);
-  }else{
-    return VecSet<int>::singleton(mv);
-  }
+  return mem.possible_values(common.index(nml),common.machine.get_var_decl(nml));
 };
 
 VecSet<int> SbConstraint::possible_values(const Store &reg_store, int pid, const Lang::Expr<int> &e) const{
-  int reg_count = common.reg_count[pid];
-  std::set<int> eregs = e.get_registers();
-  std::vector<int> lbs(reg_count);
-  std::vector<int> ubs(reg_count);
-  std::vector<int> valuation(reg_count);
-  int value_count_ub = 1; // The upper bound for the number of possible values for e
-  for(int i = 0; i < reg_count; ++i){
-    if(eregs.count(i)){
-      if(reg_store[i] == STAR){
-        lbs[i] = common.machine.regs[pid][i].domain.get_lower_bound();
-        ubs[i] = common.machine.regs[pid][i].domain.get_upper_bound();
-        value_count_ub *= (ubs[i] - lbs[i] + 1);
-      }else{
-        lbs[i] = ubs[i] = reg_store[i];
-      }
-    }else{
-      lbs[i] = ubs[i] = 0;
-    }
-    valuation[i] = lbs[i];
-  }
-
-  VecSet<int> pos_vals;
-  pos_vals.reserve(value_count_ub);
-
-  bool done = false;
-  while(!done){
-    pos_vals.insert(e.eval<std::vector<int>, int*>(valuation,0));
-
-    /* Find the next valuation */
-    int i = 0;
-    while(i < reg_count){
-      ++valuation[i];
-      if(valuation[i] <= ubs[i]){
-        break; // Found new valuation
-      }else{
-        valuation[i] = lbs[i];
-        ++i;
-        // Try increasing the next instead...
-      }
-    }
-    if(i == reg_count){
-      done = true;
-    }
-  }
-
-  return pos_vals;
+  return reg_store.possible_values(e,common.machine.regs[pid]);
 };
 
 bool SbConstraint::possibly_holds(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
-  int reg_count = common.reg_count[pid];
-  std::set<int> bregs = b.get_registers();
-  std::vector<int> lbs(reg_count);
-  std::vector<int> ubs(reg_count);
-  std::vector<int> valuation(reg_count);
-  for(int i = 0; i < reg_count; ++i){
-    if(bregs.count(i)){
-      if(reg_store[i] == STAR){
-        lbs[i] = common.machine.regs[pid][i].domain.get_lower_bound();
-        ubs[i] = common.machine.regs[pid][i].domain.get_upper_bound();
-      }else{
-        lbs[i] = ubs[i] = reg_store[i];
-      }
-    }else{
-      lbs[i] = ubs[i] = 0;
-    }
-    valuation[i] = lbs[i];
-  }
-
-  bool done = false;
-  while(!done){
-    if(b.eval<std::vector<int>, int*>(valuation,0)){
-      return true;
-    }
-
-    /* Find the next valuation */
-    int i = 0;
-    while(i < reg_count){
-      ++valuation[i];
-      if(valuation[i] <= ubs[i]){
-        break; // Found new valuation
-      }else{
-        valuation[i] = lbs[i];
-        ++i;
-        // Try increasing the next instead...
-      }
-    }
-    if(i == reg_count){
-      done = true;
-    }
-  }
-
-  return false;
+  throw new std::logic_error("SbConstraint::possibly_holds: Not implemented");
 };
 
 VecSet<SbConstraint::Store> 
 SbConstraint::possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const{
-  int reg_count = common.reg_count[pid];
-  std::set<int> eregs = e.get_registers();
-  std::vector<int> lbs(reg_count);
-  std::vector<int> ubs(reg_count);
-  std::vector<value_t> valuation(reg_count);
-  int value_count_ub = 1; // The upper bound for the number of possible values for e
-  for(int i = 0; i < reg_count; ++i){
-    if(eregs.count(i)){
-      if(reg_store[i] == STAR){
-        lbs[i] = common.machine.regs[pid][i].domain.get_lower_bound();
-        ubs[i] = common.machine.regs[pid][i].domain.get_upper_bound();
-        value_count_ub *= (ubs[i] - lbs[i] + 1);
-      }else{
-        lbs[i] = ubs[i] = reg_store[i];
-      }
-    }else{
-      lbs[i] = ubs[i] = reg_store[i]; // Note: Here it may happen that lbs[i] == ubs[i] == STAR
-    }
-    valuation[i] = lbs[i];
-  }
-
-  VecSet<Store> rss;
-  rss.reserve(value_count_ub);
-
-  bool done = false;
-  while(!done){
-    int val = e.eval<std::vector<value_t>, int*>(valuation,0);
-
-    if(val == value){
-      rss.insert(Store(valuation));
-    }
-
-    /* Find the next valuation */
-    int i = 0;
-    while(i < reg_count){
-      if(eregs.count(i) == 0){
-        // Ignore this value, it is not in eregs anyway
-        i++;
-      }else{
-        ++valuation[i];
-        if(valuation[i] <= ubs[i]){
-          break; // Found new valuation
-        }else{
-          valuation[i] = lbs[i];
-          ++i;
-          // Try increasing the next instead...
-        }
-      }
-    }
-    if(i == reg_count){
-      done = true;
-    }
-  }
-
-  return rss;
+  return reg_store.possible_regs(e,value,common.machine.regs[pid]);
 };
 
 VecSet<SbConstraint::Store> 
 SbConstraint::possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
-  int reg_count = common.reg_count[pid];
-  std::set<int> bregs = b.get_registers();
-  std::vector<int> lbs(reg_count);
-  std::vector<int> ubs(reg_count);
-  std::vector<value_t> valuation(reg_count);
-  int valuation_count = 1;
-  for(int i = 0; i < reg_count; ++i){
-    if(bregs.count(i)){
-      if(reg_store[i] == STAR){
-        lbs[i] = common.machine.regs[pid][i].domain.get_lower_bound();
-        ubs[i] = common.machine.regs[pid][i].domain.get_upper_bound();
-        valuation_count *= (ubs[i] - lbs[i] + 1);
-      }else{
-        lbs[i] = ubs[i] = reg_store[i];
-      }
-    }else{
-      lbs[i] = ubs[i] = reg_store[i]; // Note: Here it may happen that lbs[i] == ubs[i] == STAR
-    }
-    valuation[i] = lbs[i];
-  }
-
-  VecSet<Store> rss;
-  rss.reserve(valuation_count);
-
-  bool done = false;
-  while(!done){
-    if(b.eval<std::vector<value_t>, int*>(valuation,0)){
-      rss.insert(Store(valuation));
-    }
-
-    /* Find the next valuation */
-    int i = 0;
-    while(i < reg_count){
-      if(bregs.count(i) == 0){
-        // Ignore this value, it is not in bregs anyway
-        i++;
-      }else{
-        ++valuation[i];
-        if(valuation[i] <= ubs[i]){
-          break; // Found new valuation
-        }else{
-          valuation[i] = lbs[i];
-          ++i;
-          // Try increasing the next instead...
-        }
-      }
-    }
-    if(i == reg_count){
-      done = true;
-    }
-  }
-
-  return rss;
+  return reg_store.possible_regs(b,common.machine.regs[pid]);
 };
 
 int SbConstraint::index_of_read(Lang::NML nml, int pid) const{
@@ -797,7 +547,7 @@ std::vector<SbConstraint*> SbConstraint::channel_pop_back() const{
 
     std::vector<Msg> ch0(channel);
     ch0.pop_back();
-    ch0[ch0.size()-1].store = ch0[ch0.size()-1].store.unify(channel.back().store.assign(nmli,STAR),&last_unifiable);
+    ch0[ch0.size()-1].store = ch0[ch0.size()-1].store.unify(channel.back().store.assign(nmli,value_t::STAR),&last_unifiable);
 
     if(last_unifiable){
       /* The case when there is no hidden message */
@@ -831,7 +581,7 @@ std::vector<SbConstraint*> SbConstraint::channel_pop_back() const{
     /* The case when the hidden message is the last of the new channel */
     {
       sbc = new SbConstraint(*this);
-      sbc->channel.back().store = sbc->channel.back().store.assign(nmli,STAR);
+      sbc->channel.back().store = sbc->channel.back().store.assign(nmli,value_t::STAR);
       res.push_back(sbc);
     }
 
@@ -976,7 +726,7 @@ void SbConstraint::test_possible_values(){
       std::vector<value_t> v;
       v.push_back(0);
       v.push_back(12);
-      v.push_back(STAR);
+      v.push_back(value_t::STAR);
       test4_v.push_back(Store(v));
       v[0] = 1;
       v[1] = 11;
@@ -1191,7 +941,7 @@ std::list<SbConstraint::pre_constr_t> SbConstraint::pre(const Machine::PTransiti
     {
       VecSet<int> val_r = possible_values(reg_stores[t.pid],t.pid,Lang::Expr<int>::reg(s.get_reg()));
       for(int i = 0; i < val_r.size(); ++i){
-        VecSet<Store> rss = possible_reg_stores(reg_stores[t.pid].assign(s.get_reg(),STAR),
+        VecSet<Store> rss = possible_reg_stores(reg_stores[t.pid].assign(s.get_reg(),value_t::STAR),
                                                 t.pid,
                                                 s.get_expr(),
                                                 val_r[i]);
@@ -1226,7 +976,7 @@ std::list<SbConstraint::pre_constr_t> SbConstraint::pre(const Machine::PTransiti
     }
   case Lang::READASSIGN:
     {
-      if(reg_stores[t.pid][s.get_reg()] == STAR){
+      if(reg_stores[t.pid][s.get_reg()] == value_t::STAR){
         SbConstraint *sbc = new SbConstraint(*this);
         sbc->pcs[t.pid] = t.source;
         res.push_back(sbc);
@@ -1235,10 +985,10 @@ std::list<SbConstraint::pre_constr_t> SbConstraint::pre(const Machine::PTransiti
         int nmli = common.index(nml);
         int msgi = index_of_read(nml,t.pid);
         VecSet<int> val_nml = possible_values(channel[msgi].store,nml);
-        if(val_nml.count(reg_stores[t.pid][s.get_reg()]) > 0){
+        if(val_nml.count(reg_stores[t.pid][s.get_reg()].get_int()) > 0){
           SbConstraint *sbc = new SbConstraint(*this);
           sbc->pcs[t.pid] = t.source;
-          if(sbc->channel[msgi].store[nmli] == STAR){
+          if(sbc->channel[msgi].store[nmli] == value_t::STAR){
             sbc->channel[msgi].store = sbc->channel[msgi].store.assign(nmli,reg_stores[t.pid][s.get_reg()]);
           }
           res.push_back(sbc);
@@ -1469,7 +1219,7 @@ void SbConstraint::test_comparison(){
     Common common(dummy_machine);
 
     std::function<bool(std::string,bool)> test = 
-      [](std::string name, bool result){
+      [](std::string name, bool result)->bool{
       if(result){
         std::cout << name << ": Success!\n";
       }else{
@@ -1479,7 +1229,7 @@ void SbConstraint::test_comparison(){
     };
 
     std::function<std::string(const SbConstraint &)> char_to_string =
-      [](const SbConstraint &sbc){
+      [](const SbConstraint &sbc)->std::string{
       std::vector<MsgCharacterization> chr = sbc.characterize_channel();
       std::stringstream ss;
       ss << "[";
@@ -1623,26 +1373,6 @@ Constraint::Comparison SbConstraint::entailment_compare(const Constraint &c) con
   return entailment_compare(static_cast<const SbConstraint&>(c));
 };
 
-Constraint::Comparison SbConstraint::Store::entailment_compare(const Store &s) const{
-  if(size() != s.size()){
-    return Constraint::INCOMPARABLE;
-  }
-
-  Constraint::Comparison cmp = Constraint::EQUAL;
-  for(int i = 0; cmp != Constraint::INCOMPARABLE && i < size(); ++i){
-    if(store[i+2] != s.store[i+2]){
-      if(store[i+2] == STAR){
-        cmp = Constraint::comb_comp(cmp,Constraint::LESS);
-      }else if(s.store[i+2] == STAR){
-        cmp = Constraint::comb_comp(cmp,Constraint::GREATER);
-      }else{
-        cmp = Constraint::INCOMPARABLE;
-      }
-    }
-  }
-  return cmp;
-};
-
 Constraint::Comparison SbConstraint::entailment_compare(const SbConstraint &sbc) const{
   if(pcs != sbc.pcs){
     return Constraint::INCOMPARABLE;
@@ -1763,25 +1493,6 @@ std::vector<SbConstraint::MsgCharacterization> SbConstraint::characterize_channe
   return w;
 };
 
-SbConstraint::Store SbConstraint::Store::unify(const Store &s, bool *unifiable) const{
-  assert(size() == s.size());
-  Store lub(size());
-  for(int i = 0; i < size(); ++i){
-    if(store[i+2] == s.store[i+2]){
-      lub.store[i+2] = store[i+2];
-    }else if(store[i+2] == STAR){
-      lub.store[i+2] = s.store[i+2];
-    }else if(s.store[i+2] == STAR){
-      lub.store[i+2] = store[i+2];
-    }else{
-      *unifiable = false;
-      return lub;
-    }
-  }
-  *unifiable = true;
-  return lub;
-};
-
 bool SbConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli){
   if(nmli < 0){
     nmli = common.index(nml);
@@ -1790,14 +1501,14 @@ bool SbConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli){
 }
 
 bool SbConstraint::propagate_value_in_channel(std::vector<Msg> *ch, const Lang::NML &nml, int nmli){
-  value_t val = STAR;
+  value_t val = value_t::STAR;
   int i;
   for(i = int(ch->size())-1; i >= 0; --i){
-    if(val == STAR){
+    if(val == value_t::STAR){
       val = (*ch)[i].store[nmli];
     }else{
-      int val2 = (*ch)[i].store[nmli];
-      if(val2 != STAR && val2 != val){
+      value_t val2 = (*ch)[i].store[nmli];
+      if(val2 != value_t::STAR && val2 != val){
         return false;
       }
     }
@@ -1808,10 +1519,10 @@ bool SbConstraint::propagate_value_in_channel(std::vector<Msg> *ch, const Lang::
     }
   }
   /* Update the channel */
-  if(val != STAR){
+  if(val != value_t::STAR){
     if(i == -1) i = 0;
     for( ; i < int(ch->size()); ++i){
-      if((*ch)[i].store[nmli] == STAR){
+      if((*ch)[i].store[nmli] == value_t::STAR){
         (*ch)[i].store = (*ch)[i].store.assign(nmli,val);
       }
     }

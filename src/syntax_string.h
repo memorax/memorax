@@ -45,8 +45,14 @@ public:
   static SyntaxString minus(const SyntaxString &t); // Unary minus
 
   /* Predicate constructors */
-  static SyntaxString tt;
-  static SyntaxString ff;
+  static SyntaxString tt(){
+    static SyntaxString t(true);
+    return t;
+  };
+  static SyntaxString ff(){
+    static SyntaxString f(false);
+    return f;
+  };
   static SyntaxString eq(const SyntaxString &a, const SyntaxString &b);
   static SyntaxString neq(const SyntaxString &a, const SyntaxString &b);
   static SyntaxString lt(const SyntaxString &a, const SyntaxString &b);
@@ -77,7 +83,7 @@ public:
 
   /* Converts all constants c and arguments a to respectively vc(c)
    * and vc(a). */
-  template<class Var2> SyntaxString<Var2> convert(std::function<Var2(const Var&)> &vc) const throw();
+  template<class Var2> SyntaxString<Var2> convert(std::function<Var2(const Var&)> &vc) const;
 
   /* Evaluates this expression. Constant variables v are evaluated to
    * c[v]. Arguments v are evaluated to A[v]. If this expression is

@@ -29,7 +29,7 @@ namespace ShellCmd{
   public:
     ShCmdException(std::string m) : msg(m) {};
     virtual ~ShCmdException() throw() {};
-    virtual const char *what() throw() { return ("ShCmd: "+msg).c_str(); };
+    virtual const char *what() const throw() { return ("ShCmd: "+msg).c_str(); };
   private:
     std::string msg;
   };

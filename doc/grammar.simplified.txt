@@ -122,6 +122,7 @@ MEMLOC ::=
     ID
   | ID '[' 'my' ']'
   | ID '[' NAT ']'
+  | '[' EXPR ']'
 
 LABEL ::= ID
 

@@ -44,9 +44,6 @@ namespace Predicates{
     return Predicate(e.convert(g));
   };
 
-  template<class Var> Predicate<Var> Predicate<Var>::tt(SyntaxString<Var>::tt);
-  template<class Var> Predicate<Var> Predicate<Var>::ff(SyntaxString<Var>::ff);
-
   template<class Var> std::set<Var> Predicate<Var>::get_variables() const throw(){
     std::set<Var> s;
     for(int i = 0; i < this->const_count; i++){

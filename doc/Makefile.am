@@ -1,5 +1,6 @@
 nobase_dist_doc_DATA = \
    manual.pdf \
+   examples/bakery.bound2.rmm \
    examples/bakery.rmm \
    examples/burns.rmm \
    examples/clh.rmm \
@@ -8,6 +9,7 @@ nobase_dist_doc_DATA = \
    examples/dijkstra.rmm \
    examples/lamport_fast.rmm \
    examples/peterson.rmm \
+   examples/sense_rev_bar.rmm \
    examples/ticket_spin_lock.2.rmm \
    examples/ticket_spin_lock.rmm
 

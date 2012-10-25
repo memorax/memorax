@@ -43,7 +43,7 @@ namespace Lang {
   class Exception : public std::exception{
   public:
     Exception(std::string m) : msg(m) {};
-    virtual const char *what(){ return msg.c_str(); };
+    virtual const char *what() const throw() { return msg.c_str(); };
     virtual ~Exception() throw() {};
   private:
     std::string msg;
@@ -188,7 +188,7 @@ namespace Lang {
   };
 
   inline std::function<std::string(const int&)> int_reg_to_string(){
-    return [](const int &i){
+    return [](const int &i)->std::string{
       std::stringstream ss;
       ss << "$reg:" << i;
       return ss.str();
@@ -280,8 +280,14 @@ namespace Lang {
     };
 
     /* Constructors */
-    static BExpr tt;
-    static BExpr ff;
+    static BExpr tt(){
+      static BExpr<RegId> t(SyntaxString<RegId>::tt());
+      return t;
+    };
+    static BExpr ff(){
+      static BExpr<RegId> f(SyntaxString<RegId>::ff());
+      return f;
+    };
     static BExpr eq(const Expr<RegId> &a, const Expr<RegId> &b){
       return BExpr(SyntaxString<RegId>::eq(a,b));
     };
@@ -687,6 +693,19 @@ namespace Lang {
     template<class RegId2> Stmt<RegId2> 
     convert(std::function<RegId2(const RegId&)> &rc,
             std::function<MemLoc<RegId2>(const MemLoc<RegId>&)> &mlc) const;
+    /* Returns an Stmt equal to this one, but if this Stmt is a locked
+     * statement, then the contained tree-structure has been flattened
+     * as follows:
+     *
+     * The returned locked statement has a sequence of unique
+     * alternatives a0,...,an, such that no ai contains a locked
+     * statement. Sequences ai = {s0,...,{s0',...,sk'},...,sm} are
+     * flattened into {s0,...,s0',...,sk',...sm}. Sequences ai = {s0}
+     * are replaced by s0.
+     *
+     * Pre: This Stmt is an instruction.
+     */
+    Stmt flatten() const;
     /* Returns a string representation of this statement.
      * 
      * Registers r and memory locations ml will be represented with
@@ -772,6 +791,7 @@ namespace Lang {
      * Then fills them with reads and writes that are in stmts.
      * reads and writes will be sorted and distinct */
     void populate_reads_writes();
+    std::vector<std::vector<Stmt> > flatten_aux() const;
   };
 
   template<class RegId> inline std::ostream &operator<<(std::ostream &os,Expr<RegId> &e){
