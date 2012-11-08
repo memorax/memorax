@@ -504,8 +504,16 @@ Parser::bexpr_t Parser::p_bexpr_atom_r(Lexer &lex,const expr_t &left){
     {
       return bexpr_t::gt(left, p_expr(lex));
     }
+  case Lexer::LEQ:
+    {
+      return bexpr_t::leq(left, p_expr(lex));
+    }
+  case Lexer::GEQ:
+    {
+      return bexpr_t::geq(left, p_expr(lex));
+    }
   default:
-    throw new SyntaxError("Expected comparison operator (=,!=,<,>) at "+
+    throw new SyntaxError("Expected comparison operator (=,!=,<,>,<=,>=) at "+
                           tok.pos.to_long_string()+
                           ".",tok.pos);
   }

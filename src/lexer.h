@@ -44,8 +44,8 @@ public:
     ASSUME, FORBIDDEN, PREDICATES, REGISTERS,
 
     EQ, LPAREN, RPAREN, COMMA, MINUS, STAR, SEMICOLON, COLON,
-    ASSIGNMENT, LCURL, RCURL, OR, AND, NEQ, LT, GT, PLUS, 
-    LBRAK, RBRAK, AT
+    ASSIGNMENT, LCURL, RCURL, OR, AND, NEQ, LT, GT, LEQ, GEQ, 
+    PLUS, LBRAK, RBRAK, AT
   };
 
   static std::string token_type_to_string(TokenType);

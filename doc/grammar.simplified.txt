@@ -103,6 +103,8 @@ BEXPR-ATOM ::=
   | EXPR '!=' EXPR
   | EXPR '<' EXPR
   | EXPR '>' EXPR
+  | EXPR '<=' EXPR
+  | EXPR '>=' EXPR
   | '[' BEXPR ']'
 
 EXPR ::=

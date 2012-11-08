@@ -107,6 +107,8 @@ Lexer::Lexer(std::istream &i) : is(i), eof(false) {
   operators["!="] = NEQ;
   operators["<"]  = LT;
   operators[">"]  = GT;
+  operators["<="]  = LEQ;
+  operators[">="]  = GEQ;
   operators["+"]  = PLUS;
   operators["["]  = LBRAK;
   operators["]"]  = RBRAK;
@@ -188,6 +190,8 @@ std::string Lexer::token_type_to_string(TokenType typ){
   case NEQ: return "!=";
   case LT: return "<";
   case GT: return ">";
+  case LEQ: return "<=";
+  case GEQ: return ">=";
   case PLUS: return "+";
   case LBRAK: return "[";
   case RBRAK: return "]";
