@@ -31,6 +31,29 @@ Basic Installation
    $ make
    $ make install
 
+Building the configure Script and Makefiles
+===========================================
+
+   The downloadable tarballs are provided with a configure script and
+   Makefiles. But in case you acquired the Memorax sources by
+   e.g. cloning the git repository, it is necessary to build those
+   files using GNU autotools. The easiest way to do this is as
+   follows:
+
+   $ cd memorax-<version>
+   $ autoreconf --install
+
+   This will automatically produce a configure script as well as
+   Makefiles, from the autotools template files configure.ac,
+   Makefile.am, doc/Makefile.am, src/Makefile.am.
+
+   After building the installation files, you should be able to
+   proceed in the same way as above:
+
+   $ ./configure
+   $ make
+   $ make install
+
 Installation Options
 ====================
 
