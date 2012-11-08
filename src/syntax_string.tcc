@@ -1114,8 +1114,8 @@ template<class Var> MSat::msat_term SyntaxString<Var>::to_msat_term(int i, MSat:
   case GT:
     {
 #if MATHSAT_VERSION == 4
-      MSat::msat_make_gt(env,to_msat_term(i+2,env,var_decl_map,vts),
-                         to_msat_term(i+symbols[i+1],env,var_decl_map,vts));
+      return MSat::msat_make_gt(env,to_msat_term(i+2,env,var_decl_map,vts),
+                                to_msat_term(i+symbols[i+1],env,var_decl_map,vts));
 #elif MATHSAT_VERSION == 5
       MSat::msat_term a = to_msat_term(i+2,env,var_decl_map,vts);
       MSat::msat_term b = to_msat_term(i+symbols[i+1],env,var_decl_map,vts);
@@ -1127,8 +1127,8 @@ template<class Var> MSat::msat_term SyntaxString<Var>::to_msat_term(int i, MSat:
   case GEQ:
     {
 #if MATHSAT_VERSION == 4
-      return MSat::msat_make_geq(env,to_msat_term(i+symbols[i+1],env,var_decl_map,vts),
-                                 to_msat_term(i+2,env,var_decl_map,vts));
+      return MSat::msat_make_geq(env,to_msat_term(i+2,env,var_decl_map,vts),
+                                 to_msat_term(i+symbols[i+1],env,var_decl_map,vts));
 #elif MATHSAT_VERSION == 5
       return MSat::msat_make_leq(env,
                                  to_msat_term(i+symbols[i+1],env,var_decl_map,vts),
@@ -1388,145 +1388,6 @@ template<class Var> bool SyntaxString<Var>::check_invariant() const{
 
   return true;
 };
-
-/*
-template<class Var> SyntaxString<Var> SyntaxString<Var>::simplify() const throw(){
-  switch(symbols[0]){
-  case INT: return *this;
-  case VAR: return *this;
-  case ARG: return *this;
-  case TRUE: return *this;
-  case FALSE: return *this;
-  case PLUS:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      if(b.symbols[0] == UNMINUS){
-        return minus(a,b.separate_only_argument()).simplify();
-      }else if(b.symbols[0] == INT && a.symbols[0] == PLUS && a.separate_right_argument().symbols[0] == INT){
-        int sum = a.separate_right_argument().get_integer() + b.get_integer();
-        return plus(a.separate_left_argument(),SyntaxString::integer(sum)).simplify();
-      }else if(b.symbols[0] == INT && b.get_integer() == 0){
-        return a;
-      }else if(b.symbols[0] == INT && b.get_integer() < 0){
-        return minus(a,integer(-b.get_integer())).simplify();
-      }else{
-        return plus(a,b);
-      }
-    }
-  case MINUS:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      return minus(a,b);
-    }
-  case UNMINUS:
-    {
-      SyntaxString a = separate_only_argument().simplify();
-      return minus(a);
-    }
-  case EQ:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      if(a.symbols[0] == PLUS && b.symbols[0] == PLUS &&
-         a.separate_right_argument().symbols[0] == INT &&
-         b.separate_right_argument().symbols[0] == INT){
-        int sum = b.separate_right_argument().get_integer() - a.separate_right_argument().get_integer();
-        return eq(a.separate_left_argument(),plus(b.separate_left_argument(),integer(sum))).simplify();
-      }else if(a.symbols[0] == PLUS && b.symbols[0] == INT &&
-               a.separate_right_argument().symbols[0] == INT){
-        int sum = b.get_integer() - a.separate_right_argument().get_integer();
-        return eq(a.separate_left_argument(),integer(sum)).simplify();
-      }else{
-        return eq(a,b);
-      }
-      return eq(a,b);
-    }
-  case NEQ:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      if(a.symbols[0] == PLUS && b.symbols[0] == PLUS &&
-         a.separate_right_argument().symbols[0] == INT &&
-         b.separate_right_argument().symbols[0] == INT){
-        int sum = b.separate_right_argument().get_integer() - a.separate_right_argument().get_integer();
-        return neq(a.separate_left_argument(),plus(b.separate_left_argument(),integer(sum))).simplify();
-      }else if(a.symbols[0] == PLUS && b.symbols[0] == INT &&
-               a.separate_right_argument().symbols[0] == INT){
-        int sum = b.get_integer() - a.separate_right_argument().get_integer();
-        return neq(a.separate_left_argument(),integer(sum)).simplify();
-      }else{
-        return neq(a,b);
-      }
-    }
-  case LT:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      if(a.symbols[0] == PLUS && b.symbols[0] == PLUS &&
-         a.separate_right_argument().symbols[0] == INT &&
-         b.separate_right_argument().symbols[0] == INT){
-        int sum = b.separate_right_argument().get_integer() - a.separate_right_argument().get_integer();
-        return lt(a.separate_left_argument(),plus(b.separate_left_argument(),integer(sum))).simplify();
-      }else if(a.symbols[0] == PLUS && b.symbols[0] == INT &&
-               a.separate_right_argument().symbols[0] == INT){
-        int sum = b.get_integer() - a.separate_right_argument().get_integer();
-        return lt(a.separate_left_argument(),integer(sum)).simplify();
-      }else{
-        return lt(a,b);
-      }
-    }
-  case LEQ:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      return leq(a,b);
-    }
-  case GT:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      return gt(a,b);
-    }
-  case GEQ:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      if(a.symbols[0] == PLUS && b.symbols[0] == PLUS &&
-         a.separate_right_argument().symbols[0] == INT &&
-         b.separate_right_argument().symbols[0] == INT){
-        int sum = b.separate_right_argument().get_integer() - a.separate_right_argument().get_integer();
-        return geq(a.separate_left_argument(),plus(b.separate_left_argument(),integer(sum))).simplify();
-      }else if(a.symbols[0] == PLUS && b.symbols[0] == INT &&
-               a.separate_right_argument().symbols[0] == INT){
-        int sum = b.get_integer() - a.separate_right_argument().get_integer();
-        return geq(a.separate_left_argument(),integer(sum)).simplify();
-      }else{
-        return geq(a,b);
-      }
-    }
-  case NOT:
-    {
-      return drive_in_negations().simplify();
-    }
-  case AND:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      return conj(a,b);
-    }
-  case OR:
-    {
-      SyntaxString a = separate_left_argument().simplify();
-      SyntaxString b = separate_right_argument().simplify();
-      return disj(a,b);
-    }
-  default:
-    throw new std::logic_error("SyntaxString::simplify: Unknown symbol.");
-  }
-}
-*/
 
 template<class Var> SyntaxString<Var> SyntaxString<Var>::simplify() const throw(){
   switch(symbols[0]){
