@@ -77,6 +77,8 @@ Leonardsson ({\tt carl.leonardsson@it.uu.se}).
 
 \section{Installation}
 
+Memorax can be compiled and installed on UNIX-like systems.
+
 \subsection{Requirements}
 
 \begin{enumerate}
@@ -97,6 +99,10 @@ Leonardsson ({\tt carl.leonardsson@it.uu.se}).
   \item To be able to graphically draw automata, Graphviz is required.
 \end{enumerate}
 
+If you acquired Memorax by other means than downloading the
+installable tarballs (e.g. cloning the git repository) then GNU
+autotools and a latex installation will also be required.
+
 \subsection{Basic Installation}
 
    In the simplest case, \memorax\ can be installed with the following
@@ -110,10 +116,13 @@ $ make
 $ make install
 \end{verbatim}
 
+In case you have no configure script, then you should refer to the
+next section.
+
 \subsection{Building the configure Script and Makefiles}
 
-   The downloadable tarballs are provided with a {\tt configure}
-   script and {\tt Makefile}s. But in case you acquired the
+   The installable tarballs are provided with a {\tt configure} script
+   and {\tt Makefile} templates. But in case you acquired the
    \memorax\ sources by e.g. cloning the git repository, it is
    necessary to build those files using GNU autotools. The easiest way
    to do this is as follows:
@@ -124,8 +133,9 @@ $ autoreconf --install
 \end{verbatim}
 
    This will automatically produce a configure script as well as
-   Makefiles, from the autotools template files {\tt configure.ac},
-   {\tt Makefile.am}, {\tt doc/Makefile.am}, {\tt src/Makefile.am}.
+   Makefile templates, from the autotools template files {\tt
+     configure.ac}, {\tt Makefile.am}, {\tt doc/Makefile.am}, {\tt
+     src/Makefile.am}.
 
    After building the installation files, you should be able to
    proceed in the same way as above:
