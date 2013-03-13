@@ -306,7 +306,7 @@ CS:\n\
         self.cegar_check = Tkinter.IntVar() # Checks whether or not to use CEGAR
         self.cegar_check.set(True)
         self.rff_check = Tkinter.IntVar() # Checks whether or not to use register free form
-        self.rff_check.set(False)
+        self.rff_check.set(True)
 
         master.bind_all("<F1>",lambda evt: self.select_command("reach"))
         master.bind_all("<F2>",lambda evt: self.select_command("fencins"))
