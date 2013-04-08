@@ -16,6 +16,7 @@ lexer.cpp lexer.h \
 log.cpp log.h \
 machine.cpp machine.h \
 main.cpp \
+min_coverage.cpp min_coverage.h min_coverage.tcc \
 parser.cpp parser.h \
 pb_cegar.cpp pb_cegar.h \
 pb_constraint.cpp pb_constraint.h \
