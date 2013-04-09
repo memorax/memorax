@@ -19,6 +19,7 @@
  */
 
 #include <cassert>
+#include <map>
 #include <queue>
 #include <vector>
 #include <sstream>
@@ -30,8 +31,10 @@ namespace MinCoverage{
   template<typename S>
   class CandSet{
   public:
-    /* Constructs an empty candidate for (T,cost_fun) */
+    /* Constructs an empty candidate for (T,cost_fun)
+     * cm should be a coverage map for T (See get_coverage_map below). */
     CandSet(const std::vector<std::set<S> > &T,
+            const std::map<S,std::set<int> > &cm,
             const std::function<int(const S&)> &cost_fun);
     CandSet(const CandSet&) = default;
     CandSet &operator=(const CandSet&);
@@ -68,6 +71,8 @@ namespace MinCoverage{
     int cost;
     /* The set of sets T */
     const std::vector<std::set<S> > &T;
+    /* coverage_map is get_coverage_map(T) */
+    const std::map<S,std::set<int> > &coverage_map;
     /* The cost function */
     const std::function<int(const S&)> &cost_fun;
   };
@@ -108,8 +113,9 @@ namespace MinCoverage{
 
   template<typename S>
   CandSet<S>::CandSet(const std::vector<std::set<S> > &T,
+                      const std::map<S,std::set<int> > &cm,
                       const std::function<int(const S&)> &cost_fun)
-    : T(T), cost_fun(cost_fun){
+    : T(T), coverage_map(cm), cost_fun(cost_fun){
     coverage.resize(T.size(),false);
     cost = 0;
   };
@@ -149,12 +155,85 @@ namespace MinCoverage{
   template<typename S>
   void CandSet<S>::insert(const S &s){
     set.insert(s);
-    for(int i = 0; i < int(T.size()); ++i){
-      if(!coverage[i] && T[i].count(s)){
-        coverage[i] = true;
-      }
+    const std::set<int> &is = coverage_map.at(s);
+    for(auto it = is.begin(); it != is.end(); ++it){
+      coverage[*it] = true;
     }
     cost += cost_fun(s);
+  };
+
+  /* Returns a map m such that for each s contained in any set in T,
+   * m[s] is the set of all indices i where s is in T[i].
+   */
+  template<typename S> 
+  std::map<S,std::set<int> > 
+  get_coverage_map(const std::vector<std::set<S> > &T){
+    std::map<S,std::set<int> > m;
+    for(unsigned i = 0; i < T.size(); ++i){
+      for(auto it = T[i].begin(); it != T[i].end(); ++it){
+        m[*it].insert(i);
+      }
+    }
+    return m;
+  };
+
+  /* Returns a set of min-coverage sets for (T,cost).
+   *
+   * If get_all, then the returned set contains all min-coverage sets
+   * for (T,cost), otherwise it contains exactly one min-coverage set
+   * for (T,cost).
+   */
+  template<typename S> 
+  std::set<std::set<S> >
+  min_coverage_impl(const std::set<std::set<S> > &T,
+                    const std::function<int(const S&)> &cost,
+                    bool get_all){
+    
+    std::vector<std::set<S> > Tvec(T.begin(),T.end());
+    const std::map<S,std::set<int> > &cov_map = get_coverage_map(Tvec);
+
+    std::priority_queue<CandSet<S>,
+                        std::vector<CandSet<S> >,
+                        std::greater<CandSet<S> > > queue;
+
+    queue.push(CandSet<S>(Tvec,cov_map,cost));
+
+    std::set<std::set<S> > res;
+    bool found_first = false; // Have we found the first set?
+    int cost_res = -1; // If found_first, then cost_res is the cost of each individual set in res
+
+    while(!queue.empty() &&
+          (!get_all || !found_first || queue.top().get_cost() == cost_res) &&
+          (get_all || !found_first)){
+      CandSet<S> cs = queue.top();
+      queue.pop();
+
+      int i = cs.get_uncovered_Ti();
+      if(i == -1){ // Total coverage for cs
+        found_first = true;
+        cost_res = cs.get_cost();
+        res.insert(cs.get_set());
+      }else{ // Increase coverage
+        assert(i >= 0 && i < int(Tvec.size()));
+
+        for(auto it = Tvec[i].begin(); it != Tvec[i].end(); ++it){
+          CandSet<S> cs2 = cs;
+          cs2.insert(*it);
+          queue.push(cs2);
+        }
+      }
+    }
+
+    return res;
+  };
+
+  template<typename S> 
+  std::set<S>
+  min_coverage(const std::set<std::set<S> > &T,
+               const std::function<int(const S&)> &cost){
+    std::set<std::set<S> > mcs = min_coverage_impl(T,cost,false);
+    assert(mcs.size() == 1);
+    return *mcs.begin();
   };
 
   template<typename S> 
@@ -165,34 +244,19 @@ namespace MinCoverage{
     return min_coverage(T,unit_cost);
   };
 
-  template<typename S> 
-  std::set<S>
-  min_coverage(const std::set<std::set<S> > &T,
-               const std::function<int(const S&)> &cost){
-    
-    std::vector<std::set<S> > Tvec(T.begin(),T.end());
+  template<typename S>
+  std::set<std::set<S> >
+  min_coverage_all(const std::set<std::set<S> > &T,
+                   const std::function<int(const S&)> &cost){
+    return min_coverage_impl(T,cost,true);
+  };
 
-    std::priority_queue<CandSet<S>,
-                        std::vector<CandSet<S> >,
-                        std::greater<CandSet<S> > > queue;
-
-    queue.push(CandSet<S>(Tvec,cost));
-
-    while(!queue.top().total_coverage()){
-      CandSet<S> cs = queue.top();
-      queue.pop();
-
-      int i = cs.get_uncovered_Ti();
-      assert(i >= 0 && i < int(Tvec.size()));
-
-      for(auto it = Tvec[i].begin(); it != Tvec[i].end(); ++it){
-        CandSet<S> cs2 = cs;
-        cs2.insert(*it);
-        queue.push(cs2);
-      }
-    }
-
-    return queue.top().get_set();
+  template<typename S>
+  std::set<std::set<S> >
+  min_coverage_all(const std::set<std::set<S> > &T){
+    std::function<int(const S&)> unit_cost = 
+      [](const S&){ return 1; };
+    return min_coverage_all(T,unit_cost);
   };
 
 };

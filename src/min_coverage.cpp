@@ -38,9 +38,10 @@ namespace MinCoverage{
       T[0].insert(1); T[0].insert(2); T[0].insert(3);
       T[1].insert(2);
       T[2].insert(3); T[2].insert(4);
+      const std::map<int,std::set<int> > &cov_map = get_coverage_map(T);
 
       {
-        CandSet<int> cs0(T,unit_cost);
+        CandSet<int> cs0(T,cov_map,unit_cost);
         Test::inner_test("Initial cost",cs0.get_cost() == 0);
         {
           int sug = cs0.get_uncovered_Ti();
@@ -67,16 +68,21 @@ namespace MinCoverage{
       }
 
       {
-        std::set<std::set<int> > Tset(T.begin(),T.end());
-        std::set<int> mcset = min_coverage<int>(Tset);
-        Test::inner_test("Min coverage (unit)",
-                         mcset.size() == 2 && 
-                         ((mcset.count(2) && mcset.count(3)) || 
-                          (mcset.count(2) && mcset.count(4))));
+        std::set<std::set<int> > res_unit;
+        std::set<int> res0; res0.insert(2); res0.insert(3);
+        std::set<int> res1; res1.insert(2); res1.insert(4);
+        res_unit.insert(res0); res_unit.insert(res1);
 
-        std::set<int> mcset_id = min_coverage<int>(Tset,id_cost);
-        Test::inner_test("Min coverage (id)",
-                         mcset.size() == 2 && mcset.count(2) && mcset.count(3));
+        std::set<std::set<int> > Tset(T.begin(),T.end());
+        Test::inner_test("#1 Min coverage (unit)",res_unit.count(min_coverage<int>(Tset)));
+        Test::inner_test("#1 Min coverage all (unit)",res_unit == min_coverage_all<int>(Tset));
+
+        std::set<std::set<int> > res_id;
+        std::set<int> res2; res2.insert(2); res2.insert(3);
+        res_id.insert(res2);
+        Test::inner_test("#1 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
+        Test::inner_test("#1 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+
       }
     }
 
@@ -86,17 +92,55 @@ namespace MinCoverage{
       T[1].insert(5); T[1].insert(1);
       T[2].insert(2); T[2].insert(6);
 
-      std::set<std::set<int> > Tset(T.begin(),T.end());
-      std::set<int> mcset = min_coverage<int>(Tset);
-      Test::inner_test("Min coverage (unit)",
-                       mcset.size() == 2 && 
-                       ((mcset.count(5) && mcset.count(2)) || 
-                        (mcset.count(5) && mcset.count(6))));
+      std::set<std::set<int> > res_unit;
+      std::set<int> res0; res0.insert(5); res0.insert(2);
+      std::set<int> res1; res1.insert(5); res1.insert(6);
+      res_unit.insert(res0); res_unit.insert(res1);
 
-      std::set<int> mcset_id = min_coverage<int>(Tset,id_cost);
-      Test::inner_test("Min coverage (id)",
-                       mcset_id.size() == 3 && 
-                       mcset_id.count(1) && mcset_id.count(2) && mcset_id.count(3));
+      std::set<std::set<int> > Tset(T.begin(),T.end());
+      Test::inner_test("#2 Min coverage (unit)",res_unit.count(min_coverage<int>(Tset)));
+      Test::inner_test("#2 Min coverage all (unit)",res_unit == min_coverage_all<int>(Tset));
+
+      std::set<std::set<int> > res_id;
+      std::set<int> res2; res2.insert(1); res2.insert(2); res2.insert(3);
+      res_id.insert(res2);
+
+      Test::inner_test("#2 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
+      Test::inner_test("#2 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+    }
+
+    {
+      /* Test #3: Empty T */
+      std::set<std::set<int> > Tset;
+
+      std::set<std::set<int> > res;
+      res.insert(std::set<int>());
+      Test::inner_test("#3 Min coverage (unit)",res.count(min_coverage<int>(Tset)));
+      Test::inner_test("#3 Min coverage all (unit)",res == min_coverage_all<int>(Tset));
+
+      Test::inner_test("#3 Min coverage (id)",res.count(min_coverage<int>(Tset,id_cost)));
+      Test::inner_test("#3 Min coverage all (id)",res == min_coverage_all<int>(Tset,id_cost));
+    }
+
+    {
+      /* Test #4: Singleton T */
+      std::set<std::set<int> > Tset;
+      std::set<int> T0; T0.insert(1); T0.insert(2); T0.insert(3);
+      Tset.insert(T0);
+
+      std::set<std::set<int> > res_unit;
+      std::set<int> res1; res1.insert(1);
+      std::set<int> res2; res2.insert(2);
+      std::set<int> res3; res3.insert(3);
+      res_unit.insert(res1); res_unit.insert(res2); res_unit.insert(res3);
+      std::set<std::set<int> > res_id;
+      res_id.insert(res1);
+
+      Test::inner_test("#4 Min coverage (unit)",res_unit.count(min_coverage<int>(Tset)));
+      Test::inner_test("#4 Min coverage all (unit)",res_unit == min_coverage_all<int>(Tset));
+
+      Test::inner_test("#4 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
+      Test::inner_test("#4 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
     }
 
   };

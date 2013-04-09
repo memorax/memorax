@@ -52,6 +52,18 @@ namespace MinCoverage {
   std::set<S>
   min_coverage(const std::set<std::set<S> > &T);
 
+  /* Returns all min-coverage sets for (T,cost). */
+  template<typename S>
+  std::set<std::set<S> >
+  min_coverage_all(const std::set<std::set<S> > &T,
+                   const std::function<int(const S&)> &cost);
+
+  /* Returns all min-coverage sets for (T,unit), where unit assigns
+   * the cost 1 to each element. */
+  template<typename S>
+  std::set<std::set<S> >
+  min_coverage_all(const std::set<std::set<S> > &T);
+
   void test();
 };
 
