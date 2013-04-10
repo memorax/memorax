@@ -752,6 +752,16 @@ namespace Lang {
      * then *ss is assigned some substatement that satisfies f.
      */
     bool find_substmt(std::function<bool(const Stmt<RegId>&)> &f,Stmt *ss = 0) const throw();
+    /* Set the sequence of lexer symbols associated with this
+     * statement to symbs. The sequence should be the tokens that were
+     * parsed to produce this statement.
+     */
+    void set_lex_symbols(std::vector<Lexer::Token> symbs) { lex_symbols = symbs; };
+    /* Get the sequence of lexer symbols associtaed with this
+     * statement. If no sequence has been associated with this
+     * statement, an empty vector is returned.
+     */
+    const std::vector<Lexer::Token> &get_lex_symbols() const { return lex_symbols; };
   private:
     /* Creates a nop statement .
      * Sets all fields to default values. */
@@ -782,6 +792,10 @@ namespace Lang {
     /* The position in the source code at which this statement occurs.
      * (Defaults to (-1,-1) if no position is given.) */
     Lexer::TokenPos pos;
+    /* An empty vector, or the sequence of tokens that were parsed to
+     * produce this statement.
+     */
+    std::vector<Lexer::Token> lex_symbols;
 
     template<class RegId2> friend class Stmt;
 

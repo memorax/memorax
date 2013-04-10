@@ -280,7 +280,7 @@ template<class RegId> Lang::Stmt<RegId>::~Stmt() throw(){
 
 template<class RegId> Lang::Stmt<RegId>::Stmt(const Stmt &s) :
 type(s.type), reg(s.reg), writes(s.writes), reads(s.reads), e0(0), e1(0), b(0),
-stmts(0), fence(s.fence), lbl(s.lbl), writer(s.writer), stmt_count(s.stmt_count), pos(s.pos)
+stmts(0), fence(s.fence), lbl(s.lbl), writer(s.writer), stmt_count(s.stmt_count), pos(s.pos), lex_symbols(s.lex_symbols)
 {
   if(s.e0) e0 = new Expr<RegId>(*s.e0);
   if(s.e1) e1 = new Expr<RegId>(*s.e1);
@@ -314,6 +314,7 @@ template<class RegId> Lang::Stmt<RegId> &Lang::Stmt<RegId>::operator=(const Stmt
     writer = s.writer;
     stmt_count = s.stmt_count;
     pos = s.pos;
+    lex_symbols = s.lex_symbols;
   }
   return *this;
 };
