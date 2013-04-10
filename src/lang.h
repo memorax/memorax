@@ -521,22 +521,28 @@ namespace Lang {
     Stmt &operator=(const Stmt&); // Deep copy
     virtual ~Stmt() throw();
     /* Nop */
-    static Stmt<RegId> nop(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    static Stmt<RegId> nop(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                           std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Assignment: reg := e */
     static Stmt<RegId> assignment(RegId reg, const Expr<RegId> &e,
-                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Assume: assume: b */
     static Stmt<RegId> assume(const BExpr<RegId> &b,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Blocking read: read: ml = e */
     static Stmt<RegId> read_assert(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                   std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Assigning read: read: reg := ml */
     static Stmt<RegId> read_assign(RegId reg, MemLoc<RegId> ml,
-                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                   std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Non-locked write: write: ml := e */
     static Stmt<RegId> write(MemLoc<RegId> ml, const Expr<RegId> &e,
-                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Locked block: 
      * locked{
      *   ss[0]
@@ -552,16 +558,20 @@ namespace Lang {
      * ss.size() > 0
      */
     static Stmt<RegId> locked_block(const std::vector<Stmt> &ss,
-                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                    std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Locked write: locked write: ml := e */
     static Stmt<RegId> locked_write(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                    std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Cas: cas(ml,e0,e1) */
     static Stmt<RegId> cas(MemLoc<RegId> ml, const Expr<RegId> &e0, const Expr<RegId> &e1,
-                           const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                           const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                           std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Goto: goto lbl */
     static Stmt<RegId> goto_stmt(label_t lbl,
-                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                 std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Update: An update concerning memory locations mls, and a
      * write performed by process writer. 
      * 
@@ -575,7 +585,8 @@ namespace Lang {
      * SB.
      */
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Type of a labeled statement. */
     struct labeled_stmt_t{
       labeled_stmt_t() : lbl(""), stmt() {};
@@ -593,16 +604,19 @@ namespace Lang {
     /* If statement: if b then s */
     static Stmt<RegId> if_stmt(const BExpr<RegId> &b,
                                const labeled_stmt_t &s,
-                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* If statement: if b then s0 else s1 */
     static Stmt<RegId> if_stmt(const BExpr<RegId> &b,
                                const labeled_stmt_t &s0,
                                const labeled_stmt_t &s1,
-                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* While statement: while b do s */
     static Stmt<RegId> while_stmt(const BExpr<RegId> &b,
                                   const labeled_stmt_t &s,
-                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Either statement: 
      * either{
      *   ss[0]
@@ -615,10 +629,12 @@ namespace Lang {
      * Pre: ss.size() > 0
      */
     static Stmt<RegId> either(const std::vector<Stmt> &ss,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Sequence statement: { ss[0], ..., ss[ss.size()-1] } */
     static Stmt<RegId> sequence(const std::vector<labeled_stmt_t> &ss,
-                                const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
 
     /**********************************
      *          Getters               *
@@ -765,7 +781,8 @@ namespace Lang {
   private:
     /* Creates a nop statement .
      * Sets all fields to default values. */
-    Stmt(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    Stmt(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+         std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
 
     stmt_t type;
     /* Fields used by the different types of statements.

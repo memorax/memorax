@@ -245,10 +245,11 @@ inline bool Lang::NML::operator<(const NML &nml) const throw(){
   return (owner < nml.owner) || ((owner == nml.owner) && (id < nml.id));
 }
 
-template<class RegId> Lang::Stmt<RegId>::Stmt(const Lexer::TokenPos &p) :
+template<class RegId> Lang::Stmt<RegId>::Stmt(const Lexer::TokenPos &p,
+                                              std::vector<Lexer::Token> symbs) :
   type(NOP), e0(0), e1(0), b(0), 
   stmts(0), fence(false), lbl(""), 
-  writer(-1), stmt_count(0), pos(p)
+  writer(-1), stmt_count(0), pos(p), lex_symbols(symbs)
 {
 };
 
@@ -320,58 +321,68 @@ template<class RegId> Lang::Stmt<RegId> &Lang::Stmt<RegId>::operator=(const Stmt
 };
 
 template<class RegId>
-Lang::Stmt<RegId> Lang::Stmt<RegId>::nop(const Lexer::TokenPos &p)
+Lang::Stmt<RegId> Lang::Stmt<RegId>::nop(const Lexer::TokenPos &p,
+                                         std::vector<Lexer::Token> symbs)
 {
-  return Stmt<RegId>(p);
+  return Stmt<RegId>(p,symbs);
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::assignment(RegId reg, const Expr<RegId> &e,
-                                                const Lexer::TokenPos &p){
+                                                const Lexer::TokenPos &p,
+                                                std::vector<Lexer::Token> symbs){
   Stmt<RegId> s;
   s.type = ASSIGNMENT;
   s.reg = reg;
   s.e0 = new Expr<RegId>(e);
   s.pos = p;
+  s.lex_symbols = symbs;
   return s;
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::assume(const BExpr<RegId> &b,
-                                            const Lexer::TokenPos &p){
+                                            const Lexer::TokenPos &p,
+                                            std::vector<Lexer::Token> symbs){
   Stmt<RegId> s;
   s.type = ASSUME;
   s.b = new BExpr<RegId>(b);
   s.pos = p;
+  s.lex_symbols = symbs;
   return s;
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::read_assert(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                                 const Lexer::TokenPos &p){
+                                                 const Lexer::TokenPos &p,
+                                                 std::vector<Lexer::Token> symbs){
   Stmt<RegId> s;
   s.type = READASSERT;
   s.reads.insert(ml);
   s.e0 = new Expr<RegId>(e);
   s.pos = p;
+  s.lex_symbols = symbs;
   return s;
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::read_assign(RegId reg, MemLoc<RegId> ml,
-                                                 const Lexer::TokenPos &p){
+                                                 const Lexer::TokenPos &p,
+                                                 std::vector<Lexer::Token> symbs){
   Stmt<RegId> s;
   s.type = READASSIGN;
   s.reg = reg;
   s.reads.insert(ml);
   s.pos = p;
+  s.lex_symbols = symbs;
   return s;
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::write(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                           const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                           const Lexer::TokenPos &p,
+                                           std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = WRITE;
   s.writes.insert(ml);
   s.e0 = new Expr<RegId>(e);
@@ -380,7 +391,8 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::write(MemLoc<RegId> ml, const Expr<RegId> &
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::locked_block(const std::vector<Stmt> &ss,
-                                                  const Lexer::TokenPos &p){
+                                                  const Lexer::TokenPos &p,
+                                                  std::vector<Lexer::Token> symbs){
   if(ss.empty()){
     throw new std::logic_error("Lang::Stmt::locked: Empty statement set.");
   }
@@ -393,7 +405,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::locked_block(const std::vector<Stmt> &ss,
     }
   }
 
-  Stmt<RegId> s(p);
+  Stmt<RegId> s(p,symbs);
   s.type = LOCKED;
   s.stmt_count = ss.size();
   s.stmts = new labeled_stmt_t[ss.size()];
@@ -408,24 +420,27 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::locked_block(const std::vector<Stmt> &ss,
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::locked_write(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                                  const Lexer::TokenPos &p){
-  return locked_block(std::vector<Stmt<RegId> >(1,write(ml,e,p)),p);
+                                                  const Lexer::TokenPos &p,
+                                                  std::vector<Lexer::Token> symbs){
+  return locked_block(std::vector<Stmt<RegId> >(1,write(ml,e,p)),p,symbs);
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::cas(MemLoc<RegId> ml, const Expr<RegId> &e0,
                                          const Expr<RegId> &e1,
-                                         const Lexer::TokenPos &p){
+                                         const Lexer::TokenPos &p,
+                                         std::vector<Lexer::Token> symbs){
   std::vector<labeled_stmt_t> ss;
   ss.push_back(read_assert(ml,e0,p));
   ss.push_back(write(ml,e1,p));
-  return locked_block(std::vector<Stmt<RegId> >(1,sequence(ss,p)),p);
+  return locked_block(std::vector<Stmt<RegId> >(1,sequence(ss,p)),p,symbs);
 };
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::goto_stmt(label_t lbl,
-                                               const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                               const Lexer::TokenPos &p,
+                                               std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = GOTO;
   s.lbl = lbl;
   return s;
@@ -433,8 +448,9 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::goto_stmt(label_t lbl,
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::update(int writer, VecSet<MemLoc<RegId> > mls,
-                                            const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                            const Lexer::TokenPos &p,
+                                            std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = UPDATE;
   s.writer = writer;
   s.writes = mls;
@@ -444,8 +460,9 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::update(int writer, VecSet<MemLoc<RegId> > m
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b, 
                                              const labeled_stmt_t &s0,
-                                             const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                             const Lexer::TokenPos &p,
+                                             std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = IF;
   s.b = new BExpr<RegId>(b);
   s.stmts = new labeled_stmt_t[1];
@@ -459,8 +476,9 @@ template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b, 
                                              const labeled_stmt_t &s0,
                                              const labeled_stmt_t &s1,
-                                             const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                             const Lexer::TokenPos &p,
+                                             std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = IF;
   s.b = new BExpr<RegId>(b);
   s.stmts = new labeled_stmt_t[2];
@@ -474,8 +492,9 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b,
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::while_stmt(const BExpr<RegId> &b,
                                                 const labeled_stmt_t &s0,
-                                                const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                                const Lexer::TokenPos &p,
+                                                std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = WHILE;
   s.b = new BExpr<RegId>(b);
   s.stmts = new labeled_stmt_t[1];
@@ -487,11 +506,12 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::while_stmt(const BExpr<RegId> &b,
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::either(const std::vector<Stmt> &ss,
-                                            const Lexer::TokenPos &p){
+                                            const Lexer::TokenPos &p,
+                                            std::vector<Lexer::Token> symbs){
   if(ss.empty()){
     throw new std::logic_error("Lang::Stmt::either: Empty statement set.");
   }
-  Stmt<RegId> s(p);
+  Stmt<RegId> s(p,symbs);
   s.type = EITHER;
   s.stmts = new labeled_stmt_t[ss.size()];
   for(unsigned i = 0; i < ss.size(); i++){
@@ -505,8 +525,9 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::either(const std::vector<Stmt> &ss,
 
 template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::sequence(const std::vector<labeled_stmt_t> &ss,
-                                              const Lexer::TokenPos &p){
-  Stmt<RegId> s(p);
+                                              const Lexer::TokenPos &p,
+                                              std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
   s.type = SEQUENCE;
   s.stmts = new labeled_stmt_t[ss.size()];
   for(unsigned i = 0; i < ss.size(); i++){
@@ -520,7 +541,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::sequence(const std::vector<labeled_stmt_t> 
 template<class RegId> template<class RegId2> Lang::Stmt<RegId2> 
 Lang::Stmt<RegId>::convert(std::function<RegId2(const RegId&)> &rc,
                            std::function<MemLoc<RegId2>(const MemLoc<RegId>&)> &mlc) const{
-  Stmt<RegId2> s(pos);
+  Stmt<RegId2> s(pos,lex_symbols);
   s.type = type;
   s.reg = rc(reg);
   for(int i = 0; i < reads.size(); i++){
