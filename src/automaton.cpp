@@ -434,6 +434,43 @@ bool Automaton::add_transition(const Transition &t){
   }
 }
 
+bool Automaton::del_transition(const Transition &t){
+  if(t.source >= int(states.size()) || t.target >= int(states.size())) return false;
+  bool found = false;
+  for(auto it = states[t.source].fwd_transitions.begin(); it != states[t.source].fwd_transitions.end(); ){
+    if(**it == t){
+      states[t.source].fwd_transitions.erase(it);
+      it = states[t.source].fwd_transitions.end();
+      found = true;
+    }else{
+      ++it;
+    }
+  }
+
+  if(!found) return false;
+
+  found = false;
+  for(auto it = states[t.target].bwd_transitions.begin(); it != states[t.target].bwd_transitions.end(); ){
+    if(**it == t){
+      delete *it;
+      states[t.target].bwd_transitions.erase(it);
+      it = states[t.target].bwd_transitions.end();
+      found = true;
+    }else{
+      ++it;
+    }
+  }
+
+  /* If !found then the transition t was present in
+   * states[t.source].fwd_transitions, but not in
+   * states[t.target].bwd_transitions. This violates the invariant of
+   * Automaton. Also it causes a memory leak in this method.
+   */
+  assert(found);
+
+  return true;
+};
+
 int Automaton::get_transition_count() const{
   int tc = 0;
   for(unsigned i = 0; i < states.size(); ++i){

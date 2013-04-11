@@ -134,6 +134,11 @@ public:
    * those states are created.
    */
   bool add_transition(const Transition &t);
+  /* If there is a transition identical to t in this automaton, then
+   * it is removed from this automaton and true is returned. Otherwise
+   * false is returned.
+   */
+  bool del_transition(const Transition &t);
   /* Sets the label lbl to the state i. If lbl was previously present
    * as a label in this automaton, the old label is removed. */
   void set_label(Lang::label_t lbl, int i) { label_map[lbl] = i; };
