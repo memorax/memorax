@@ -136,7 +136,17 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
         }
       }
 
-      if(source >= 0 && source != i){ // Insert a nop before goto
+      if(states.size() == 1){
+        /* Goto is the first statement in the AST.
+         * Add a nop from state 0, before goto
+         */
+        states.push_back(State());
+        ++i;
+        source = 0;
+        Transition *nopt = new Transition(0,Lang::Stmt<int>::nop(),i);
+        states[0].fwd_transitions.insert(nopt);
+        states[1].bwd_transitions.insert(nopt);
+      }else if(source >= 0 && source != i){ // Insert a nop before goto
         Transition *nopt = new Transition(source,Lang::Stmt<int>::nop(),i);
         states[source].fwd_transitions.insert(nopt);
         states[i].bwd_transitions.insert(nopt);
@@ -805,8 +815,16 @@ void Automaton::test(){
                      tst("$r0 := 0","$r0 := 1",false));
     Test::inner_test("same_automaton #11",
                      /* Disconnected parts of automata */
-                     tst("L0: $r0 := 0; $r0 := 1; $r0 := 2; goto L0; L1: $r1 := 0; $r1 := 1; $r1 := 2; goto L1",
+                     tst("nop; L0: $r0 := 0; $r0 := 1; $r0 := 2; goto L0; L1: $r1 := 0; $r1 := 1; $r1 := 2; goto L1",
                          "goto L0; L1: $r1 := 0; $r1 := 1; $r1 := 2; goto L1; L0: $r0 := 0; $r0 := 1; $r0 := 2; goto L0",true));
+    Test::inner_test("same_automaton #12",
+                     /* Test obscure gotos */
+                     tst("goto L0; goto L1; $r1 := 1; L0: $r0 := 0; L1: $r2 := 2",
+                         "nop; goto L0; $r1 := 1; L0: $r0 := 0; L1: $r2 := 2",true));
+    Test::inner_test("same_automaton #13",
+                     /* More obscure gotos */
+                     tst("L0: $r0:=0; goto L0; $r1:=1; goto L1; goto L0; $r2:=2; L1: $r3:=3",
+                         "L0: $r0:=0; goto L0; $r2:=2; goto L1; $r1:=1; L1: $r3:=3",true));
 
   }
 };
