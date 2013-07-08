@@ -30,10 +30,19 @@
 #include <sstream>
 #include <stdexcept>
 
+const VipsBitConstraint::data_t VipsBitConstraint::Common::ptr_max = VipsBitConstraint::Common::calc_ptr_max();
+
 VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   proc_count = m.automata.size();
-  pointer_pack = true;
-  bits_len = 0;
+  if(possible_to_pointer_pack(m)){
+    pointer_pack = true;
+    bits_len = 0;
+    Log::debug << "VipsBitConstraint::Common: Using pointer packing.\n";
+  }else{
+    pointer_pack = false;
+    bits_len = 1;
+    Log::debug << "VipsBitConstraint::Common: Not using pointer packing.\n";
+  }
 
   /* Set up bitfields */
   int div = 2;
@@ -117,6 +126,37 @@ std::string VipsBitConstraint::Common::bitfield::to_string() const{
   return ss.str();
 };
 
+bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine){
+  data_t remains = ptr_max / 2 + 1;
+  
+  /* pcs */
+  for(unsigned p = 0; p < machine.automata.size(); ++p){
+    if((data_t)machine.automata[p].get_states().size() > remains) return false;
+    remains /= (data_t)machine.automata[p].get_states().size();
+  }
+
+  return true;
+};
+
+VipsBitConstraint::data_t VipsBitConstraint::Common::calc_ptr_max(){
+  if(sizeof(data_t*) >= sizeof(data_t)){
+    return std::numeric_limits<data_t>::max();
+  }else{
+    // Bits per unit used by sizeof
+    int bpc = std::numeric_limits<unsigned char>::digits / sizeof(unsigned char);
+
+    /* Calculate 2^(bpc*sizeof(data_t*))-1 */
+    data_t d = 1;
+    for(int i = 0; i < (int)sizeof(data_t*)*bpc - 1; ++i){
+      d *= 2;
+    }
+    d -= 1;
+    d *= 2;
+    d += 1;
+    return d;
+  }
+};
+
 void VipsBitConstraint::test(){
   /* Test bitfields */
   /* Test 1 */
@@ -164,6 +204,17 @@ void VipsBitConstraint::test(){
     data_t v = std::numeric_limits<data_t>::max() - 1;
     ss << bf.to_string() << ": get(set(" << e << "," << v << ")) == " << v;
     Test::inner_test("#1.6: "+ss.str(),bf.get_el(bf.set_el(e,v)) == v);
+  }
+
+  /* Test 7,8: empty field */
+  {
+    std::stringstream ss, ss2;
+    data_t e = 18288972349823;
+    Common::bitfield bf(0,13,1);
+    ss << bf.to_string() << ": get(set(" << e << ",0)) == 0";
+    ss2 << bf.to_string() << ": set(" << e << ",0) == " << e;
+    Test::inner_test("#1.7: "+ss.str(),bf.get_el(bf.set_el(e,0)) == 0);
+    Test::inner_test("#1.8: "+ss2.str(),bf.set_el(e,0) == e);
   }
 
   /* Test fields in VipsBitConstraint */

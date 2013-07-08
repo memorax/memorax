@@ -74,6 +74,17 @@ public:
      */
     int proc_count;
 
+    /* Calculates the amount of data necessary to store a
+     * configuration of m. Returns true if this amount is small enough
+     * to be pointer packed. Returns false otherwise.
+     */
+    static bool possible_to_pointer_pack(const Machine &m);
+    /* Return the maximal integer that can be stored in a data_t*
+     * casted into a data_t.
+     */
+    static data_t calc_ptr_max();
+    static const data_t ptr_max; /* = calc_ptr_max() */
+
     /**************************************************************/
     /* Information about how to interpret VipsBitConstraint::bits */
     /**************************************************************/
@@ -119,7 +130,11 @@ public:
       data_t get_el(data_t e) const{ return e / div % mod; };
       data_t get_vec(const data_t *vec) const{ return get_el(vec[element]); };
       /* Returns e, with this bitfield set to v. */
-      data_t set_el(data_t e,data_t v) const{ return (e - e%(div*mod)) + v*div + e%div; };
+      data_t set_el(data_t e,data_t v) const{
+        assert(0 <= v);
+        assert(v < mod);
+        return (e - e%(div*mod)) + v*div + e%div;
+      };
       /* Updates the part of the element in vec described by this
        * bitfield, with the value val */
       void set_vec(data_t *vec,data_t val) const{ vec[element] = set_el(vec[element],val); };
