@@ -122,7 +122,15 @@ VipsBitConstraint::Common::bitfield::bitfield(int e, data_t d, data_t m, int off
 
 std::string VipsBitConstraint::Common::bitfield::to_string() const{
   std::stringstream ss;
-  ss << "BF(e:" << element << ", div:" << div << ", mod:" << mod << ")";
+  ss << "BF(";
+  if(element != 0){
+    ss << "e:" << element << ", ";
+  }
+  ss << "div:" << div << ", mod:" << mod;
+  if(offset != 0){
+    ss << ", off:" << offset;
+  }
+  ss << ")";
   return ss.str();
 };
 
