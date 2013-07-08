@@ -40,6 +40,7 @@ tso_cycle_lock.cpp tso_cycle_lock.h \
 tso_fencins.cpp tso_fencins.h \
 tso_var.cpp tso_var.h \
 vecset.h vecset.tcc \
+vips_bit_constraint.h vips_bit_constraint.cpp \
 zstar.h zstar.tcc
 memorax_gui_SOURCES = gui.py
 
