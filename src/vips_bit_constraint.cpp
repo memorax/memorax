@@ -49,7 +49,7 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   int element = 0;
   for(int p = 0; p < proc_count; ++p){
     int mod = (int)m.automata[p].get_states().size() + 1;
-    pcs.push_back(bitfield(element,div,mod));
+    pcs.push_back(bitfield(element,div,mod,0));
     div *= mod;
   }
 };
@@ -111,8 +111,8 @@ std::string VipsBitConstraint::debug_dump(const Common &common) const{
   throw new std::logic_error("VipsBitConstraint::debug_dump: Not implemented");
 };
 
-VipsBitConstraint::Common::bitfield::bitfield(int e, data_t d, data_t m)
-  : element(e), div(d), mod(m) {
+VipsBitConstraint::Common::bitfield::bitfield(int e, data_t d, data_t m, int off)
+  : element(e), div(d), mod(m), offset(off) {
   assert(0 <= e);
   assert(0 < d);
   assert(d < std::numeric_limits<data_t>::max());
@@ -163,7 +163,7 @@ void VipsBitConstraint::test(){
   {
     std::stringstream ss;
     data_t e = 981290183;
-    Common::bitfield bf(0,4,4);
+    Common::bitfield bf(0,4,4,0);
     ss << bf.to_string() << ": get(set(" << e << ",2)) == 2";
     Test::inner_test("#1.1: "+ss.str(),bf.get_el(bf.set_el(e,2)) == 2);
   }
@@ -172,7 +172,7 @@ void VipsBitConstraint::test(){
   {
     std::stringstream ss;
     data_t e = 18288972349823;
-    Common::bitfield bf(0,13,27);
+    Common::bitfield bf(0,13,27,0);
     ss << bf.to_string() << ": get(set(" << e << ",7)) == 7";
     Test::inner_test("#1.2: "+ss.str(),bf.get_el(bf.set_el(e,7)) == 7);
   }
@@ -181,7 +181,7 @@ void VipsBitConstraint::test(){
   {
     std::stringstream ss;
     data_t e = 0;
-    Common::bitfield bf(0,1,8);
+    Common::bitfield bf(0,1,8,0);
     ss << bf.to_string() << ": set(" << e << ",7) == 7";
     Test::inner_test("#1.3: "+ss.str(),bf.set_el(e,7) == 7);
   }
@@ -190,7 +190,7 @@ void VipsBitConstraint::test(){
   {
     std::stringstream ss;
     data_t e = 0;
-    Common::bitfield bf(0,(std::numeric_limits<data_t>::max()/4)+1,4);
+    Common::bitfield bf(0,(std::numeric_limits<data_t>::max()/4)+1,4,0);
     ss << bf.to_string() << ": get(set(" << e << ",3)) == 3";
     Test::inner_test("#1.4: "+ss.str(),bf.get_el(bf.set_el(e,3)) == 3);
     Test::inner_test("#1.5: "+ss.str()+" - no overflow",bf.set_el(e,3) % 2 == 0);
@@ -200,8 +200,8 @@ void VipsBitConstraint::test(){
   {
     std::stringstream ss;
     data_t e = 0;
-    Common::bitfield bf(0,1,std::numeric_limits<data_t>::max());
-    data_t v = std::numeric_limits<data_t>::max() - 1;
+    Common::bitfield bf(0,1,std::numeric_limits<data_t>::max(),0);
+    int v = std::numeric_limits<int>::max() - 1;
     ss << bf.to_string() << ": get(set(" << e << "," << v << ")) == " << v;
     Test::inner_test("#1.6: "+ss.str(),bf.get_el(bf.set_el(e,v)) == v);
   }
@@ -210,11 +210,24 @@ void VipsBitConstraint::test(){
   {
     std::stringstream ss, ss2;
     data_t e = 18288972349823;
-    Common::bitfield bf(0,13,1);
+    Common::bitfield bf(0,13,1,0);
     ss << bf.to_string() << ": get(set(" << e << ",0)) == 0";
     ss2 << bf.to_string() << ": set(" << e << ",0) == " << e;
     Test::inner_test("#1.7: "+ss.str(),bf.get_el(bf.set_el(e,0)) == 0);
     Test::inner_test("#1.8: "+ss2.str(),bf.set_el(e,0) == e);
+  }
+
+  /* Test 9,10,11: Negative values */
+  {
+    std::stringstream ss, ss2, ss3;
+    data_t e = 23409;
+    Common::bitfield bf(0,11,20,-10); /* range: [-10,9] */
+    ss << bf.to_string() << ": get(set(" << e << ",-10)) == -10";
+    ss2 << bf.to_string() << ": get(set(" << e << ",9)) == 9";
+    ss3 << bf.to_string() << ": set(" << e << ",get(" << e << ")) == " << e;
+    Test::inner_test("#1.9: "+ss.str(),bf.get_el(bf.set_el(e,-10)) == -10);
+    Test::inner_test("#1.10: "+ss2.str(),bf.get_el(bf.set_el(e,9)) == 9);
+    Test::inner_test("#1.11: "+ss3.str(),bf.set_el(e,bf.get_el(e)) == e);
   }
 
   /* Test fields in VipsBitConstraint */

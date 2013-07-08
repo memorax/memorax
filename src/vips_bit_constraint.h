@@ -118,7 +118,7 @@ public:
        * 0 < d < std::numeric_limits<data_t>::max()
        * 0 < m <= std::numeric_limits<data_t>::max()
        */
-      bitfield(int e, data_t d, data_t m);
+      bitfield(int e, data_t d, data_t m, int off);
       /* Which element of the array pointed to by vbcbits contains
        * this bitfield?
        *
@@ -127,13 +127,20 @@ public:
       int element;
       /* To get the bitfield from an element e, compute e / div % mod. */
       data_t div, mod;
-      data_t get_el(data_t e) const{ return e / div % mod; };
-      data_t get_vec(const data_t *vec) const{ return get_el(vec[element]); };
+      /* A value v is stored in the bitfield as v - offset.
+       *
+       * offset should be such that the domain of values to be stored
+       * is some range [0,n], with 0 as its lowest element.
+       */
+      int offset;
+      int get_el(data_t e) const{ return e / div % mod + offset; };
+      int get_vec(const data_t *vec) const{ return get_el(vec[element]); };
       /* Returns e, with this bitfield set to v. */
-      data_t set_el(data_t e,data_t v) const{
-        assert(0 <= v);
-        assert(v < mod);
-        return (e - e%(div*mod)) + v*div + e%div;
+      data_t set_el(data_t e,int val) const{
+        val -= offset;
+        assert(0 <= val);
+        assert((data_t)val < mod);
+        return (e - e%(div*mod)) + val*div + e%div;
       };
       /* Updates the part of the element in vec described by this
        * bitfield, with the value val */
