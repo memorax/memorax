@@ -156,6 +156,7 @@ public:
 
     friend class SbConstraint;
     friend class SbTsoBwd;
+    friend class PwsConstraint;
 
     /* Returns true iff a is a suffix of b */
     template<class T>
