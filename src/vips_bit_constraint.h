@@ -48,6 +48,8 @@
  * event that depends on a memory location not being in L1.
  */
 class VipsBitConstraint{
+private:
+  typedef unsigned long data_t;
 public:
   /* A Common object contains information common to all
    * VipsBitConstraints for a particular Machine.
@@ -64,6 +66,75 @@ public:
     /* The Machine which this Common object corresponds to. */
     const Machine &machine;
   private:
+    /*****************************/
+    /* Information about machine */
+    /*****************************/
+
+    /* The number of processes in machine.
+     */
+    int proc_count;
+
+    /**************************************************************/
+    /* Information about how to interpret VipsBitConstraint::bits */
+    /**************************************************************/
+
+    /* All data in a VipsBitConstraint is packed into
+     * VipsBitConstraint::bits. These members describe how to
+     * interpret bits.
+     *
+     * The short notation vbcbits is used to denote
+     * VipsBitConstraint::bits.
+     */
+    
+    /* Should data be packed directly into vbcbits, as opposed to into
+     * the array pointed to by bits? See VipsBitConstraint::bits.
+     */
+    bool pointer_pack;
+    /* The number of elements in the array pointed to by vbcbits. */
+    int bits_len;
+    
+    /* A bitfield represents a certain part of vbcbits.
+     *
+     * A bitfield is entirely contained within one element of the
+     * vbcbits array (or in the vbcbits pointer if pointer_pack is
+     * set).
+     *
+     * A bitfield must be strictly shorter than a data_t.
+     */
+    struct bitfield{
+      /* Pre:
+       * e >= 0
+       * 0 < d < std::numeric_limits<data_t>::max()
+       * 0 < m <= std::numeric_limits<data_t>::max()
+       */
+      bitfield(int e, data_t d, data_t m);
+      /* Which element of the array pointed to by vbcbits contains
+       * this bitfield?
+       *
+       * This field is undefined if pointer_pack is set.
+       */
+      int element;
+      /* To get the bitfield from an element e, compute e / div % mod. */
+      data_t div, mod;
+      data_t get_el(data_t e) const{ return e / div % mod; };
+      data_t get_vec(const data_t *vec) const{ return get_el(vec[element]); };
+      /* Returns e, with this bitfield set to v. */
+      data_t set_el(data_t e,data_t v) const{ return (e - e%(div*mod)) + v*div + e%div; };
+      /* Updates the part of the element in vec described by this
+       * bitfield, with the value val */
+      void set_vec(data_t *vec,data_t val) const{ vec[element] = set_el(vec[element],val); };
+      std::string to_string() const;
+    };
+
+    /* For each process pid, pcs[pid].get_vec(vbcbits) is its control
+     * state. */
+    std::vector<bitfield> pcs;
+
+    data_t bfget(const data_t *vbcbits,const bitfield &bf) const{
+      if(pointer_pack) return bf.get_el((data_t)vbcbits);
+      else return bf.get_vec(vbcbits);
+    };
+
     friend class VipsBitConstraint;
   };
   /* Constructs an initial constraint based on common. All memory
@@ -73,7 +144,7 @@ public:
    * which initial value will be used.
    */
   VipsBitConstraint(const Common &common);
-  VipsBitConstraint(const VipsBitConstraint&);
+  VipsBitConstraint(const Common &common, const VipsBitConstraint&);
   ~VipsBitConstraint();
 
   /* Returns the set of transitions that should be explored from this
@@ -90,8 +161,41 @@ public:
    */
   std::vector<int> get_control_states(const Common &common) const throw();
 
+  /* Return a multi-line, human-readable representation of this Constraint.
+   */
+  std::string to_string(const Common &common) const;
+
   static void test();
 private:
+  /* All data of the constraint are bit-packed here.
+   *
+   * If common.pointer_pack is set, then the pointer bits should not
+   * be interpreted as a pointer. Instead the data is all packed into
+   * the field bits itself. So bits should be cast into (unsigned
+   * long) and treated as data.
+   *
+   * If common.pointer_pack is unset, then bits points to an array
+   * containing common.bits_len elements.
+   *
+   * General overview of format of the data stored in bits:
+   * ppack - Is common.pointer_pack set? (1 bit)
+   * pcs - control states of all processes
+   * mem - main memory / LLC
+   * per process:
+   * - L1
+   * -- per memory location:
+   * --- value
+   * --- dirty/clean
+   */
+  data_t *bits;
+
+  bool use_pointer_pack() const{
+    return ((ulong)bits) % 2;
+  };
+
+  /* Dump the representation of this Constraint in a low-level fashion. */
+  std::string debug_dump(const Common &) const;
+
   friend class Common;
 };
 
