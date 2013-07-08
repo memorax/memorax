@@ -339,6 +339,24 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
         },ctx,mytoks);
       break;
     }
+  case Lexer::SYNCWR:
+    {
+      ppush(&mytoks,tok);
+      force_toks(lex,Lexer::COLON,&mytoks);
+      Parser::memloc_or_pointer_t ml = p_memloc_toks(lex,ctx,&mytoks);
+      force_toks(lex,Lexer::ASSIGNMENT,&mytoks);
+      expr_t e = p_expr_toks(lex,&mytoks);
+      res_stmt = resolve_pointer(ml,[&e,&tok](const memloc_t &ml){
+          return stmt_t::syncwr(ml,e,tok.pos);
+        },ctx,mytoks);
+      break;
+    }
+  case Lexer::FENCE:
+    {
+      ppush(&mytoks,tok);
+      res_stmt = stmt_t::full_fence(tok.pos,mytoks);
+      break;
+    }
   case Lexer::CAS: 
     {
       ppush(&mytoks,tok);

@@ -462,6 +462,11 @@ namespace Lang {
     READASSIGN,
     /* Write: write: writes[0] := e0 */
     WRITE,
+    /* Synchronized Write: syncwr: writes[0] := e0
+     * Used in VIPS-M. */
+    SYNCWR,
+    /* Fence: A full memory fence. Used in particular in VIPS-M. */
+    FENCE,
     /* Locked block: 
      * locked {
      *   stmts[0]
@@ -481,6 +486,21 @@ namespace Lang {
     /* Update: An update concerning memory location writes[0], and a
      * write performed by process writer. */
     UPDATE,
+    /* Fetch: The value of memory location writes[0] is fetched from
+     * memory to local storage. For VIPS-M, the data is fetched into
+     * L1.
+     */
+    FETCH,
+    /* Evict: The locally stored value of memory location writes[0] is
+     * removed from local storage. For VIPS-M, the data is removed
+     * from L1.
+     */
+    EVICT,
+    /* WrLLC: The memory is updated with the locally stored value of
+     * memory location writes[0]. For VIPS-M, the dirty value of
+     * writes[0] in L1 is written to memory.
+     */
+    WRLLC,
     /* If statement:
      * If stmt_count == 1 then: if b then stmts[0]
      * If stmt_count == 2 then: if b then stmts[0] else stmts[1]
@@ -543,6 +563,13 @@ namespace Lang {
     static Stmt<RegId> write(MemLoc<RegId> ml, const Expr<RegId> &e,
                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Synchronized write: syncwr: ml := e */
+    static Stmt<RegId> syncwr(MemLoc<RegId> ml, const Expr<RegId> &e,
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Full memory fence */
+    static Stmt<RegId> full_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Locked block: 
      * locked{
      *   ss[0]
@@ -587,6 +614,18 @@ namespace Lang {
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* A fetch concerning the memory location ml. */
+    static Stmt<RegId> fetch(MemLoc<RegId> ml,
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* An evict concerning the memory location ml. */
+    static Stmt<RegId> evict(MemLoc<RegId> ml,
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* The local value of ml (in L1) is written to memory. */
+    static Stmt<RegId> wrllc(MemLoc<RegId> ml,
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Type of a labeled statement. */
     struct labeled_stmt_t{
       labeled_stmt_t() : lbl(""), stmt() {};

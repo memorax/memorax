@@ -71,6 +71,8 @@ Lexer::Lexer(std::istream &i) : is(i), eof(false) {
   reserved_names["do"] = DO;
   reserved_names["read"] = READ;
   reserved_names["write"] = WRITE;
+  reserved_names["syncwr"] = SYNCWR;
+  reserved_names["fence"] = FENCE;
   reserved_names["locked"] = LOCKED;
   reserved_names["cas"] = CAS;
   reserved_names["goto"] = GOTO;
@@ -163,6 +165,8 @@ std::string Lexer::token_type_to_string(TokenType typ){
   case DO: return "do";
   case READ: return "read";
   case WRITE: return "write";
+  case SYNCWR: return "syncwr";
+  case FENCE: return "fence";
   case LOCKED: return "locked";
   case CAS: return "cas";
   case GOTO: return "goto";

@@ -106,7 +106,8 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
   switch(ast.get_type()){
   case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME: 
   case Lang::READASSERT: case Lang::READASSIGN: case Lang::WRITE: 
-  case Lang::LOCKED:
+  case Lang::LOCKED: case Lang::SYNCWR: case Lang::FENCE:
+    /* Ordinary instructions */
     {
       int i = states.size() - 1;
       if(source < 0) source = i;
@@ -172,8 +173,10 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
       }
       break;
     }
-  case Lang::UPDATE:
-    throw new std::logic_error("Automaton: \"Update\" instruction in AST.");
+  case Lang::UPDATE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
+    throw new std::logic_error("Automaton: Pseudo-instruction in AST: "+
+                               ast.to_string(Lang::int_reg_to_string(),
+                                             Lang::int_memloc_to_string()));
   case Lang::IF:
     {
       int i = states.size() - 1;
