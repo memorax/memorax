@@ -211,6 +211,14 @@ public:
       return l1_vec[pid][nml_index(nml)];
     };
 
+    /* Get the bitfield corresponding to the L1 entry of process
+     * caller for the memory location ml from the perspective of
+     * process caller.
+     */
+    const bitfield &l1(int caller, const Lang::MemLoc<int> &ml) const{
+      return l1(caller,Lang::NML(ml,caller));
+    };
+
     /* Shorthand for reg_vec[pid][reg]. */
     const bitfield &reg(int pid, int reg) const{
       return reg_vec[pid][reg];

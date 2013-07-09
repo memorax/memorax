@@ -210,18 +210,18 @@ VipsBitConstraint::~VipsBitConstraint(){
   }
 };
 
-VipsBitConstraint *VipsBitConstraint::post(const Common &common, 
+VipsBitConstraint *VipsBitConstraint::post(const Common &c, 
                                            const Machine::PTransition &t) const{
   int pid = t.pid;
   const Lang::Stmt<int> &s = t.instruction;
 
   /* Check control state */
-  if(common.bfget(bits,common.pcs[pid]) != t.source){
+  if(c.bfget(bits,c.pcs[pid]) != t.source){
     return 0;
   }
 
-  VipsBitConstraint *vbc = new VipsBitConstraint(common,*this);
-  common.bfset(&vbc->bits,common.pcs[pid],t.target);
+  VipsBitConstraint *vbc = new VipsBitConstraint(c,*this);
+  c.bfset(&vbc->bits,c.pcs[pid],t.target);
 
   switch(s.get_type()){
   case Lang::NOP:
@@ -229,10 +229,10 @@ VipsBitConstraint *VipsBitConstraint::post(const Common &common,
   case Lang::ASSIGNMENT:
     {
       int reg = s.get_reg();
-      RegVal regval(pid,common,bits);
+      RegVal regval(pid,c,bits);
       int v = s.get_expr().eval<RegVal,int*>(regval,0);
-      if(common.machine.regs[pid][reg].domain.member(v)){
-        common.bfset(&vbc->bits,common.reg(pid,reg),v);
+      if(c.machine.regs[pid][reg].domain.member(v)){
+        c.bfset(&vbc->bits,c.reg(pid,reg),v);
         return vbc;
       }else{
         /* t cannot be executed; computed value outside of domain */
@@ -242,7 +242,7 @@ VipsBitConstraint *VipsBitConstraint::post(const Common &common,
     }
   case Lang::ASSUME:
     {
-      RegVal regval(pid,common,bits);
+      RegVal regval(pid,c,bits);
       if(s.get_condition().eval<RegVal,int*>(regval,0)){
         return vbc;
       }else{ /* Assume failed. */
@@ -250,18 +250,54 @@ VipsBitConstraint *VipsBitConstraint::post(const Common &common,
         return 0;
       }
     }
+  case Lang::FETCH:
+    {
+      int vd = c.bfget(bits,c.l1(pid,s.get_memloc()));
+      if(c.l1val_is_dirty(vd)){
+        /* Cannot perform necessary implicit evict */
+        /* Cannot fetch */
+        delete vbc;
+        return 0;
+      }
+      int memval = c.bfget(bits,c.mem(Lang::NML(s.get_memloc(),pid)));
+      c.bfset(&vbc->bits,c.l1(pid,s.get_memloc()),c.l1val_clean(memval));
+      return vbc;
+    }
+  case Lang::WRLLC:
+    {
+      int vd = c.bfget(bits,c.l1(pid,s.get_memloc()));
+      if(!c.l1val_is_dirty(vd)){
+        /* Cannot write back value; it is clean */
+        delete vbc;
+        return 0;
+      }
+      int val = c.l1val_valof(vd);
+      c.bfset(&vbc->bits,c.mem(Lang::NML(s.get_memloc(),pid)),val);
+      c.bfset(&vbc->bits,c.l1(pid,s.get_memloc()),c.l1val_clean(val));
+      return vbc;
+    }
+  case Lang::WRITE:
+    {
+      RegVal regval(pid,c,bits);
+      int val = s.get_expr().eval<RegVal,int*>(regval,0);
+      Lang::NML nml(s.get_memloc(),pid);
+      if(!c.machine.get_var_decl(nml).domain.member(val)){
+        /* Cannot write; value outside of domain */
+        delete vbc;
+        return 0;
+      }
+      c.bfset(&vbc->bits,c.l1(pid,s.get_memloc()),c.l1val_dirty(val));
+      return vbc;
+    }
   case Lang::READASSERT:
   case Lang::READASSIGN:
-  case Lang::WRITE:
   case Lang::SYNCWR:
   case Lang::FENCE:
   case Lang::LOCKED:
-  case Lang::FETCH:
   case Lang::EVICT:
-  case Lang::WRLLC:
   default:
     delete vbc;
-    throw new std::logic_error("VipsBitConstraint::post: Unsupported transition: "+t.to_string(common.machine));
+    throw new std::logic_error("VipsBitConstraint::post: Unsupported transition: "+t.to_string(c.machine));
   }
 
   delete vbc;
@@ -738,6 +774,118 @@ void VipsBitConstraint::test(){
     Lang::Expr<int> e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1) + Lang::Expr<int>::integer(1);
     Test::inner_test("#2.23: VBC register, expr evaluation",
                      e.eval<RegVal,int*>(regval,0) == 3);
+
+    delete m;
+  }
+
+  /* Test semantics */
+  {
+    Machine *m = get_machine
+      ("forbidden * *\n"
+       "data\n"
+       "  x = 0 : [0:5]\n"
+       "  y = 0 : [0:5]\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = 0 : [0:5]\n"
+       "  $r1 = 0 : [0:5]\n"
+       "text\n"
+       "  Lnop: nop;\n"
+       "  Lnop1: nop\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = 0 : [0:5]\n"
+       "  $r1 = 0 : [0:5]\n"
+       "text\n"
+       "  Lass0: $r0 := 1;\n"
+       "  Lass1: $r1 := 2;\n"
+       "  Lass2: $r1 := $r0 + $r1;\n"
+       "  Lass3: either{\n"
+       "    nop\n"
+       "  or\n"
+       "    $r1 := $r1 + $r1" /* outside domain */
+       "  };\n"
+       "  FAIL: nop\n"
+       );
+
+    Common common(*m);
+    VipsBitConstraint vbc(common);
+
+    /* Return some PTransition from m which originates in the control
+     * state of process pid which is labelled lbl.
+     */
+    std::function<Machine::PTransition(int,std::string)> trans = 
+      [m](int pid, std::string lbl){
+      int s = m->automata[pid].state_index_of_label(lbl);
+      Automaton::Transition *t = *m->automata[pid].get_states()[s].fwd_transitions.begin();
+      return Machine::PTransition(*t,pid);
+    };
+
+    /* Return some PTransition from m which originates in the control
+     * state of process pid which is labelled srclbl, and targets the
+     * control state labelled tgtlbl.
+     */
+    std::function<Machine::PTransition(int,std::string,std::string)> trans2 = 
+      [m](int pid, std::string srclbl, std::string tgtlbl){
+      int src = m->automata[pid].state_index_of_label(srclbl);
+      int tgt = m->automata[pid].state_index_of_label(tgtlbl);
+      Automaton::Transition *t = 0;
+      for(auto it = m->automata[pid].get_states()[src].fwd_transitions.begin(); 
+          it != m->automata[pid].get_states()[src].fwd_transitions.end();
+          ++it){
+        if((*it)->target == tgt){
+          t = *it;
+        }
+      }
+      return Machine::PTransition(*t,pid);
+    };
+
+    /* Test nop */
+    {
+      VipsBitConstraint *vbc2 = vbc.post(common,trans(0,"Lnop"));
+      Test::inner_test("#3.1: nop",
+                       vbc2 != 0 &&
+                       common.bfget(vbc2->bits,common.pcs[0]) == 1 &&
+                       common.bfget(vbc2->bits,common.pcs[1]) == 0);
+
+      delete vbc2;
+
+      vbc2 = vbc.post(common,trans(0,"Lnop1"));
+      Test::inner_test("#3.2: nop", vbc2 == 0);
+
+      // Do not delete vbc2 (it is null)
+    }
+
+    /* Test assignment */
+    {
+      VipsBitConstraint *vbc2 = vbc.post(common,trans(1,"Lass0"));
+      Test::inner_test("#3.3: assignment",
+                       vbc2 != 0 &&
+                       common.bfget(vbc2->bits,common.pcs[0]) == 0 &&
+                       common.bfget(vbc2->bits,common.pcs[1]) == 1 &&
+                       common.bfget(vbc2->bits,common.reg(1,0)) == 1 &&
+                       common.bfget(vbc2->bits,common.reg(1,1)) == 0 && 
+                       common.bfget(vbc2->bits,common.reg(0,0)) == 0 &&
+                       common.bfget(vbc2->bits,common.reg(0,1)) == 0);
+
+      VipsBitConstraint *vbc3 = vbc2->post(common,trans(1,"Lass1"));
+      Test::inner_test("#3.4: assignment",
+                       vbc3 != 0 &&
+                       common.bfget(vbc3->bits,common.reg(1,1)) == 2);
+
+      VipsBitConstraint *vbc4 = vbc3->post(common,trans(1,"Lass2"));
+      Test::inner_test("#3.5: assignment",
+                       vbc4 != 0 &&
+                       common.bfget(vbc4->bits,common.reg(1,1)) == 3);
+
+      VipsBitConstraint *vbc5 = vbc4->post(common,trans2(1,"Lass3","FAIL"));
+      Test::inner_test("#3.6: assignment", vbc5 == 0);
+
+      delete vbc2;
+      delete vbc3;
+      delete vbc4;
+      // Do not delete vbc5
+    }
 
     delete m;
   }
