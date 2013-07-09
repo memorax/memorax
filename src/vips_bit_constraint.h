@@ -26,6 +26,7 @@
 #include "lang.h"
 #include "vecset.h"
 
+#include <cstdint>
 #include <map>
 #include <vector>
 
@@ -50,7 +51,7 @@
  */
 class VipsBitConstraint{
 private:
-  typedef unsigned long data_t;
+  typedef uintptr_t data_t;
 public:
   /* A Common object contains information common to all
    * VipsBitConstraints for a particular Machine.
@@ -80,11 +81,6 @@ public:
      * to be pointer packed. Returns false otherwise.
      */
     static bool possible_to_pointer_pack(const Machine &m);
-    /* Return the maximal integer that can be stored in a data_t*
-     * casted into a data_t.
-     */
-    static data_t calc_ptr_max();
-    static const data_t ptr_max; /* = calc_ptr_max() */
 
     /**************************************************************/
     /* Information about how to interpret VipsBitConstraint::bits */
@@ -241,8 +237,8 @@ private:
    *
    * If common.pointer_pack is set, then the pointer bits should not
    * be interpreted as a pointer. Instead the data is all packed into
-   * the field bits itself. So bits should be cast into (unsigned
-   * long) and treated as data.
+   * the field bits itself. So bits should be cast into data_t and
+   * treated as data.
    *
    * If common.pointer_pack is unset, then bits points to an array
    * containing common.bits_len elements.

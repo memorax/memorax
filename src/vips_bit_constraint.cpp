@@ -30,8 +30,6 @@
 #include <sstream>
 #include <stdexcept>
 
-const VipsBitConstraint::data_t VipsBitConstraint::Common::ptr_max = VipsBitConstraint::Common::calc_ptr_max();
-
 VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   proc_count = m.automata.size();
   if(possible_to_pointer_pack(m)){
@@ -102,7 +100,7 @@ VipsBitConstraint::VipsBitConstraint(const Common &common){
     for(int i = 0; i < common.bits_len; ++i){
       bits[i] = 0;
     }
-    assert((ulong)bits % 2 == 0);
+    assert((data_t)bits % 2 == 0);
   }
 
   /* Setup pcs */
@@ -164,11 +162,11 @@ std::string VipsBitConstraint::debug_dump(const Common &common) const{
   std::stringstream ss;
   ss << "VBC(";
   if(common.pointer_pack){
-    ss << "0x" << std::hex << (ulong)bits;
+    ss << "0x" << std::hex << (data_t)bits;
   }else{
     for(int i = 0; i < common.bits_len; ++i){
       if(i > 0) ss << " ";
-      ss << "0x" << std::hex << (ulong)bits[i];
+      ss << "0x" << std::hex << (data_t)bits[i];
     }
   }
   ss << ")";
@@ -199,7 +197,7 @@ std::string VipsBitConstraint::Common::bitfield::to_string() const{
 };
 
 bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine){
-  data_t remains = ptr_max / 2 + 1;
+  data_t remains = std::numeric_limits<data_t>::max() / 2 + 1;
   
   /* pcs */
   for(unsigned p = 0; p < machine.automata.size(); ++p){
@@ -238,25 +236,6 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
   }
 
   return true;
-};
-
-VipsBitConstraint::data_t VipsBitConstraint::Common::calc_ptr_max(){
-  if(sizeof(data_t*) >= sizeof(data_t)){
-    return std::numeric_limits<data_t>::max();
-  }else{
-    // Bits per unit used by sizeof
-    int bpc = std::numeric_limits<unsigned char>::digits / sizeof(unsigned char);
-
-    /* Calculate 2^(bpc*sizeof(data_t*))-1 */
-    data_t d = 1;
-    for(int i = 0; i < (int)sizeof(data_t*)*bpc - 1; ++i){
-      d *= 2;
-    }
-    d -= 1;
-    d *= 2;
-    d += 1;
-    return d;
-  }
 };
 
 void VipsBitConstraint::test(){
