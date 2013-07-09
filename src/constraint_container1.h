@@ -53,8 +53,6 @@ public:
   virtual Trace *clear_and_get_trace(Constraint *c);
   virtual void clear();
 private:
-  /* The machine to which all Constraints in F belong. */
-  const Machine &machine;
   /* The number of processes in machine */
   int proc_count;
   /* The greatest number of program locations (automaton states) of

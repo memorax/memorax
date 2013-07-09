@@ -47,8 +47,6 @@ public:
   virtual Trace *clear_and_get_trace(Constraint *c);
   virtual void clear();
 private:
-  /* The machine to which all constraints should belong. */
-  const Machine &machine;
   struct edge_t{
     edge_t() : parent(0), transition(0), child(0) {};
     edge_t(PbConstraint *p, const Machine::PTransition *t, PbConstraint *c) 
