@@ -47,8 +47,6 @@ public:
   virtual Trace *clear_and_get_trace(Constraint *c);
   virtual void clear();
 private:
-  /* The machine to which all constraints should belong. */
-  const Machine &machine;
   /* A constraint in F is kept in a wrapper. */
   struct wrapper_t{
     wrapper_t(PbConstraint *c) : constraint(c), q_index(-1) {};

@@ -69,7 +69,7 @@ inline bool ConstraintContainer1::insert_constraint_in_f(Constraint *c){
 };
 
 ConstraintContainer1::ConstraintContainer1(const Machine &m)
-: machine(m), edges(EDGES_START_SIZE), edge_count(0), q(Q_START_SIZE), q_size(0), f_size(0){
+: edges(EDGES_START_SIZE), edge_count(0), q(Q_START_SIZE), q_size(0), f_size(0){
   proc_count = m.proc_count();
   max_state_count = 0;
   for(int i = 0; i < proc_count; i++){

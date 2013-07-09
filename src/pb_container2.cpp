@@ -21,8 +21,7 @@
 #include "pb_container2.h"
 
 PbContainer2::PbContainer2(const Machine &m)
-: machine(m),
-  f_size(0), 
+: f_size(0), 
   clean_q(Q_SIZE), dirty_q(Q_SIZE), q_size(0), dummy_wrapper(0)
 {
   prev_popped = &dummy_wrapper;
