@@ -174,14 +174,50 @@ public:
      */
     std::vector<bitfield> mem_vec;
 
+    /* l1_vec[p][i].get_vec(vbcbits) is (v*2 + d) where
+     *
+     * v is the value in the L1 of process p of the memory location
+     * corresponding to index i (as described in the documentation of
+     * ml_offsets)
+     *
+     * d is 1 if the entry for i in the L1 of process p is dirty, 0
+     * otherwise.
+     */
+    std::vector<std::vector<bitfield> > l1_vec;
+
+    /* Returns the index of nml according to ml_offsets. */
+    int nml_index(const Lang::NML &nml) const{
+      if(nml.is_global()){
+        return nml.get_id();
+      }else{
+        return ml_offsets[nml.get_owner()] + nml.get_id();
+      }
+    }
+
     /* mem(nml).get_vec(vbcbits) is the value in memory of nml. */
     const bitfield &mem(const Lang::NML &nml) const{
-      if(nml.is_global()){
-        return mem_vec[nml.get_id()];
-      }else{
-        return mem_vec[ml_offsets[nml.get_owner()] + nml.get_id()];
-      }
+      return mem_vec[nml_index(nml)];
     };
+
+    /* Shorthand for l1_vec[pid][i] where i is the index of nml
+     * according to ml_offsets.
+     */
+    const bitfield &l1(int pid, const Lang::NML &nml) const{
+      return l1_vec[pid][nml_index(nml)];
+    };
+
+    /* For an L1 value vd, 
+     * l1val_is_dirty(vd) returns true iff vd is dirty.
+     * l1val_valof(vd) returns the value of vd.
+     *
+     * For an integer value val,
+     * l1val_clean(val) returns an L1 value corresponding to (val,clean)
+     * l1val_dirty(val) returns an L1 value corresponding to (val,dirty)
+     */
+    static bool l1val_is_dirty(int vd){ return vd % 2; }
+    static int l1val_valof(int vd){ return (vd - (vd % 2 ? 1 : 0)) / 2; }
+    static int l1val_clean(int val){ return val*2; };
+    static int l1val_dirty(int val){ return val*2+1; };
 
     /* Returns the value held in field bf of vbcbits.
      *

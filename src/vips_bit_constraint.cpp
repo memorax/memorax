@@ -32,6 +32,11 @@
 
 VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   proc_count = m.automata.size();
+
+  /* Note that possible_to_pointer_pack also checks that the domains
+   * of memory locations and registers are finite, and sufficiently
+   * small.
+   */
   if(possible_to_pointer_pack(m)){
     pointer_pack = true;
     bits_len = 0;
@@ -66,7 +71,7 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   }
 
   /* Set up bitfields */
-  int div = 2;
+  data_t div = 2;
   int element = 0;
   /* pcs */
   for(int p = 0; p < proc_count; ++p){
@@ -79,14 +84,24 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   {
     for(unsigned i = 0; i < all_nmls.size(); ++i){
       Lang::VarDecl::Domain dom = machine.get_var_decl(all_nmls[i]).domain;
-      if(!dom.is_finite()){
-        throw new std::logic_error("VipsBitConstraint: Memory location "+all_nmls[i].to_string()+
-                                   " has an infinite domain. Not supported.");
-      }
       int mod = 1 + dom.get_upper_bound() - dom.get_lower_bound();
       int off = dom.get_lower_bound();
       mem_vec.push_back(bitfield(element,div,mod,off));
       div *= mod;
+    }
+  }
+
+  /* L1s */
+  {
+    for(int p = 0; p < proc_count; ++p){
+      l1_vec.push_back(std::vector<bitfield>());
+      for(unsigned i = 0; i < all_nmls.size(); ++i){
+        Lang::VarDecl::Domain dom = machine.get_var_decl(all_nmls[i]).domain;
+        int mod = 2*(1 + dom.get_upper_bound() - dom.get_lower_bound());
+        int off = 2*dom.get_lower_bound();
+        l1_vec[p].push_back(bitfield(element,div,mod,off));
+        div *= mod;
+      }
     }
   }
 
@@ -106,7 +121,7 @@ VipsBitConstraint::VipsBitConstraint(const Common &common){
   /* Setup pcs */
   /* Vacuously set all pcs to 0 */
 
-  /* Setup mem */
+  /* Setup mem and L1s */
   {
     for(unsigned i = 0; i < common.all_nmls.size(); ++i){
       int val;
@@ -116,6 +131,9 @@ VipsBitConstraint::VipsBitConstraint(const Common &common){
         val = common.machine.get_var_decl(common.all_nmls[i]).value.get_value();
       }
       common.bfset(&bits,common.mem(common.all_nmls[i]),val);
+      for(int pid = 0; pid < common.proc_count; ++pid){
+        common.bfset(&bits,common.l1(pid,common.all_nmls[i]),common.l1val_clean(val));
+      }
     }
   }
 };
@@ -198,6 +216,10 @@ std::string VipsBitConstraint::Common::bitfield::to_string() const{
 
 bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine){
   data_t remains = std::numeric_limits<data_t>::max() / 2 + 1;
+
+  /* The maximum allowed domain size for a memory location or register. */
+  /* Sufficiently small to fit both value and dirty/clean state into one data_t. */
+  data_t max_sz = std::numeric_limits<data_t>::max() / 2 + 1;
   
   /* pcs */
   for(unsigned p = 0; p < machine.automata.size(); ++p){
@@ -215,8 +237,18 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
                                    " has an infinite domain. Not supported.");
       }
       data_t sz = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+      if(sz > max_sz){
+        throw new std::logic_error("VipsBitConstraint: Global memory location "+machine.gvars[i].name+
+                                   " has a too large domain. Not supported.");
+      }
+      /* mem */
       if(sz > remains) return false;
       remains /= sz;
+      /* L1s */
+      for(unsigned l1 = 0; l1 < machine.automata.size(); ++l1){
+        if(sz*2 > remains) return false;
+        remains /= (2*sz);
+      }
     }
     /* Local */
     for(unsigned p = 0; p < machine.lvars.size(); ++p){
@@ -229,11 +261,25 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
           throw new std::logic_error(ss.str());
         }
         data_t sz = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+        if(sz > max_sz){
+          std::stringstream ss;
+          ss << "VipsBitConstraint: Global memory location " << machine.gvars[i].name
+             << "[P" << p << "] has a too large domain. Not supported.";
+          throw new std::logic_error(ss.str());
+        }
+        /* mem */
         if(sz > remains) return false;
         remains /= sz;
+        /* L1s */
+        for(unsigned l1 = 0; l1 < machine.automata.size(); ++l1){
+          if(sz*2 > remains) return false;
+          remains /= (2*sz);
+        }
       }
     }
   }
+
+  Log::debug << "VipsBitConstraint: remains: " << remains << "\n";
 
   return true;
 };
@@ -387,6 +433,42 @@ void VipsBitConstraint::test(){
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) >= 2 &&
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) <= 5 &&
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(0,2))) == 1);
+
+    /* Test 6: L1 */
+    Test::inner_test("#2.6: VBC L1 (init,basic)",
+                     !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(0,Lang::NML::local(1,1)))) &&
+                     !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(2,Lang::NML::global(0)))) &&
+                     common.l1val_valof(common.bfget(vbc.bits,common.l1(1,Lang::NML::local(0,1)))) == 11 &&
+                     common.l1val_valof(common.bfget(vbc.bits,common.l1(0,Lang::NML::local(0,2)))) == 1);
+
+    Test::inner_test("#2.7: l1val_valof/l1val_clean",
+                     common.l1val_valof(common.l1val_clean(-3)) == -3 &&
+                     common.l1val_valof(common.l1val_clean(-1)) == -1 &&
+                     common.l1val_valof(common.l1val_clean(0)) == 0 &&
+                     common.l1val_valof(common.l1val_clean(1)) == 1 &&
+                     common.l1val_valof(common.l1val_clean(2)) == 2);
+
+    Test::inner_test("#2.8: l1val_valof/l1val_dirty",
+                     common.l1val_valof(common.l1val_dirty(-3)) == -3 &&
+                     common.l1val_valof(common.l1val_dirty(-1)) == -1 &&
+                     common.l1val_valof(common.l1val_dirty(0)) == 0 &&
+                     common.l1val_valof(common.l1val_dirty(1)) == 1 &&
+                     common.l1val_valof(common.l1val_dirty(2)) == 2);
+
+    Test::inner_test("#2.9: l1val_is_dirty/l1val_dirty",
+                     common.l1val_is_dirty(common.l1val_dirty(-3)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(-1)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(0)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(1)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(2)));
+
+    Test::inner_test("#2.10: l1val_is_dirty/l1val_clean",
+                     !common.l1val_is_dirty(common.l1val_clean(-3)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(-1)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(0)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(1)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(2)));
+
 
     delete m;
   }
