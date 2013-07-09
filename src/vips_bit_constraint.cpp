@@ -210,8 +210,61 @@ VipsBitConstraint::~VipsBitConstraint(){
   }
 };
 
-VipsBitConstraint VipsBitConstraint::post(const Common &common, 
-                                          const Machine::PTransition &t) const{
+VipsBitConstraint *VipsBitConstraint::post(const Common &common, 
+                                           const Machine::PTransition &t) const{
+  int pid = t.pid;
+  const Lang::Stmt<int> &s = t.instruction;
+
+  /* Check control state */
+  if(common.bfget(bits,common.pcs[pid]) != t.source){
+    return 0;
+  }
+
+  VipsBitConstraint *vbc = new VipsBitConstraint(common,*this);
+  common.bfset(&vbc->bits,common.pcs[pid],t.target);
+
+  switch(s.get_type()){
+  case Lang::NOP:
+    return vbc;
+  case Lang::ASSIGNMENT:
+    {
+      int reg = s.get_reg();
+      RegVal regval(pid,common,bits);
+      int v = s.get_expr().eval<RegVal,int*>(regval,0);
+      if(common.machine.regs[pid][reg].domain.member(v)){
+        common.bfset(&vbc->bits,common.reg(pid,reg),v);
+        return vbc;
+      }else{
+        /* t cannot be executed; computed value outside of domain */
+        delete vbc;
+        return 0;
+      }
+    }
+  case Lang::ASSUME:
+    {
+      RegVal regval(pid,common,bits);
+      if(s.get_condition().eval<RegVal,int*>(regval,0)){
+        return vbc;
+      }else{ /* Assume failed. */
+        delete vbc;
+        return 0;
+      }
+    }
+  case Lang::READASSERT:
+  case Lang::READASSIGN:
+  case Lang::WRITE:
+  case Lang::SYNCWR:
+  case Lang::FENCE:
+  case Lang::LOCKED:
+  case Lang::FETCH:
+  case Lang::EVICT:
+  case Lang::WRLLC:
+  default:
+    delete vbc;
+    throw new std::logic_error("VipsBitConstraint::post: Unsupported transition: "+t.to_string(common.machine));
+  }
+
+  delete vbc;
   throw new std::logic_error("VipsBitConstraint::post: Not implemented");
 };
 
@@ -639,7 +692,7 @@ void VipsBitConstraint::test(){
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) <= 5 &&
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(0,2))) == 1);
 
-    /* Test 6-10: L1 */
+    /* Test 17-21: L1 */
     Test::inner_test("#2.17: VBC L1 (init,basic)",
                      !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(0,Lang::NML::local(1,1)))) &&
                      !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(2,Lang::NML::global(0)))) &&
@@ -675,11 +728,16 @@ void VipsBitConstraint::test(){
                      !common.l1val_is_dirty(common.l1val_clean(2)));
 
 
-    /* Test 11: Registers */
+    /* Test 22,23: Registers */
     Test::inner_test("#2.22: VBC registers (init,basic)",
                      common.bfget(vbc.bits,common.reg(0,0)) == 0 && 
                      common.bfget(vbc.bits,common.reg(0,1)) == 2 && 
                      common.bfget(vbc.bits,common.reg(1,0)) == -1);
+
+    RegVal regval(0,common,vbc.bits);
+    Lang::Expr<int> e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1) + Lang::Expr<int>::integer(1);
+    Test::inner_test("#2.23: VBC register, expr evaluation",
+                     e.eval<RegVal,int*>(regval,0) == 3);
 
     delete m;
   }

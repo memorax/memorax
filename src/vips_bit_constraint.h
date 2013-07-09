@@ -249,6 +249,26 @@ public:
 
     friend class VipsBitConstraint;
   };
+
+  /* A RegVal object regval(pid,common,bits) provides an operator [],
+   * such that regval[r] is the value in bits (interpreted by common)
+   * of the r:th register of process pid.
+   *
+   * Use this when calling Expr::eval, BExpr::eval.
+   */
+  class RegVal{
+  public:
+    RegVal(int pid,const Common &common,const data_t *bits)
+      : pid(pid), common(common), bits(bits) {};
+    int operator[](int r) const{
+      return common.bfget(bits,common.reg(pid,r));
+    };
+  private:
+    int pid;
+    const Common &common;
+    const data_t *bits;
+  };
+
   /* Constructs an initial constraint based on common. All memory
    * locations will be initialized to some initial value, but for
    * memory locations where the initial value is not uniquely
@@ -257,6 +277,8 @@ public:
    */
   VipsBitConstraint(const Common &common);
   VipsBitConstraint(const Common &common, const VipsBitConstraint&);
+  VipsBitConstraint(const VipsBitConstraint&) = delete;
+  VipsBitConstraint &operator=(const VipsBitConstraint&) = delete;
   ~VipsBitConstraint();
 
   /* Returns the set of transitions that should be explored from this
@@ -264,9 +286,11 @@ public:
    */
   VecSet<const Machine::PTransition*> partred(const Common &common) const;
 
-  /* Returns the result of applying t to this constraint. */
-  VipsBitConstraint post(const Common &common, 
-                         const Machine::PTransition &t) const;
+  /* Returns the result of applying t to this constraint.
+   * Returns null if t cannot be applied to this constraint.
+   */
+  VipsBitConstraint *post(const Common &common, 
+                          const Machine::PTransition &t) const;
 
   /* A vector v such that for each process pid, v[pid] is the control
    * state of pid in this constraint.
