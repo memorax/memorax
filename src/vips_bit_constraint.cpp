@@ -130,6 +130,19 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
     }
   }
 
+  /* Registers */
+  {
+    for(int p = 0; p < proc_count; ++p){
+      reg_vec.push_back(std::vector<bitfield>());
+      for(unsigned r = 0; r < machine.regs[p].size(); ++r){
+        Lang::VarDecl::Domain dom = machine.regs[p][r].domain;
+        int mod = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+        int off = dom.get_lower_bound();
+        reg_vec[p].push_back(bfseq.next(mod,off));
+      }
+    }
+  }
+
   bits_len = bfseq.get_element_count();
 
 };
@@ -160,6 +173,21 @@ VipsBitConstraint::VipsBitConstraint(const Common &common){
       common.bfset(&bits,common.mem(common.all_nmls[i]),val);
       for(int pid = 0; pid < common.proc_count; ++pid){
         common.bfset(&bits,common.l1(pid,common.all_nmls[i]),common.l1val_clean(val));
+      }
+    }
+  }
+
+  /* Setup registers */
+  {
+    for(int p = 0; p < common.proc_count; ++p){
+      for(unsigned r = 0; r < common.machine.regs[p].size(); ++r){
+        int val;
+        if(common.machine.regs[p][r].value.is_wild()){
+          val = common.machine.regs[p][r].domain.get_lower_bound();
+        }else{
+          val = common.machine.regs[p][r].value.get_value();
+        }
+        common.bfset(&bits,common.reg(p,r),val);
       }
     }
   }
@@ -254,7 +282,7 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
     remains /= (data_t)machine.automata[p].get_states().size();
   }
 
-  /* mem */
+  /* mem and L1s */
   {
     /* Global */
     for(unsigned i = 0; i < machine.gvars.size(); ++i){
@@ -283,14 +311,14 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
         Lang::VarDecl::Domain dom = machine.lvars[p][i].domain;
         if(!dom.is_finite()){
           std::stringstream ss;
-          ss << "VipsBitConstraint: Global memory location " << machine.gvars[i].name
+          ss << "VipsBitConstraint: Local memory location " << machine.lvars[p][i].name
              << "[P" << p << "] has an infinite domain. Not supported.";
           throw new std::logic_error(ss.str());
         }
         data_t sz = 1 + dom.get_upper_bound() - dom.get_lower_bound();
         if(sz > max_sz){
           std::stringstream ss;
-          ss << "VipsBitConstraint: Global memory location " << machine.gvars[i].name
+          ss << "VipsBitConstraint: Local memory location " << machine.lvars[p][i].name
              << "[P" << p << "] has a too large domain. Not supported.";
           throw new std::logic_error(ss.str());
         }
@@ -302,6 +330,30 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
           if(sz*2 > remains) return false;
           remains /= (2*sz);
         }
+      }
+    }
+  }
+
+  /* Registers */
+  {
+    for(unsigned p = 0; p < machine.regs.size(); ++p){
+      for(unsigned r = 0; r < machine.regs[p].size(); ++r){
+        Lang::VarDecl::Domain dom = machine.regs[p][r].domain;
+        if(!dom.is_finite()){
+          std::stringstream ss;
+          ss << "VipsBitConstraint: Register " << machine.regs[p][r].name
+             << " of P" << p << " has an infinite domain. Not supported.";
+          throw new std::logic_error(ss.str());
+        }
+        data_t sz = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+        if(sz > max_sz){
+          std::stringstream ss;
+          ss << "VipsBitConstraint: Register " << machine.regs[p][r].name
+             << " of P" << p << " has a too large domain. Not supported.";
+          throw new std::logic_error(ss.str());
+        }
+        if(sz > remains) return false;
+        remains /= sz;
       }
     }
   }
@@ -392,8 +444,9 @@ void VipsBitConstraint::test(){
     return new Machine(Parser::p_test(lex));
   };
 
-  /* Test 1-: bit packing */
+  /* Test 1-11: bit packing (pointer_pack) */
   {
+    /* Machine s.t. configurations (barely) fits into a 64-bit data_t. */
     Machine *m = get_machine
       ("forbidden * * *\n"
        "data\n"
@@ -402,9 +455,14 @@ void VipsBitConstraint::test(){
        "process\n"
        "data\n"
        "  flag = 1 : [1:1]\n"
+       "registers\n"
+       "  $r0 = 0 : [0:1]\n"
+       "  $r1 = 2 : [2:3]\n"
        "text\n"
        "  nop\n\n"
        "process\n"
+       "registers\n"
+       "  $r0 = -1 : [-2:-1]\n"
        "data\n"
        "  a = 11 : [10:20]\n"
        "  b = * : [2:5]\n"
@@ -461,7 +519,7 @@ void VipsBitConstraint::test(){
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) <= 5 &&
                      common.bfget(vbc.bits,common.mem(Lang::NML::local(0,2))) == 1);
 
-    /* Test 6: L1 */
+    /* Test 6-10: L1 */
     Test::inner_test("#2.6: VBC L1 (init,basic)",
                      !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(0,Lang::NML::local(1,1)))) &&
                      !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(2,Lang::NML::global(0)))) &&
@@ -496,6 +554,132 @@ void VipsBitConstraint::test(){
                      !common.l1val_is_dirty(common.l1val_clean(1)) &&
                      !common.l1val_is_dirty(common.l1val_clean(2)));
 
+
+    /* Test 11: Registers */
+    Test::inner_test("#2.11: VBC registers (init,basic)",
+                     common.bfget(vbc.bits,common.reg(0,0)) == 0 && 
+                     common.bfget(vbc.bits,common.reg(0,1)) == 2 && 
+                     common.bfget(vbc.bits,common.reg(1,0)) == -1);
+
+    delete m;
+  }
+
+  /* Test 12-22: bit packing (pointer_pack) */
+  {
+    /* Machine s.t. configurations do not fit into a 64-bit data_t. */
+    Machine *m = get_machine
+      ("forbidden * * *\n"
+       "data\n"
+       "  x = 0 : [0:5]\n" /* Changed domain [0:1] -> [0:5] */
+       "  y = 1 : [-1:1]\n"
+       "process\n"
+       "data\n"
+       "  flag = 1 : [1:1]\n"
+       "registers\n"
+       "  $r0 = 0 : [0:1]\n"
+       "  $r1 = 2 : [2:3]\n"
+       "text\n"
+       "  nop\n\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = -1 : [-2:-1]\n"
+       "data\n"
+       "  a = 11 : [10:20]\n"
+       "  b = * : [2:5]\n"
+       "text\n"
+       "  nop;nop;nop;nop\n\n"
+       "process\n"
+       "data\n"
+       "  a = 1 : [0:1]\n"
+       "text\n"
+       "  nop;nop;nop\n");
+
+    Common common(*m);
+
+    /* Test 12,13: pcs */
+    Test::inner_test("#2.12: Common pcs (init, basic)",
+                     common.pcs.size() == 3 &&
+                     common.pcs[0].mod == 3 &&
+                     common.pcs[1].mod == 6 &&
+                     common.pcs[2].mod == 5);
+
+    VipsBitConstraint vbc(common);
+
+    Log::result << vbc.debug_dump(common) << "\n";
+
+    std::vector<int> pcs = vbc.get_control_states(common);
+    Test::inner_test("#2.13: VBC pcs (init, basic)",
+                     pcs.size() == 3 &&
+                     pcs[0] == 0 &&
+                     pcs[1] == 0 &&
+                     pcs[2] == 0);
+
+    /* Test 14,15,16: mem */
+    Test::inner_test("#2.14: Common ml_offsets",
+                     common.ml_offsets.size() == 3 &&
+                     common.ml_offsets[0] == 2 &&
+                     common.ml_offsets[1] == 3 &&
+                     common.ml_offsets[2] == 5);
+
+    Test::inner_test("#2.15: Common mem (init, basic)",
+                     common.mem_vec.size() == 6 &&
+                     common.mem_vec[0].mod == 6 &&
+                     common.mem_vec[1].mod == 3 &&
+                     common.mem_vec[2].mod == 1 &&
+                     common.mem_vec[3].mod == 11 &&
+                     common.mem_vec[4].mod == 4 &&
+                     common.mem_vec[5].mod == 2);
+
+    Test::inner_test("#2.16: VBC mem (init,basic)",
+                     common.bfget(vbc.bits,common.mem(Lang::NML::global(0))) == 0 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::global(1))) == 1 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(0,0))) == 1 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(0,1))) == 11 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) >= 2 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) <= 5 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(0,2))) == 1);
+
+    /* Test 6-10: L1 */
+    Test::inner_test("#2.17: VBC L1 (init,basic)",
+                     !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(0,Lang::NML::local(1,1)))) &&
+                     !common.l1val_is_dirty(common.bfget(vbc.bits,common.l1(2,Lang::NML::global(0)))) &&
+                     common.l1val_valof(common.bfget(vbc.bits,common.l1(1,Lang::NML::local(0,1)))) == 11 &&
+                     common.l1val_valof(common.bfget(vbc.bits,common.l1(0,Lang::NML::local(0,2)))) == 1);
+
+    Test::inner_test("#2.18: l1val_valof/l1val_clean",
+                     common.l1val_valof(common.l1val_clean(-3)) == -3 &&
+                     common.l1val_valof(common.l1val_clean(-1)) == -1 &&
+                     common.l1val_valof(common.l1val_clean(0)) == 0 &&
+                     common.l1val_valof(common.l1val_clean(1)) == 1 &&
+                     common.l1val_valof(common.l1val_clean(2)) == 2);
+
+    Test::inner_test("#2.19: l1val_valof/l1val_dirty",
+                     common.l1val_valof(common.l1val_dirty(-3)) == -3 &&
+                     common.l1val_valof(common.l1val_dirty(-1)) == -1 &&
+                     common.l1val_valof(common.l1val_dirty(0)) == 0 &&
+                     common.l1val_valof(common.l1val_dirty(1)) == 1 &&
+                     common.l1val_valof(common.l1val_dirty(2)) == 2);
+
+    Test::inner_test("#2.20: l1val_is_dirty/l1val_dirty",
+                     common.l1val_is_dirty(common.l1val_dirty(-3)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(-1)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(0)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(1)) &&
+                     common.l1val_is_dirty(common.l1val_dirty(2)));
+
+    Test::inner_test("#2.21: l1val_is_dirty/l1val_clean",
+                     !common.l1val_is_dirty(common.l1val_clean(-3)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(-1)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(0)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(1)) &&
+                     !common.l1val_is_dirty(common.l1val_clean(2)));
+
+
+    /* Test 11: Registers */
+    Test::inner_test("#2.22: VBC registers (init,basic)",
+                     common.bfget(vbc.bits,common.reg(0,0)) == 0 && 
+                     common.bfget(vbc.bits,common.reg(0,1)) == 2 && 
+                     common.bfget(vbc.bits,common.reg(1,0)) == -1);
 
     delete m;
   }

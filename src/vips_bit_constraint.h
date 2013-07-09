@@ -155,7 +155,7 @@ public:
      * belonging to any process p' with lower pid: p' < p.
      *
      * ml_offsets is used internally to find the position
-     * corresponding to a certain NML in vectors such as mem. The
+     * corresponding to a certain NML in vectors such as mem_vec. The
      * global NML with id i, will have index i. The local NML with id
      * i, belonging to process p, will have index ml_offsets[p] + i.
      */
@@ -185,6 +185,11 @@ public:
      */
     std::vector<std::vector<bitfield> > l1_vec;
 
+    /* reg_vec[p][r].get_vec(vbcbits) is the value of the r:th
+     * register of process p.
+     */
+    std::vector<std::vector<bitfield> > reg_vec;
+
     /* Returns the index of nml according to ml_offsets. */
     int nml_index(const Lang::NML &nml) const{
       if(nml.is_global()){
@@ -204,6 +209,11 @@ public:
      */
     const bitfield &l1(int pid, const Lang::NML &nml) const{
       return l1_vec[pid][nml_index(nml)];
+    };
+
+    /* Shorthand for reg_vec[pid][reg]. */
+    const bitfield &reg(int pid, int reg) const{
+      return reg_vec[pid][reg];
     };
 
     /* For an L1 value vd, 
@@ -288,6 +298,9 @@ private:
    * -- per memory location:
    * --- value
    * --- dirty/clean
+   * per process
+   * - per register
+   * -- value
    */
   data_t *bits;
 
