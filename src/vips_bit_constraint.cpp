@@ -290,8 +290,50 @@ VipsBitConstraint *VipsBitConstraint::post(const Common &c,
       return vbc;
     }
   case Lang::READASSERT:
+    {
+      RegVal regval(pid,c,bits);
+      int e_val = s.get_expr().eval<RegVal,int*>(regval,0);
+      int v_val = c.l1val_valof(c.bfget(bits,c.l1(pid,s.get_memloc())));
+      if(e_val == v_val){
+        return vbc;
+      }else{
+        /* Read the wrong value */
+        delete vbc;
+        return 0;
+      }
+    }
   case Lang::READASSIGN:
+    {
+      int v_val = c.l1val_valof(c.bfget(bits,c.l1(pid,s.get_memloc())));
+      if(c.machine.regs[pid][s.get_reg()].domain.member(v_val)){
+        c.bfset(&vbc->bits,c.reg(pid,s.get_reg()),v_val);
+        return vbc;
+      }else{
+        /* The read value is not in the register domain. */
+        /* Cannot proceed with the read */
+        delete vbc;
+        return 0;
+      }
+    }
   case Lang::SYNCWR:
+    {
+      if(c.l1val_is_dirty(c.bfget(bits,c.l1(pid,s.get_memloc())))){
+        /* Cannot execute implicit evict before syncwr */
+        delete vbc;
+        return 0;
+      }
+      RegVal regval(pid,c,bits);
+      int val = s.get_expr().eval<RegVal,int*>(regval,0);
+      Lang::NML nml(s.get_memloc(),pid);
+      if(!c.machine.get_var_decl(nml).domain.member(val)){
+        /* Cannot write; value outside of domain */
+        delete vbc;
+        return 0;
+      }
+      c.bfset(&vbc->bits,c.l1(pid,s.get_memloc()),c.l1val_clean(val));
+      c.bfset(&vbc->bits,c.mem(nml),val);
+      return vbc;
+    }
   case Lang::FENCE:
   case Lang::LOCKED:
   case Lang::EVICT:
@@ -792,9 +834,23 @@ void VipsBitConstraint::test(){
        "text\n"
        "  Lnop: nop;\n"
        "  Lnop1: either{\n"
-       "    write: x := 1\n"
+       "    write: x := 1;\n"
+       "    Lreads:\n"
+       "    either{\n"
+       "      read: x = 1; goto A\n"
+       "    or\n"
+       "      read: x = 0; goto B\n"
+       "    or\n"
+       "      read: $r0 := x; goto C\n"
+       "    }\n"
+       "  or\n"
+       "    syncwr: x := 2; goto D\n"
        "  };\n"
        "  END: nop;\n"
+       "  A: nop;\n"
+       "  B: nop;\n"
+       "  C: nop;\n"
+       "  D: nop;\n"
        "  FAIL: nop\n"
        "process\n"
        "registers\n"
@@ -948,7 +1004,7 @@ void VipsBitConstraint::test(){
                        common.l1val_valof(common.bfget(vbc3->bits,common.l1(0,x))) == 0);
       VipsBitConstraint *vbc5 = vbc2->post(common,wrllc(0,"Lnop1",x));
       Test::inner_test("#3.10: wrllc", vbc5 == 0);
-      VipsBitConstraint *vbc4 = vbc2->post(common,trans2(0,"Lnop1","END"));
+      VipsBitConstraint *vbc4 = vbc2->post(common,trans2(0,"Lnop1","Lreads"));
       Test::inner_test("#3.11: write",
                        vbc4 != 0 &&
                        common.l1val_is_dirty(common.bfget(vbc4->bits,common.l1(0,x))) &&
@@ -956,14 +1012,14 @@ void VipsBitConstraint::test(){
                        !common.l1val_is_dirty(common.bfget(vbc4->bits,common.l1(1,x))) &&
                        common.l1val_valof(common.bfget(vbc4->bits,common.l1(1,x))) == 0 &&
                        common.bfget(vbc4->bits,common.mem(x)) == 0);
-      VipsBitConstraint *vbc6 = vbc4->post(common,fetch(0,"END",x));
+      VipsBitConstraint *vbc6 = vbc4->post(common,fetch(0,"Lreads",x));
       Test::inner_test("#3.12: fetch",vbc6 == 0);
-      VipsBitConstraint *vbc7 = vbc4->post(common,fetch(0,"END",y));
+      VipsBitConstraint *vbc7 = vbc4->post(common,fetch(0,"Lreads",y));
       Test::inner_test("#3.13: fetch",
                        vbc7 != 0 &&
                        !common.l1val_is_dirty(common.bfget(vbc7->bits,common.l1(0,y))) &&
                        common.l1val_valof(common.bfget(vbc7->bits,common.l1(0,y))) == 0);
-      VipsBitConstraint *vbc8 = vbc4->post(common,wrllc(0,"END",x));
+      VipsBitConstraint *vbc8 = vbc4->post(common,wrllc(0,"Lreads",x));
       Test::inner_test("#3.14: wrllc",
                        vbc8 != 0 &&
                        !common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(0,x))) &&
@@ -979,6 +1035,47 @@ void VipsBitConstraint::test(){
       // Do not delete vbc6
       delete vbc7;
       delete vbc8;
+    }
+
+    /* Test read */
+    {
+      VipsBitConstraint *vbc2 = vbc.post(common,trans(0,"Lnop"));
+      VipsBitConstraint *vbc3 = vbc2->post(common,trans2(0,"Lnop1","Lreads")); // write: x := 1
+      VipsBitConstraint *vbc4 = vbc3->post(common,trans2(0,"Lreads","A")); // read: x = 1
+      Test::inner_test("#3.15: read assert", vbc4 != 0);
+      VipsBitConstraint *vbc5 = vbc3->post(common,wrllc(0,"Lreads",x));
+      VipsBitConstraint *vbc6 = vbc5->post(common,trans2(0,"Lreads","A")); // read: x = 1
+      Test::inner_test("#3.16: read assert", vbc6 != 0);
+      VipsBitConstraint *vbc7 = vbc3->post(common,trans2(0,"Lreads","B")); // read: x = 0
+      Test::inner_test("#3.17: read assert", vbc7 == 0);
+      VipsBitConstraint *vbc8 = vbc3->post(common,trans2(0,"Lreads","C")); // read: $r0 := x
+      Test::inner_test("#3.18: read assign",
+                       vbc8 != 0 &&
+                       common.bfget(vbc8->bits,common.reg(0,0)) == 1);
+      
+
+      delete vbc2;
+      delete vbc3;
+      delete vbc4;
+      delete vbc5;
+      delete vbc6;
+      // Do not delete vbc7
+      delete vbc8;
+    }
+
+    /* Test syncwr */
+    {
+      VipsBitConstraint *vbc2 = vbc.post(common,trans(0,"Lnop"));
+      VipsBitConstraint *vbc3 = vbc2->post(common,trans2(0,"Lnop1","D")); // syncwr: x := 2
+
+      Test::inner_test("#3.19: syncwr",
+                       vbc3 != 0 &&
+                       common.bfget(vbc3->bits,common.mem(x)) == 2 &&
+                       !common.l1val_is_dirty(common.bfget(vbc3->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc3->bits,common.l1(0,x))) == 2);
+
+      delete vbc2;
+      delete vbc3;
     }
 
     delete m;
