@@ -791,7 +791,11 @@ void VipsBitConstraint::test(){
        "  $r1 = 0 : [0:5]\n"
        "text\n"
        "  Lnop: nop;\n"
-       "  Lnop1: nop\n"
+       "  Lnop1: either{\n"
+       "    write: x := 1\n"
+       "  };\n"
+       "  END: nop;\n"
+       "  FAIL: nop\n"
        "process\n"
        "registers\n"
        "  $r0 = 0 : [0:5]\n"
@@ -801,15 +805,26 @@ void VipsBitConstraint::test(){
        "  Lass1: $r1 := 2;\n"
        "  Lass2: $r1 := $r0 + $r1;\n"
        "  Lass3: either{\n"
-       "    nop\n"
+       "    assume: $r0 + $r1 = 4\n"
        "  or\n"
-       "    $r1 := $r1 + $r1" /* outside domain */
+       "    $r1 := $r1 + $r1;\n" /* outside domain */
+       "    goto FAIL\n"
        "  };\n"
+       "  Lassu1: either{\n"
+       "    assume: $r1 = 2;\n"
+       "    goto FAIL\n"
+       "  or\n"
+       "    nop"
+       "  };\n"
+       "  END: nop;\n"
        "  FAIL: nop\n"
        );
 
     Common common(*m);
     VipsBitConstraint vbc(common);
+
+    Lang::NML x = Lang::NML::global(0);
+    Lang::NML y = Lang::NML::global(1);
 
     /* Return some PTransition from m which originates in the control
      * state of process pid which is labelled lbl.
@@ -838,6 +853,24 @@ void VipsBitConstraint::test(){
         }
       }
       return Machine::PTransition(*t,pid);
+    };
+
+    /* Return a fetch for process pid and memory location nml,
+     * originating in the control state labelled lbl
+     */
+    std::function<Machine::PTransition(int,std::string,Lang::NML)> fetch =
+      [m](int pid, std::string lbl, Lang::NML nml){
+      int src = m->automata[pid].state_index_of_label(lbl);
+      return Machine::PTransition(src,Lang::Stmt<int>::fetch(nml.localize(pid)),src,pid);
+    };
+
+    /* Return a wrllc for process pid and memory location nml,
+     * originating in the control state labelled lbl
+     */
+    std::function<Machine::PTransition(int,std::string,Lang::NML)> wrllc =
+      [m](int pid, std::string lbl, Lang::NML nml){
+      int src = m->automata[pid].state_index_of_label(lbl);
+      return Machine::PTransition(src,Lang::Stmt<int>::wrllc(nml.localize(pid)),src,pid);
     };
 
     /* Test nop */
@@ -885,6 +918,67 @@ void VipsBitConstraint::test(){
       delete vbc3;
       delete vbc4;
       // Do not delete vbc5
+    }
+
+    /* Test assume */
+    {
+      
+      VipsBitConstraint *vbc2 = vbc.post(common,trans(1,"Lass0"));
+      VipsBitConstraint *vbc3 = vbc2->post(common,trans(1,"Lass1"));
+      VipsBitConstraint *vbc4 = vbc3->post(common,trans(1,"Lass2"));
+      VipsBitConstraint *vbc5 = vbc4->post(common,trans2(1,"Lass3","Lassu1"));
+      Test::inner_test("#3.7: assume", vbc5 != 0);
+      VipsBitConstraint *vbc6 = vbc5->post(common,trans2(1,"Lassu1","FAIL"));
+      Test::inner_test("#3.8: assume",vbc6 == 0);
+
+      delete vbc2;
+      delete vbc3;
+      delete vbc4;
+      delete vbc5;
+      // Do not delete vbc6
+    }
+
+    /* Test write, fetch, wrllc */
+    {
+      VipsBitConstraint *vbc2 = vbc.post(common,trans(0,"Lnop"));
+      VipsBitConstraint *vbc3 = vbc2->post(common,fetch(0,"Lnop1",x));
+      Test::inner_test("#3.9: fetch",
+                       vbc3 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc3->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc3->bits,common.l1(0,x))) == 0);
+      VipsBitConstraint *vbc5 = vbc2->post(common,wrllc(0,"Lnop1",x));
+      Test::inner_test("#3.10: wrllc", vbc5 == 0);
+      VipsBitConstraint *vbc4 = vbc2->post(common,trans2(0,"Lnop1","END"));
+      Test::inner_test("#3.11: write",
+                       vbc4 != 0 &&
+                       common.l1val_is_dirty(common.bfget(vbc4->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc4->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc4->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc4->bits,common.l1(1,x))) == 0 &&
+                       common.bfget(vbc4->bits,common.mem(x)) == 0);
+      VipsBitConstraint *vbc6 = vbc4->post(common,fetch(0,"END",x));
+      Test::inner_test("#3.12: fetch",vbc6 == 0);
+      VipsBitConstraint *vbc7 = vbc4->post(common,fetch(0,"END",y));
+      Test::inner_test("#3.13: fetch",
+                       vbc7 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc7->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc7->bits,common.l1(0,y))) == 0);
+      VipsBitConstraint *vbc8 = vbc4->post(common,wrllc(0,"END",x));
+      Test::inner_test("#3.14: wrllc",
+                       vbc8 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc8->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc8->bits,common.l1(1,x))) == 0 &&
+                       common.bfget(vbc8->bits,common.mem(x)) == 1);
+
+      delete vbc2;
+      delete vbc3;
+      delete vbc4;
+      // Do not delete vbc5
+      // Do not delete vbc6
+      delete vbc7;
+      delete vbc8;
     }
 
     delete m;
