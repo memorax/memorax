@@ -343,6 +343,9 @@ private:
   /* Dump the representation of this Constraint in a low-level fashion. */
   std::string debug_dump(const Common &) const;
 
+  /* Returns true iff s is a CAS statement */
+  static bool is_cas(const Lang::Stmt<int> &s);
+
   friend class Common;
 };
 
