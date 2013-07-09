@@ -39,11 +39,9 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
    */
   if(possible_to_pointer_pack(m)){
     pointer_pack = true;
-    bits_len = 0;
     Log::debug << "VipsBitConstraint::Common: Using pointer packing.\n";
   }else{
     pointer_pack = false;
-    bits_len = 1;
     Log::debug << "VipsBitConstraint::Common: Not using pointer packing.\n";
   }
 
@@ -70,14 +68,43 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
     }
   }
 
+  /* A class computing a sequence of non-overlapping bitfields while
+   * moving to new elements as necessary.
+   */
+  class BFSeq{
+  public:
+    BFSeq(bool pointer_pack){
+      if(pointer_pack){
+        div = 2;
+      }else{
+        div = 1;
+      }
+      element = 0;
+    };
+    /* Get the next bitfield with size mod and offset off. */
+    bitfield next(data_t mod, int off){
+      if((std::numeric_limits<data_t>::max() - mod + 1) / mod < div){
+        ++element;
+        div = 1;
+      }
+      bitfield bf(element,div,mod,off);
+      div *= mod;
+      return bf;
+    };
+    /* Get the total number of elements that are used by this sequence. */
+    int get_element_count() const{
+      return element+1;
+    };
+  private:
+    data_t div;
+    int element;
+  };
+
   /* Set up bitfields */
-  data_t div = 2;
-  int element = 0;
+  BFSeq bfseq(pointer_pack);
   /* pcs */
   for(int p = 0; p < proc_count; ++p){
-    int mod = (int)m.automata[p].get_states().size() + 1;
-    pcs.push_back(bitfield(element,div,mod,0));
-    div *= mod;
+    pcs.push_back(bfseq.next((int)m.automata[p].get_states().size() + 1,0));
   }
 
   /* mem */
@@ -86,8 +113,7 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
       Lang::VarDecl::Domain dom = machine.get_var_decl(all_nmls[i]).domain;
       int mod = 1 + dom.get_upper_bound() - dom.get_lower_bound();
       int off = dom.get_lower_bound();
-      mem_vec.push_back(bitfield(element,div,mod,off));
-      div *= mod;
+      mem_vec.push_back(bfseq.next(mod,off));
     }
   }
 
@@ -99,11 +125,12 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
         Lang::VarDecl::Domain dom = machine.get_var_decl(all_nmls[i]).domain;
         int mod = 2*(1 + dom.get_upper_bound() - dom.get_lower_bound());
         int off = 2*dom.get_lower_bound();
-        l1_vec[p].push_back(bitfield(element,div,mod,off));
-        div *= mod;
+        l1_vec[p].push_back(bfseq.next(mod,off));
       }
     }
   }
+
+  bits_len = bfseq.get_element_count();
 
 };
 
