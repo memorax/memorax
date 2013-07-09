@@ -26,6 +26,7 @@
 #include "lang.h"
 #include "vecset.h"
 
+#include <map>
 #include <vector>
 
 /* VipsBitConstraint is an explicit representation of a VIPS-M
@@ -152,9 +153,56 @@ public:
      * state. */
     std::vector<bitfield> pcs;
 
-    data_t bfget(const data_t *vbcbits,const bitfield &bf) const{
+    /* ml_offsets is a vector with one entry per process. For each
+     * process p, ml_offsets[p] is the total number of global memory
+     * locations + the total number of local memory locations
+     * belonging to any process p' with lower pid: p' < p.
+     *
+     * ml_offsets is used internally to find the position
+     * corresponding to a certain NML in vectors such as mem. The
+     * global NML with id i, will have index i. The local NML with id
+     * i, belonging to process p, will have index ml_offsets[p] + i.
+     */
+    std::vector<int> ml_offsets;
+
+    /* All NMLs in machine, in the order described by the
+     * documentation for ml_offsets.
+     */
+    std::vector<Lang::NML> all_nmls;
+
+    /* mem_vec[i].get_vec(vbcbits) is the value in memory of the
+     * memory location corresponding to index i (as described in the
+     * documentation of ml_offsets).
+     *
+     * Use through the member function mem.
+     */
+    std::vector<bitfield> mem_vec;
+
+    /* mem(nml).get_vec(vbcbits) is the value in memory of nml. */
+    const bitfield &mem(const Lang::NML &nml) const{
+      if(nml.is_global()){
+        return mem_vec[nml.get_id()];
+      }else{
+        return mem_vec[ml_offsets[nml.get_owner()] + nml.get_id()];
+      }
+    };
+
+    /* Returns the value held in field bf of vbcbits.
+     *
+     * Takes pointer_pack into account.
+     */
+    int bfget(const data_t *vbcbits,const bitfield &bf) const{
       if(pointer_pack) return bf.get_el((data_t)vbcbits);
       else return bf.get_vec(vbcbits);
+    };
+
+    /* Assigns the value val to the field bf in vbcbits.
+     *
+     * Takes pointer_pack into account.
+     */
+    void bfset(data_t **vbcbits,const bitfield &bf,int val) const{
+      if(pointer_pack) *vbcbits = (data_t*)bf.set_el((data_t)(*vbcbits),val);
+      else bf.set_vec(*vbcbits,val);
     };
 
     friend class VipsBitConstraint;

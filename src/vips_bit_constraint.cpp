@@ -44,14 +44,54 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
     Log::debug << "VipsBitConstraint::Common: Not using pointer packing.\n";
   }
 
+  /* Set up ml_offsets */
+  {
+    int c = machine.gvars.size();
+    for(int p = 0; p < proc_count; ++p){
+      ml_offsets.push_back(c);
+      c += machine.lvars[p].size();
+    }
+  }
+
+  /* Set up all_nmls */
+  {
+    /* Global */
+    for(unsigned i = 0; i < machine.gvars.size(); ++i){
+      all_nmls.push_back(Lang::NML::global(i));
+    }
+    /* Local */
+    for(unsigned p = 0; p < machine.lvars.size(); ++p){
+      for(unsigned i = 0; i < machine.lvars[p].size(); ++i){
+        all_nmls.push_back(Lang::NML::local(i,p));
+      }
+    }
+  }
+
   /* Set up bitfields */
   int div = 2;
   int element = 0;
+  /* pcs */
   for(int p = 0; p < proc_count; ++p){
     int mod = (int)m.automata[p].get_states().size() + 1;
     pcs.push_back(bitfield(element,div,mod,0));
     div *= mod;
   }
+
+  /* mem */
+  {
+    for(unsigned i = 0; i < all_nmls.size(); ++i){
+      Lang::VarDecl::Domain dom = machine.get_var_decl(all_nmls[i]).domain;
+      if(!dom.is_finite()){
+        throw new std::logic_error("VipsBitConstraint: Memory location "+all_nmls[i].to_string()+
+                                   " has an infinite domain. Not supported.");
+      }
+      int mod = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+      int off = dom.get_lower_bound();
+      mem_vec.push_back(bitfield(element,div,mod,off));
+      div *= mod;
+    }
+  }
+
 };
 
 VipsBitConstraint::VipsBitConstraint(const Common &common){
@@ -67,6 +107,19 @@ VipsBitConstraint::VipsBitConstraint(const Common &common){
 
   /* Setup pcs */
   /* Vacuously set all pcs to 0 */
+
+  /* Setup mem */
+  {
+    for(unsigned i = 0; i < common.all_nmls.size(); ++i){
+      int val;
+      if(common.machine.get_var_decl(common.all_nmls[i]).value.is_wild()){
+        val = common.machine.get_var_decl(common.all_nmls[i]).domain.get_lower_bound();
+      }else{
+        val = common.machine.get_var_decl(common.all_nmls[i]).value.get_value();
+      }
+      common.bfset(&bits,common.mem(common.all_nmls[i]),val);
+    }
+  }
 };
 
 VipsBitConstraint::VipsBitConstraint(const Common &common, const VipsBitConstraint &vbc){
@@ -108,7 +161,18 @@ std::string VipsBitConstraint::to_string(const Common &common) const{
 };
 
 std::string VipsBitConstraint::debug_dump(const Common &common) const{
-  throw new std::logic_error("VipsBitConstraint::debug_dump: Not implemented");
+  std::stringstream ss;
+  ss << "VBC(";
+  if(common.pointer_pack){
+    ss << "0x" << std::hex << (ulong)bits;
+  }else{
+    for(int i = 0; i < common.bits_len; ++i){
+      if(i > 0) ss << " ";
+      ss << "0x" << std::hex << (ulong)bits[i];
+    }
+  }
+  ss << ")";
+  return ss.str();
 };
 
 VipsBitConstraint::Common::bitfield::bitfield(int e, data_t d, data_t m, int off)
@@ -141,6 +205,36 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
   for(unsigned p = 0; p < machine.automata.size(); ++p){
     if((data_t)machine.automata[p].get_states().size() > remains) return false;
     remains /= (data_t)machine.automata[p].get_states().size();
+  }
+
+  /* mem */
+  {
+    /* Global */
+    for(unsigned i = 0; i < machine.gvars.size(); ++i){
+      Lang::VarDecl::Domain dom = machine.gvars[i].domain;
+      if(!dom.is_finite()){
+        throw new std::logic_error("VipsBitConstraint: Global memory location "+machine.gvars[i].name+
+                                   " has an infinite domain. Not supported.");
+      }
+      data_t sz = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+      if(sz > remains) return false;
+      remains /= sz;
+    }
+    /* Local */
+    for(unsigned p = 0; p < machine.lvars.size(); ++p){
+      for(unsigned i = 0; i < machine.lvars[p].size(); ++i){
+        Lang::VarDecl::Domain dom = machine.lvars[p][i].domain;
+        if(!dom.is_finite()){
+          std::stringstream ss;
+          ss << "VipsBitConstraint: Global memory location " << machine.gvars[i].name
+             << "[P" << p << "] has an infinite domain. Not supported.";
+          throw new std::logic_error(ss.str());
+        }
+        data_t sz = 1 + dom.get_upper_bound() - dom.get_lower_bound();
+        if(sz > remains) return false;
+        remains /= sz;
+      }
+    }
   }
 
   return true;
@@ -246,21 +340,33 @@ void VipsBitConstraint::test(){
     return new Machine(Parser::p_test(lex));
   };
 
-  /* Test 1: pcs */
+  /* Test 1-: bit packing */
   {
     Machine *m = get_machine
       ("forbidden * * *\n"
+       "data\n"
+       "  x = 0 : [0:1]\n"
+       "  y = 1 : [-1:1]\n"
        "process\n"
+       "data\n"
+       "  flag = 1 : [1:1]\n"
        "text\n"
        "  nop\n\n"
        "process\n"
+       "data\n"
+       "  a = 11 : [10:20]\n"
+       "  b = * : [2:5]\n"
        "text\n"
        "  nop;nop;nop;nop\n\n"
        "process\n"
+       "data\n"
+       "  a = 1 : [0:1]\n"
        "text\n"
        "  nop;nop;nop\n");
 
     Common common(*m);
+
+    /* Test 1,2: pcs */
     Test::inner_test("#2.1: Common pcs (init, basic)",
                      common.pcs.size() == 3 &&
                      common.pcs[0].mod == 3 &&
@@ -268,12 +374,41 @@ void VipsBitConstraint::test(){
                      common.pcs[2].mod == 5);
 
     VipsBitConstraint vbc(common);
+
+    Log::result << vbc.debug_dump(common) << "\n";
+
     std::vector<int> pcs = vbc.get_control_states(common);
     Test::inner_test("#2.2: VBC pcs (init, basic)",
                      pcs.size() == 3 &&
                      pcs[0] == 0 &&
                      pcs[1] == 0 &&
                      pcs[2] == 0);
+
+    /* Test 3,4,5: mem */
+    Test::inner_test("#2.3: Common ml_offsets",
+                     common.ml_offsets.size() == 3 &&
+                     common.ml_offsets[0] == 2 &&
+                     common.ml_offsets[1] == 3 &&
+                     common.ml_offsets[2] == 5);
+
+    Test::inner_test("#2.4: Common mem (init, basic)",
+                     common.mem_vec.size() == 6 &&
+                     common.mem_vec[0].mod == 2 &&
+                     common.mem_vec[1].mod == 3 &&
+                     common.mem_vec[2].mod == 1 &&
+                     common.mem_vec[3].mod == 11 &&
+                     common.mem_vec[4].mod == 4 &&
+                     common.mem_vec[5].mod == 2);
+
+    Test::inner_test("#2.5: VBC mem (init,basic)",
+                     common.bfget(vbc.bits,common.mem(Lang::NML::global(0))) == 0 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::global(1))) == 1 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(0,0))) == 1 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(0,1))) == 11 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) >= 2 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(1,1))) <= 5 &&
+                     common.bfget(vbc.bits,common.mem(Lang::NML::local(0,2))) == 1);
+
     delete m;
   }
   
