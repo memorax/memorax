@@ -599,6 +599,7 @@ int main(int argc, char *argv[]){
     case TEST:
       Test::add_test("Test",Test::test_testing);
       Test::add_test("ZStar",ZStar<int>::test);
+      Test::add_test("Machine",Machine::test);
       retval = Test::run_tests();
       break;
     default: 
