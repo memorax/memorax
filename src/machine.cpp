@@ -19,9 +19,14 @@
  */
 
 #include "machine.h"
-#include <utility>
+#include "test.h"
+
+#include <algorithm>
 #include <cassert>
+#include <functional>
 #include <queue>
+#include <sstream>
+#include <utility>
 
 Machine::Machine(const Parser::Test &test){
   class MLC{
@@ -219,7 +224,7 @@ void Machine::init_forbidden(const Parser::forbidden_t &fb)
   }
 
   for(int p = 0; p < proc_count(); p++){
-    for(std::list<std::vector<int> >::iterator it = tmp_fb.begin(); it != tmp_fb.end(); it++ ){
+    for(std::list<std::vector<int> >::iterator it = tmp_fb.begin(); it != tmp_fb.end(); ){
       if((*it)[p] < 0){
         std::vector<int> v = *it;
         it = tmp_fb.erase(it);
@@ -227,6 +232,8 @@ void Machine::init_forbidden(const Parser::forbidden_t &fb)
           v[p] = i;
           tmp_fb.push_front(v);
         }
+      }else{
+        ++it;
       }
     }
   }
@@ -1103,3 +1110,195 @@ bool Machine::expr_always_in_domain(const Lang::Expr<int> &e, int pid, const Lan
   }
   return true;
 };
+
+void Machine::test(){
+  std::function<Machine*(std::string)> get_machine = 
+    [](std::string rmm){
+    std::stringstream ss(rmm);
+    Lexer lex(ss);
+    return new Machine(Parser::p_test(lex));
+  };
+
+  /* cs(m,pid,lbl) returns the control state labelled lbl for process
+   * pid in m.
+   */
+  std::function<int(const Machine*,int,std::string)> cs =
+    [](const Machine *m, int pid,std::string lbl){
+    return m->automata[pid].state_index_of_label(lbl);
+  };
+
+  /* Test forbidden */
+  {
+    /* Test 1: one forbidden pc-combination */
+    {
+      Machine *m = get_machine
+        ("forbidden BAD BAD\n"
+         "process\n"
+         "text\n"
+         "  nop;\n"
+         "  BAD: nop\n"
+         "process\n"
+         "text\n"
+         "  nop;\n"
+         "  BAD: nop\n");
+
+      Test::inner_test("forbidden #1",
+                       m->forbidden.size() == 1 &&
+                       m->forbidden[0].size() == 2 &&
+                       m->forbidden[0][0] == cs(m,0,"BAD") &&
+                       m->forbidden[0][1] == cs(m,1,"BAD"));
+
+      delete m;
+    }
+
+    /* fb_unique(forbidden) checks that all elements in forbidden are unique. */
+    std::function<bool(const std::vector<std::vector<int> >&)> fb_unique = 
+      [](const std::vector<std::vector<int> > &forbidden){
+      for(unsigned i = 0; i < forbidden.size(); ++i){
+        for(unsigned j = i+1; j < forbidden.size(); ++j){
+          if(forbidden[i] == forbidden[j]){
+            return false;
+          }
+        }
+      }
+      return true;
+    };
+
+    /* Test 2: all pc-combinations forbidden */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "process\n"
+         "text\n"
+         "  nop;\n"
+         "  BAD: nop\n"
+         "process\n"
+         "text\n"
+         "  nop;\n"
+         "  BAD: nop\n");
+
+      std::function<bool(const std::vector<int>&)> wellformed = 
+        [&m](const std::vector<int> &fb){
+        if(fb.size() != m->automata.size()){
+          return false;
+        }
+        for(unsigned i = 0; i < fb.size(); ++i){
+          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+            return false;
+          }
+        }
+        return true;
+      };
+
+      Test::inner_test("forbidden #2",
+                       m->forbidden.size() == 9 &&
+                       std::all_of(m->forbidden.begin(),m->forbidden.end(),wellformed) &&
+                       fb_unique(m->forbidden));
+
+      delete m;
+    }
+
+    /* Test 3: all pc-combinations forbidden */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      std::function<bool(const std::vector<int>&)> wellformed = 
+        [&m](const std::vector<int> &fb){
+        if(fb.size() != m->automata.size()){
+          return false;
+        }
+        for(unsigned i = 0; i < fb.size(); ++i){
+          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+            return false;
+          }
+        }
+        return true;
+      };
+
+      Test::inner_test("forbidden #3",
+                       m->forbidden.size() == 4 &&
+                       std::all_of(m->forbidden.begin(),m->forbidden.end(),wellformed) &&
+                       fb_unique(m->forbidden));
+
+      delete m;
+    }
+
+    /* Test 4: some pc-combinations forbidden */
+    {
+      Machine *m = get_machine
+        ("forbidden BAD *\n"
+         "process\n"
+         "text\n"
+         "  BAD: nop\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      std::function<bool(const std::vector<int>&)> wellformed = 
+        [&m](const std::vector<int> &fb){
+        if(fb.size() != m->automata.size()){
+          return false;
+        }
+        for(unsigned i = 0; i < fb.size(); ++i){
+          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+            return false;
+          }
+        }
+        return true;
+      };
+
+      Test::inner_test("forbidden #4",
+                       m->forbidden.size() == 2 &&
+                       std::all_of(m->forbidden.begin(),m->forbidden.end(),wellformed) &&
+                       fb_unique(m->forbidden) &&
+                       m->forbidden[0][0] == cs(m,0,"BAD") &&
+                       m->forbidden[1][0] == cs(m,0,"BAD"));
+
+      delete m;
+    }
+
+    /* Test 5: some pc-combinations forbidden */
+    {
+      Machine *m = get_machine
+        ("forbidden * BAD\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         "process\n"
+         "text\n"
+         "  BAD: nop\n"
+         );
+
+      std::function<bool(const std::vector<int>&)> wellformed = 
+        [&m](const std::vector<int> &fb){
+        if(fb.size() != m->automata.size()){
+          return false;
+        }
+        for(unsigned i = 0; i < fb.size(); ++i){
+          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+            return false;
+          }
+        }
+        return true;
+      };
+
+      Test::inner_test("forbidden #5",
+                       m->forbidden.size() == 2 &&
+                       std::all_of(m->forbidden.begin(),m->forbidden.end(),wellformed) &&
+                       fb_unique(m->forbidden) &&
+                       m->forbidden[0][1] == cs(m,1,"BAD") &&
+                       m->forbidden[1][1] == cs(m,1,"BAD"));
+
+      delete m;
+    }
+  }
+}

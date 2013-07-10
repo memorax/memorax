@@ -64,7 +64,11 @@ public:
     /* Construct a Common object for constraints of m. */
     Common(const Machine &m);
     /* Compute and return all initial constraints of this->machine. */
-    std::set<VipsBitConstraint> get_initial_constraints() const;
+    std::set<VipsBitConstraint*> get_initial_constraints() const;
+    /* Compare a and b by some total order.
+     * Return 0 if a = b, -1 if a < b and 1 if b < a.
+     */
+    int compare(const VipsBitConstraint &a, const VipsBitConstraint &b) const;
     /* The Machine which this Common object corresponds to. */
     const Machine &machine;
   private:
@@ -81,6 +85,27 @@ public:
      * to be pointer packed. Returns false otherwise.
      */
     static bool possible_to_pointer_pack(const Machine &m);
+
+    /* All transitions of machine, instructions and fetches and
+     * wrllcs.
+     *
+     * Pointers into this vector will be returned by
+     * VipsBitConstraint::partred.
+     */
+    std::vector<Machine::PTransition> all_transitions;
+
+    /* all_transitions_per_cs[p][cs] is a vector containing pointers
+     * to all transitions in all_transitions with source control state
+     * cs of process p.
+     */
+    std::vector<std::vector<std::vector<const Machine::PTransition*> > > all_transitions_per_cs;
+
+    /* Initialize all_transitions and all_transitions_per_cs, based on
+     * m.
+     *
+     * Called from Common constructor.
+     */
+    void init_all_transitions(const Machine &m);
 
     /**************************************************************/
     /* Information about how to interpret VipsBitConstraint::bits */
@@ -291,6 +316,13 @@ public:
 
   /* Returns the set of transitions that should be explored from this
    * constraint.
+   *
+   * The transitions are owned by common.
+   *
+   * The pointers can be used as identifiers of the transitions:
+   * For PTransition pointers p and q, we have *p == *q implies p == q,
+   * even if p and q were obtained in different calls with the same 
+   * common object.
    */
   VecSet<const Machine::PTransition*> partred(const Common &common) const;
 
@@ -304,6 +336,10 @@ public:
    * state of pid in this constraint.
    */
   std::vector<int> get_control_states(const Common &common) const throw();
+
+  /* Returns true iff this constraint is forbidden by common.machine.
+   */
+  bool is_forbidden(const Common &common) const throw();
 
   /* Return a multi-line, human-readable representation of this Constraint.
    */
