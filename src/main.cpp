@@ -48,6 +48,7 @@
 #include "timer.h"
 #include <iomanip>
 #include "vips_bit_constraint.h"
+#include "vips_bit_reachability.h"
 
 struct Flag{
   Flag() {};
@@ -602,6 +603,7 @@ int main(int argc, char *argv[]){
       Test::add_test("Test",Test::test_testing);
       Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("VIPS-M Bit",VipsBitConstraint::test);
+      Test::add_test("VIPS-M Bit Reachability",VipsBitReachability::test);
       retval = Test::run_tests();
       break;
     default: 

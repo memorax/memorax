@@ -41,6 +41,7 @@ tso_fencins.cpp tso_fencins.h \
 tso_var.cpp tso_var.h \
 vecset.h vecset.tcc \
 vips_bit_constraint.h vips_bit_constraint.cpp \
+vips_bit_reachability.h vips_bit_reachability.cpp \
 zstar.h zstar.tcc
 memorax_gui_SOURCES = gui.py
 
