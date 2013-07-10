@@ -275,6 +275,8 @@ public:
    * representation of register reg of process pid.
    */
   std::map<std::pair<int,int>,std::string> pretty_string_reg;
+
+  static void test();
 protected:
 private:
 
