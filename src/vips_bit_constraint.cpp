@@ -596,6 +596,27 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
   return true;
 };
 
+int VipsBitConstraint::Common::compare(const VipsBitConstraint &a, const VipsBitConstraint &b) const{
+  if(pointer_pack){
+    if((data_t)a.bits == (data_t)b.bits){
+      return 0;
+    }else if((data_t)a.bits < (data_t)b.bits){
+      return -1;
+    }else{
+      return 1;
+    }
+  }else{
+    for(int i = 0; i < bits_len; ++i){
+      if(a.bits[i] < b.bits[i]){
+        return -1;
+      }else if(a.bits[i] > b.bits[i]){
+        return 1;
+      }
+    }
+    return 0;
+  }
+};
+
 std::set<VipsBitConstraint*> VipsBitConstraint::Common::get_initial_constraints() const{
   std::set<VipsBitConstraint*> cset;
 

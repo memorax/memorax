@@ -65,6 +65,10 @@ public:
     Common(const Machine &m);
     /* Compute and return all initial constraints of this->machine. */
     std::set<VipsBitConstraint*> get_initial_constraints() const;
+    /* Compare a and b by some total order.
+     * Return 0 if a = b, -1 if a < b and 1 if b < a.
+     */
+    int compare(const VipsBitConstraint &a, const VipsBitConstraint &b) const;
     /* The Machine which this Common object corresponds to. */
     const Machine &machine;
   private:
