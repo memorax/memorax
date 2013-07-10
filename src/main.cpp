@@ -311,6 +311,9 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
     reach = new SbTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
+  }else if(flags.find("a")->second.argument == "vips"){
+    reach = new VipsBitReachability();
+    rarg = new Reachability::Arg(*machine);
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
@@ -527,7 +530,8 @@ int main(int argc, char *argv[]){
           return 1;
         }else if(i < argc-1){
           if(argv[i+1] == std::string("sb") ||
-             argv[i+1] == std::string("pb")){
+             argv[i+1] == std::string("pb") ||
+             argv[i+1] == std::string("vips")){
             flags["a"] = Flag("a",argv[i],true,argv[i+1]);
             i++;
           }else{
