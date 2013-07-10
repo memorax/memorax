@@ -305,6 +305,10 @@ public:
    */
   std::vector<int> get_control_states(const Common &common) const throw();
 
+  /* Returns true iff this constraint is forbidden by common.machine.
+   */
+  bool is_forbidden(const Common &common) const throw();
+
   /* Return a multi-line, human-readable representation of this Constraint.
    */
   std::string to_string(const Common &common) const;

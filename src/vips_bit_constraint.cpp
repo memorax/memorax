@@ -689,6 +689,13 @@ std::set<VipsBitConstraint*> VipsBitConstraint::Common::get_initial_constraints(
   }
 };
 
+bool VipsBitConstraint::is_forbidden(const Common &c) const throw(){
+  return std::any_of(c.machine.forbidden.begin(),c.machine.forbidden.end(),
+                     [this,c](const std::vector<int> &forbidden){
+                       return forbidden == this->get_control_states(c);
+                     });
+};
+
 void VipsBitConstraint::test(){
   /* Test bitfields */
   /* Test 1 */
@@ -811,8 +818,6 @@ void VipsBitConstraint::test(){
 
     VipsBitConstraint vbc(common);
 
-    Log::result << vbc.debug_dump(common) << "\n";
-
     std::vector<int> pcs = vbc.get_control_states(common);
     Test::inner_test("#2.2: VBC pcs (init, basic)",
                      pcs.size() == 3 &&
@@ -930,8 +935,6 @@ void VipsBitConstraint::test(){
                      common.pcs[2].mod == 5);
 
     VipsBitConstraint vbc(common);
-
-    Log::result << vbc.debug_dump(common) << "\n";
 
     std::vector<int> pcs = vbc.get_control_states(common);
     Test::inner_test("#2.13: VBC pcs (init, basic)",
@@ -1571,6 +1574,73 @@ void VipsBitConstraint::test(){
       for(auto it = inits.begin(); it != inits.end(); ++it){
         delete *it;
       }
+      delete m;
+    }
+  }
+
+  /* Test is_forbidden */
+  {
+    /* Test 1: universally forbidden */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      Common c(*m);
+
+      VipsBitConstraint vbc(c);
+
+      Test::inner_test("#5.1: is_forbidden",
+                       vbc.is_forbidden(c));
+
+      delete m;
+    }
+
+    /* Test 2,3: partly forbidden */
+    {
+      Machine *m = get_machine
+        ("forbidden BAD *\n"
+         "process\n"
+         "text\n"
+         "  nop;"
+         "BAD: nop\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      Common c(*m);
+
+      VipsBitConstraint vbc(c);
+
+      /* pcs:[0,0] */
+      Test::inner_test("#5.2: is_forbidden",
+                       !vbc.is_forbidden(c));
+
+      /* pcs:[1,0] */
+      VipsBitConstraint *vbc2 = vbc.post(c,Machine::PTransition(0,Lang::Stmt<int>::nop(),1,0));
+      Test::inner_test("#5.3: is_forbidden",
+                       vbc2->is_forbidden(c));
+
+      /* pcs:[0,1] */
+      VipsBitConstraint *vbc3 = vbc.post(c,Machine::PTransition(0,Lang::Stmt<int>::nop(),1,1));
+      Test::inner_test("#5.4: is_forbidden",
+                       !vbc3->is_forbidden(c));
+
+      /* pcs:[1,1] */
+      VipsBitConstraint *vbc4 = vbc2->post(c,Machine::PTransition(0,Lang::Stmt<int>::nop(),1,1));
+      Test::inner_test("#5.5: is_forbidden",
+                       vbc4->is_forbidden(c));
+
+      delete vbc2;
+      delete vbc3;
+      delete vbc4;
       delete m;
     }
   }
