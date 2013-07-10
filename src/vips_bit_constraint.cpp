@@ -24,6 +24,7 @@
 #include "test.h"
 #include "vips_bit_constraint.h"
 
+#include <algorithm>
 #include <cassert>
 #include <functional>
 #include <limits>
@@ -423,8 +424,44 @@ VecSet<const Machine::PTransition*> VipsBitConstraint::partred(const Common &com
   throw new std::logic_error("VipsBitConstraint::partred: Not implemented");
 };
 
-std::string VipsBitConstraint::to_string(const Common &common) const{
-  throw new std::logic_error("VipsBitConstraint::to_string: Not implemented");
+std::string VipsBitConstraint::to_string(const Common &c) const{
+  std::stringstream ss;
+  ss << "VBC(\n";
+  ss << "  mem:[";
+  for(unsigned i = 0; i < c.all_nmls.size(); ++i){
+    if(i != 0) ss << " ";
+    ss << c.machine.pretty_string_nml.at(c.all_nmls[i])
+       << "=" 
+       << c.bfget(bits,c.mem(c.all_nmls[i]));
+  }
+  ss << "]\n";
+  for(int p = 0; p < c.proc_count; ++p){
+    ss << "  P" << p << ":[ pc = "
+       << c.bfget(bits,c.pcs[p]) << "\n";
+    if(c.machine.regs[p].size()){
+      ss << "       regs:[";
+      for(unsigned i = 0; i < c.machine.regs[p].size(); ++i){
+        if(i != 0) ss << " ";
+        ss << c.machine.regs[p][i].name 
+           << "="
+           << c.bfget(bits,c.reg(p,i));
+      }
+      ss << "]\n";
+    }
+    ss << "       L1:[";
+    for(unsigned i = 0; i < c.all_nmls.size(); ++i){
+      if(i != 0) ss << " ";
+      int vd = c.bfget(bits,c.l1(p,c.all_nmls[i]));
+      ss << c.machine.pretty_string_nml.at(c.all_nmls[i])
+         << "=" 
+         << c.l1val_valof(vd)
+         << (c.l1val_is_dirty(vd) ? "*" : "");
+    }
+    ss << "]\n";
+    ss << "  ]\n";
+  }
+  ss << ")\n";
+  return ss.str();
 };
 
 std::string VipsBitConstraint::debug_dump(const Common &common) const{
@@ -557,6 +594,99 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
   Log::debug << "VipsBitConstraint: remains: " << remains << "\n";
 
   return true;
+};
+
+std::set<VipsBitConstraint*> VipsBitConstraint::Common::get_initial_constraints() const{
+  std::set<VipsBitConstraint*> cset;
+
+  /* The currently used valuation for memory and registers. */
+  /* It will gradually range over all possible initial valuations. */
+  /* The first all_nmls.size() entries correspond to the entries in all_nmls. */
+  /* For i >= all_nmls.size(), mr_valuation[i] is the valuation of
+   * register mr_reg[i] of process mr_proc[i]. */
+  std::vector<int> mr_valuation;
+  std::vector<int> mr_reg;
+  std::vector<int> mr_proc;
+  /* mr_wild[i] is true iff the i:th entry in mr_valuation corresponds
+   * to a memory location or register with a wild initial value. */
+  std::vector<bool> mr_wild;
+  /* mr_decls[i] is the declaration of the i:th entry in mr_valuation. */
+  std::vector<Lang::VarDecl> mr_decls;
+
+  /* Setup mr_{valuation,reg,proc,wild,decls} 
+   * for the smallest initial valuation */
+  {
+    for(unsigned i = 0; i < all_nmls.size(); ++i){
+      const Lang::VarDecl &decl = machine.get_var_decl(all_nmls[i]);
+      mr_decls.push_back(decl);
+      mr_wild.push_back(decl.value.is_wild());
+      mr_reg.push_back(-1); // Not a register
+      mr_proc.push_back(-1); // Not a register
+      if(mr_wild[i]){
+        mr_valuation.push_back(decl.domain.get_lower_bound());
+      }else{
+        mr_valuation.push_back(decl.value.get_value());
+      }
+    }
+    for(unsigned p = 0; p < machine.regs.size(); ++p){
+      for(unsigned i = 0; i < machine.regs[p].size(); ++i){
+        const Lang::VarDecl &decl = machine.regs[p][i];
+        mr_decls.push_back(decl);
+        mr_wild.push_back(decl.value.is_wild());
+        mr_reg.push_back(i);
+        mr_proc.push_back(p);
+        if(decl.value.is_wild()){
+          mr_valuation.push_back(decl.domain.get_lower_bound());
+        }else{
+          mr_valuation.push_back(decl.value.get_value());
+        }
+      }
+    }
+  }
+
+  /* Gradually increase the values in valuation.
+   * Create a constraint for each valuation.
+   */
+  while(true){
+    /* Create constraint */
+    {
+      VipsBitConstraint *vbc = new VipsBitConstraint(*this);
+      /* Setup memory, L1s and registers */
+      for(unsigned i = 0; i < mr_valuation.size(); ++i){
+        if(mr_reg[i] < 0){ // Memory location
+          bfset(&vbc->bits,mem(all_nmls[i]),mr_valuation[i]);
+          for(int p = 0; p < proc_count; ++p){
+            bfset(&vbc->bits,l1(p,all_nmls[i]),l1val_clean(mr_valuation[i]));
+          }
+        }else{ // Register
+          bfset(&vbc->bits,reg(mr_proc[i],mr_reg[i]),mr_valuation[i]);
+        }
+      }
+      cset.insert(vbc);
+    }
+    /* Count up valuation */
+    unsigned i = 0;
+    while(i < mr_valuation.size()){
+      if(mr_wild[i]){
+        if(mr_valuation[i] < mr_decls[i].domain.get_upper_bound()){
+          ++mr_valuation[i];
+          break;
+        }else{
+          assert(mr_valuation[i] == mr_decls[i].domain.get_upper_bound());
+          mr_valuation[i] = mr_decls[i].domain.get_lower_bound();
+          // Continue.
+        }
+      }else{
+        // Leave the i:th entry unchanged
+      }
+      ++i;
+    }
+    if(i == mr_valuation.size()){
+      /* Cannot increase valuation any more.
+       * We are done. */
+      return cset;
+    }
+  }
 };
 
 void VipsBitConstraint::test(){
@@ -1267,6 +1397,182 @@ void VipsBitConstraint::test(){
     }
 
     delete m;
+  }
+
+  /* Test get_initial_constraints */
+  {
+    /* Test 1: simple, only one initial constraint */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  x = 0 : [0:1]\n"
+         "  y = 1 : [0:1]\n"
+         "process\n"
+         "data\n"
+         "  flag = 2 : [1:2]\n"
+         "registers\n"
+         "  $r0 = 3 : [2:3]\n"
+         "  $r1 = 4 : [3:4]\n"
+         "text\n"
+         "  nop\n"
+         "process\n"
+         "data\n"
+         "  flag = 5 : [4:5]\n"
+         "registers\n"
+         "  $r0 = 6 : [5:6]\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      Lang::NML x = Lang::NML::global(0);
+      Lang::NML y = Lang::NML::global(1);
+      Lang::NML flag0 = Lang::NML::local(0,0);
+      Lang::NML flag1 = Lang::NML::local(0,1);
+
+      Common c(*m);
+
+      std::set<VipsBitConstraint*> inits = c.get_initial_constraints();
+      auto vbc = inits.begin();
+      Test::inner_test("4.1: initial constraints (simple)",
+                       inits.size() == 1 &&
+                       c.bfget((*vbc)->bits,c.pcs[0]) == 0 &&
+                       c.bfget((*vbc)->bits,c.pcs[1]) == 0 &&
+                       c.bfget((*vbc)->bits,c.mem(x)) == 0 &&
+                       c.bfget((*vbc)->bits,c.l1(0,x)) == c.l1val_clean(0) &&
+                       c.bfget((*vbc)->bits,c.l1(1,x)) == c.l1val_clean(0) &&
+                       c.bfget((*vbc)->bits,c.mem(y)) == 1 &&
+                       c.bfget((*vbc)->bits,c.l1(0,y)) == c.l1val_clean(1) &&
+                       c.bfget((*vbc)->bits,c.l1(1,y)) == c.l1val_clean(1) &&
+                       c.bfget((*vbc)->bits,c.mem(flag0)) == 2 &&
+                       c.bfget((*vbc)->bits,c.l1(0,flag0)) == c.l1val_clean(2) &&
+                       c.bfget((*vbc)->bits,c.l1(1,flag0)) == c.l1val_clean(2) &&
+                       c.bfget((*vbc)->bits,c.mem(flag1)) == 5 &&
+                       c.bfget((*vbc)->bits,c.l1(0,flag1)) == c.l1val_clean(5) &&
+                       c.bfget((*vbc)->bits,c.l1(1,flag1)) == c.l1val_clean(5) &&
+                       c.bfget((*vbc)->bits,c.reg(0,0)) == 3 &&
+                       c.bfget((*vbc)->bits,c.reg(0,1)) == 4 &&
+                       c.bfget((*vbc)->bits,c.reg(1,0)) == 6);
+
+      for(auto it = inits.begin(); it != inits.end(); ++it){
+        delete *it;
+      }
+      delete m;
+    }
+
+    /* Test 2: Multiple initial valuations */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  x = * : [0:1]\n"
+         "  y = 1 : [0:1]\n"
+         "process\n"
+         "data\n"
+         "  flag = 0 : [0:1]\n"
+         "registers\n"
+         "  $r0 = * : [2:4]\n"
+         "text\n"
+         "  nop\n"
+         "process\n"
+         "data\n"
+         "  flag = * : [0:1]"
+         "registers\n"
+         "  $r0 = 2 : [2:4]\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      Lang::NML x = Lang::NML::global(0);
+      Lang::NML y = Lang::NML::global(1);
+      Lang::NML flag0 = Lang::NML::local(0,0);
+      Lang::NML flag1 = Lang::NML::local(0,1);
+
+      Common c(*m);
+
+      /* Check that the non-wild memory locations/registers have the right values.
+       * Also that all caches contain clean values which are the same
+       * as the values in memory.
+       */
+      std::function<bool(const VipsBitConstraint*)> unwild = 
+        [&c,&x,&y,&flag0,&flag1](const VipsBitConstraint *vbc){
+        return 
+        /* Fixed initial values */
+        c.bfget(vbc->bits,c.mem(y)) == 1 &&
+        c.bfget(vbc->bits,c.mem(flag0)) == 0 &&
+        c.bfget(vbc->bits,c.reg(1,0)) == 2 &&
+        /* Clean caches */
+        c.bfget(vbc->bits,c.l1(0,x)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(x))) &&
+        c.bfget(vbc->bits,c.l1(1,x)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(x))) &&
+        c.bfget(vbc->bits,c.l1(0,y)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(y))) &&
+        c.bfget(vbc->bits,c.l1(1,y)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(y))) &&
+        c.bfget(vbc->bits,c.l1(0,flag0)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(flag0))) &&
+        c.bfget(vbc->bits,c.l1(1,flag0)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(flag0))) &&
+        c.bfget(vbc->bits,c.l1(0,flag1)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(flag1))) &&
+        c.bfget(vbc->bits,c.l1(1,flag1)) == c.l1val_clean(c.bfget(vbc->bits,c.mem(flag1)));
+      };
+
+      /* A predicate that should return true for exactly one of the
+       * initial constraints.
+       */
+      std::function<bool(const VipsBitConstraint*)> spot_check0 = 
+        [&c,&x,&flag1](const VipsBitConstraint *vbc){
+        return
+        c.bfget(vbc->bits,c.mem(x)) == 0 &&
+        c.bfget(vbc->bits,c.mem(flag1)) == 1 &&
+        c.bfget(vbc->bits,c.reg(0,0)) == 3;
+      };
+
+      std::set<VipsBitConstraint*> inits = c.get_initial_constraints();
+      Test::inner_test("#4.2: initial valuations (multiple)",
+                       inits.size() == 12 &&
+                       std::all_of(inits.begin(),inits.end(),unwild) &&
+                       std::any_of(inits.begin(),inits.end(),spot_check0));
+
+      for(auto it = inits.begin(); it != inits.end(); ++it){
+        delete *it;
+      }
+      delete m;
+    }
+
+    /* Test 3: wild value in singleton domain */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  x = * : [1:1]\n"
+         "  y = * : [0:1]\n"
+         "process\n"
+         "text\n"
+         "  nop\n"
+         );
+
+      Lang::NML x = Lang::NML::global(0);
+      Lang::NML y = Lang::NML::global(1);
+
+      Common c(*m);
+
+      std::set<VipsBitConstraint*> inits = c.get_initial_constraints();
+      Test::inner_test("#4.3: initial valuations (wild singleton domain)",
+                       inits.size() == 2 &&
+                       std::all_of(inits.begin(),inits.end(),
+                                   [&c,&x](const VipsBitConstraint *vbc){
+                                     return c.bfget(vbc->bits,c.mem(x)) == 1;
+                                   }) &&
+                       std::any_of(inits.begin(),inits.end(),
+                                   [&c,&y](const VipsBitConstraint *vbc){
+                                     return c.bfget(vbc->bits,c.mem(y)) == 0;
+                                   }) &&
+                       std::any_of(inits.begin(),inits.end(),
+                                   [&c,&y](const VipsBitConstraint *vbc){
+                                     return c.bfget(vbc->bits,c.mem(y)) == 1;
+                                   }));
+
+      for(auto it = inits.begin(); it != inits.end(); ++it){
+        delete *it;
+      }
+      delete m;
+    }
   }
   
 };

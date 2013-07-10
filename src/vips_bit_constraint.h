@@ -64,7 +64,7 @@ public:
     /* Construct a Common object for constraints of m. */
     Common(const Machine &m);
     /* Compute and return all initial constraints of this->machine. */
-    std::set<VipsBitConstraint> get_initial_constraints() const;
+    std::set<VipsBitConstraint*> get_initial_constraints() const;
     /* The Machine which this Common object corresponds to. */
     const Machine &machine;
   private:
