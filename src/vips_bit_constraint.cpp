@@ -32,6 +32,7 @@
 #include <stdexcept>
 
 VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
+  init_all_transitions(m);
   proc_count = m.automata.size();
 
   /* Note that possible_to_pointer_pack also checks that the domains
@@ -420,8 +421,17 @@ std::vector<int> VipsBitConstraint::get_control_states(const Common &common) con
   return pcs;
 };
 
-VecSet<const Machine::PTransition*> VipsBitConstraint::partred(const Common &common) const{
-  throw new std::logic_error("VipsBitConstraint::partred: Not implemented");
+VecSet<const Machine::PTransition*> VipsBitConstraint::partred(const Common &c) const{
+  VecSet<const Machine::PTransition*> vset;
+
+  for(int p = 0; p < c.proc_count; ++p){
+    int pc = c.bfget(bits,c.pcs[p]);
+    for(unsigned i = 0; i < c.all_transitions_per_cs[p][pc].size(); ++i){
+      vset.insert(c.all_transitions_per_cs[p][pc][i]);
+    }
+  }
+
+  return vset;
 };
 
 std::string VipsBitConstraint::to_string(const Common &c) const{
@@ -594,6 +604,43 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
   Log::debug << "VipsBitConstraint: remains: " << remains << "\n";
 
   return true;
+};
+
+void VipsBitConstraint::Common::init_all_transitions(const Machine &m){
+  assert(all_transitions.size() == 0);
+  assert(all_transitions_per_cs.size() == 0);
+
+  /* Initialize all_transitions */
+  for(unsigned p = 0; p < m.automata.size(); ++p){
+    const std::vector<Automaton::State> &states = m.automata[p].get_states();
+    for(unsigned s = 0; s < states.size(); ++s){
+      /* Add outgoing instruction transitions */
+      for(auto it = states[s].fwd_transitions.begin(); it != states[s].fwd_transitions.end(); ++it){
+        all_transitions.push_back(Machine::PTransition(**it,p));
+      }
+      /* Add system events */
+      for(unsigned i = 0; i < m.gvars.size(); ++i){
+        all_transitions.push_back(Machine::PTransition(s,Lang::Stmt<int>::fetch(Lang::MemLoc<int>::global(i)),s,p));
+        all_transitions.push_back(Machine::PTransition(s,Lang::Stmt<int>::wrllc(Lang::MemLoc<int>::global(i)),s,p));
+      }
+      for(unsigned p2 = 0; p2 < m.automata.size(); ++p2){
+        for(unsigned i = 0; i < m.lvars[p2].size(); ++i){
+          Lang::MemLoc<int> ml = Lang::NML::local(i,p2).localize(p);
+          all_transitions.push_back(Machine::PTransition(s,Lang::Stmt<int>::fetch(ml),s,p));
+          all_transitions.push_back(Machine::PTransition(s,Lang::Stmt<int>::wrllc(ml),s,p));
+        }
+      }
+    }
+  }
+
+  /* Initialize all_transitions_per_cs */
+  for(unsigned p = 0; p < m.automata.size(); ++p){
+    int s = m.automata[p].get_states().size();
+    all_transitions_per_cs.push_back(std::vector<std::vector<const Machine::PTransition*> >(s));
+  }
+  for(unsigned i = 0; i < all_transitions.size(); ++i){
+    all_transitions_per_cs[all_transitions[i].pid][all_transitions[i].source].push_back(&all_transitions[i]);
+  }
 };
 
 int VipsBitConstraint::Common::compare(const VipsBitConstraint &a, const VipsBitConstraint &b) const{
@@ -1458,7 +1505,7 @@ void VipsBitConstraint::test(){
 
       std::set<VipsBitConstraint*> inits = c.get_initial_constraints();
       auto vbc = inits.begin();
-      Test::inner_test("4.1: initial constraints (simple)",
+      Test::inner_test("#4.1: initial constraints (simple)",
                        inits.size() == 1 &&
                        c.bfget((*vbc)->bits,c.pcs[0]) == 0 &&
                        c.bfget((*vbc)->bits,c.pcs[1]) == 0 &&

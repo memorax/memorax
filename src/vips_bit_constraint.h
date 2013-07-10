@@ -86,6 +86,27 @@ public:
      */
     static bool possible_to_pointer_pack(const Machine &m);
 
+    /* All transitions of machine, instructions and fetches and
+     * wrllcs.
+     *
+     * Pointers into this vector will be returned by
+     * VipsBitConstraint::partred.
+     */
+    std::vector<Machine::PTransition> all_transitions;
+
+    /* all_transitions_per_cs[p][cs] is a vector containing pointers
+     * to all transitions in all_transitions with source control state
+     * cs of process p.
+     */
+    std::vector<std::vector<std::vector<const Machine::PTransition*> > > all_transitions_per_cs;
+
+    /* Initialize all_transitions and all_transitions_per_cs, based on
+     * m.
+     *
+     * Called from Common constructor.
+     */
+    void init_all_transitions(const Machine &m);
+
     /**************************************************************/
     /* Information about how to interpret VipsBitConstraint::bits */
     /**************************************************************/
@@ -295,6 +316,13 @@ public:
 
   /* Returns the set of transitions that should be explored from this
    * constraint.
+   *
+   * The transitions are owned by common.
+   *
+   * The pointers can be used as identifiers of the transitions:
+   * For PTransition pointers p and q, we have *p == *q implies p == q,
+   * even if p and q were obtained in different calls with the same 
+   * common object.
    */
   VecSet<const Machine::PTransition*> partred(const Common &common) const;
 
