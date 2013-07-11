@@ -426,6 +426,9 @@ void print_help(int argc, char *argv[]){
             << "    sb\n"
             << "      The Single Buffer model.\n"
             << "      Equivalent to TSO w.r.t. control state reachability.\n"
+            << "      Sound and complete for finite data domains.\n"
+            << "    vips\n"
+            << "      VIPS-M. Explicit state forward analysis.\n"
             << "      Sound and complete for finite data domains.\n";
 }
 
