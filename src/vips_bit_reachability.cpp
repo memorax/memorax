@@ -77,12 +77,13 @@ Reachability::Result *VipsBitReachability::reachability(Arg *arg) const{
             found_forbidden = true;
             /* Construct trace */
             {
-              result->trace = new Trace(0);
+              Trace tr(0);
               const parent_t *pt = &visited[child];
               while(pt->parent){
-                result->trace->push_front(0,*pt->trans);
+                tr.push_front(0,*pt->trans);
                 pt = &visited[pt->parent];
               }
+              result->trace = VipsBitConstraint::explicit_vips_trace(tr);
             }
           }
         }
@@ -358,6 +359,121 @@ void VipsBitReachability::test(){
     Arg arg(*m);
     Result *res = reach.reachability(&arg);
     Test::inner_test("#7 Simple Dekker",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 8: IRIW */
+  {
+    Machine *m = get_machine
+      ("forbidden * * END END\n"
+       "data\n"
+       "  x = 0 : [0:1]\n"
+       "  y = 0 : [0:1]\n"
+       "process\n"
+       "text\n"
+       "  write: x := 1\n"
+       "process\n"
+       "text\n"
+       "  write: y := 1\n"
+       "process\n"
+       "text\n"
+       "  read: x = 1;\n"
+       "  read: y = 0;\n"
+       "  END: nop\n"
+       "process\n"
+       "text\n"
+       "  read: y = 1;\n"
+       "  read: x = 0;\n"
+       "  END: nop\n"
+       );
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#8 IRIW (with R->R relaxation)",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 9: IRIW */
+  {
+    Machine *m = get_machine
+      ("forbidden * * END END\n"
+       "data\n"
+       "  x = 0 : [0:1]\n"
+       "  y = 0 : [0:1]\n"
+       "process\n"
+       "text\n"
+       "  write: x := 1\n"
+       "process\n"
+       "text\n"
+       "  write: y := 1\n"
+       "process\n"
+       "text\n"
+       "  read: x = 1;\n"
+       "  fence;\n"
+       "  read: y = 0;\n"
+       "  END: nop\n"
+       "process\n"
+       "text\n"
+       "  read: y = 1;\n"
+       "  fence;\n"
+       "  read: x = 0;\n"
+       "  END: nop\n"
+       );
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#9 IRIW (with R->R fence)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 10: IRIW */
+  {
+    Machine *m = get_machine
+      ("forbidden * * END END\n"
+       "data\n"
+       "  x = 0 : [0:1]\n"
+       "  y = 0 : [0:1]\n"
+       "process\n"
+       "text\n"
+       "  write: x := 1\n"
+       "process\n"
+       "text\n"
+       "  write: y := 1\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = * : [0:1]\n"
+       "text\n"
+       "  read: $r0 := x;\n"
+       "  if $r0 = 1 then{\n"
+       "    read: y = 0;\n"
+       "    END: nop\n"
+       "  }\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = * : [0:1]\n"
+       "text\n"
+       "  read: $r0 := y;\n"
+       "  if $r0 = 1 then{\n"
+       "    read: x = 0;\n"
+       "    END: nop\n"
+       "  }\n"
+       );
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#10 IRIW (with R->R ctrl dependency)",res->result == REACHABLE);
 
     delete res;
     delete m;

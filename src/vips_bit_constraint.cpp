@@ -764,6 +764,91 @@ bool VipsBitConstraint::is_forbidden(const Common &c) const throw(){
                      });
 };
 
+Trace *VipsBitConstraint::explicit_vips_trace(const Trace &vbctrace){
+  Trace *vips_trace = new Trace(0);
+
+  /* Collect all memory locations occurring in vbctrace */
+  std::set<Lang::NML> all_nmls;
+  int proc_count = 0; // the minimal number of processes in the program of vbctrace
+  {
+    for(int i = 1; i <= vbctrace.size(); ++i){
+      const std::vector<Lang::MemLoc<int> > ws = vbctrace.transition(i)->instruction.get_writes();
+      const std::vector<Lang::MemLoc<int> > rs = vbctrace.transition(i)->instruction.get_reads();
+      for(unsigned j = 0; j < ws.size(); ++j){
+        all_nmls.insert(Lang::NML(ws[j],vbctrace.transition(i)->pid));
+      }
+      for(unsigned j = 0; j < rs.size(); ++j){
+        all_nmls.insert(Lang::NML(rs[j],vbctrace.transition(i)->pid));
+      }
+      proc_count = std::max(proc_count,vbctrace.transition(i)->pid + 1);
+    }
+  }
+
+  /* First fetch everything */
+  /* Since VipsBitConstraints always start with full L1 */
+  {
+    for(int p = 0; p < proc_count; ++p){
+      for(auto it = all_nmls.begin(); it != all_nmls.end(); ++it){
+        vips_trace->push_back(Machine::PTransition(0,Lang::Stmt<int>::fetch(it->localize(p)),0,p),0);
+      }
+    }
+  }
+
+  /* Insert explicit fetches and evicts at fetch, fence, cas, syncwr */
+  {
+    for(int i = 1; i <= vbctrace.size(); ++i){
+      const Lang::Stmt<int> &s = vbctrace.transition(i)->instruction;
+      int pid = vbctrace.transition(i)->pid;
+      switch(s.get_type()){
+      case Lang::FETCH:
+        {
+          int src = vbctrace.transition(i)->source;
+          Lang::MemLoc<int> ml = s.get_memloc();
+          vips_trace->push_back(Machine::PTransition(src,Lang::Stmt<int>::evict(ml),src,pid),0);
+          vips_trace->push_back(*vbctrace.transition(i),0);
+          break;
+        }
+      case Lang::FENCE:
+        {
+          int src = vbctrace.transition(i)->source;
+          int tgt = vbctrace.transition(i)->target;
+          for(auto it = all_nmls.begin(); it != all_nmls.end(); ++it){
+            Lang::MemLoc<int> ml = it->localize(pid);
+            vips_trace->push_back(Machine::PTransition(src,Lang::Stmt<int>::evict(ml),src,pid),0);
+          }
+          vips_trace->push_back(*vbctrace.transition(i),0);
+          for(auto it = all_nmls.begin(); it != all_nmls.end(); ++it){
+            Lang::MemLoc<int> ml = it->localize(pid);
+            vips_trace->push_back(Machine::PTransition(tgt,Lang::Stmt<int>::fetch(ml),tgt,pid),0);
+          }
+          break;
+        }
+      case Lang::LOCKED: case Lang::SYNCWR:
+        {
+          assert(!(s.get_type() == Lang::LOCKED) || is_cas(s));
+          int src = vbctrace.transition(i)->source;
+          int tgt = vbctrace.transition(i)->target;
+          Lang::MemLoc<int> ml = Lang::MemLoc<int>::global(0);
+          if(s.get_type() == Lang::SYNCWR){
+            ml = s.get_memloc();
+          }else{
+            ml = s.get_statement(0)->get_statement(0)->get_memloc();
+          }
+          vips_trace->push_back(Machine::PTransition(src,Lang::Stmt<int>::evict(ml),src,pid),0);
+          vips_trace->push_back(*vbctrace.transition(i),0);
+          vips_trace->push_back(Machine::PTransition(tgt,Lang::Stmt<int>::fetch(ml),tgt,pid),0);
+          break;
+        }
+      default:
+        vips_trace->push_back(*vbctrace.transition(i),0);
+        break;
+      }
+    }
+  }
+
+  return vips_trace;
+};
+
 void VipsBitConstraint::test(){
   /* Test bitfields */
   /* Test 1 */

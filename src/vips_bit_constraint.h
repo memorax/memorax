@@ -24,6 +24,7 @@
 #include "automaton.h"
 #include "machine.h"
 #include "lang.h"
+#include "trace.h"
 #include "vecset.h"
 
 #include <cstdint>
@@ -344,6 +345,22 @@ public:
   /* Return a multi-line, human-readable representation of this Constraint.
    */
   std::string to_string(const Common &common) const;
+
+  /* The VipsBitConstraint semantics differ from the usual VIPS-M
+   * semantics, in that some fetches and evicts are implicit. Hence
+   * traces in the VipsBitConstraint semantics are not necessarily
+   * correct VIPS-M traces.
+   *
+   * Given a trace vbctrace in the VipsBitConstraint semantics, this
+   * method returns a new trace in the VIPS-M semantics which differs
+   * from vbctrace only in system event transitions.
+   *
+   * For VIPS-M semantics, we refer to
+   * formalization.VIPS-M.simplified.3.alt.pdf .
+   *
+   * Pre: vbctrace is a correct trace by VipsBitConstraint semantics.
+   */
+  static Trace *explicit_vips_trace(const Trace &vbctrace);
 
   static void test();
 private:
