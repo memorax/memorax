@@ -18,6 +18,7 @@
  *
  */
 
+#include "preprocessor.h"
 #include "test.h"
 #include "vips_bit_reachability.h"
 
@@ -112,7 +113,7 @@ void VipsBitReachability::test(){
   std::function<Machine*(std::string)> get_machine = 
     [](std::string rmm){
     std::stringstream ss(rmm);
-    Lexer lex(ss);
+    PPLexer lex(ss);
     return new Machine(Parser::p_test(lex));
   };
 
@@ -474,6 +475,110 @@ void VipsBitReachability::test(){
     Arg arg(*m);
     Result *res = reach.reachability(&arg);
     Test::inner_test("#10 IRIW (with R->R ctrl dependency)",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 11: CAS-lock */
+  {
+    Machine *m = get_machine
+      ("forbidden\n"
+       "  BAD *\n"
+       "\n"
+       "data\n"
+       "  l = 0 : [0:1]\n"
+       "  x = 0 : [0:1]\n"
+       "\n"
+       "macro lock()\n"
+       "  cas(l,0,1);\n"
+       "  fence\n"
+       "endmacro\n"
+       "\n"
+       "macro unlock()\n"
+       "  fence;\n"
+       "  syncwr: l := 0\n"
+       "endmacro\n"
+       "\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = 0 : [0:1]\n"
+       "text\n"
+       "  L0:\n"
+       "  lock();\n"
+       "  read: $r0 := x;\n"
+       "  if $r0 = 1 then goto BAD;\n"
+       "  unlock();\n"
+       "  goto L0;\n"
+       "BAD: nop\n"
+       "\n"
+       "process\n"
+       "text\n"
+       "L0:\n"
+       "  lock();\n"
+       "  write: x := 1;\n"
+       "  write: x := 0;\n"
+       "  unlock();\n"
+       "  goto L0\n"
+       );
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#11 CAS-lock (correct)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 12: CAS-lock */
+  {
+    Machine *m = get_machine
+      ("forbidden\n"
+       "  BAD *\n"
+       "\n"
+       "data\n"
+       "  l = 0 : [0:1]\n"
+       "  x = 0 : [0:1]\n"
+       "\n"
+       "macro lock()\n"
+       "  cas(l,0,1);\n"
+       "  fence\n"
+       "endmacro\n"
+       "\n"
+       "macro unlock()\n"
+       "  syncwr: l := 0;\n" /* <- swapped order between syncwr and fence */
+       "  fence\n"
+       "endmacro\n"
+       "\n"
+       "process\n"
+       "registers\n"
+       "  $r0 = 0 : [0:1]\n"
+       "text\n"
+       "  L0:\n"
+       "  lock();\n"
+       "  read: $r0 := x;\n"
+       "  if $r0 = 1 then goto BAD;\n"
+       "  unlock();\n"
+       "  goto L0;\n"
+       "BAD: nop\n"
+       "\n"
+       "process\n"
+       "text\n"
+       "L0:\n"
+       "  lock();\n"
+       "  write: x := 1;\n"
+       "  write: x := 0;\n"
+       "  unlock();\n"
+       "  goto L0\n"
+       );
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#12 CAS-lock (incorrect)",res->result == REACHABLE);
 
     delete res;
     delete m;
