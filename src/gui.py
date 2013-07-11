@@ -696,6 +696,8 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
     def async_output(self,prog,on_done=None):
         self.inc_subthread_count()
         try:
+            links = []
+            text = []
             l = prog.stdout.readline()
             while len(l) > 0:
                 if l.startswith("json: "):
@@ -703,16 +705,28 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                     if j["action"] == "Syntax Error":
                         self.mark_error_in_code("{0}.{1}".format(j["pos"][0]["lineno"],j["pos"][0]["charno"]))
                     elif j["action"] == "Link Fence":
-                        self.link_fence(j["pos"]);
+                        links.append((j["pos"],len(self.output_text.split('\n'))+len(text)-1,));
                     else:
                         self.perror("Unknown JSON: "+l)
                         self.wg_output.see("end")
                 else:
-                    self.poutput(l)
-                    self.wg_output.see("end")
+                    text.append(l)
+                    if len(text) >= 10:
+                        s = ""
+                        for l in text: s = s+l
+                        self.poutput(s)
+                        self.wg_output.see("end")
+                        text = []
                 l = prog.stdout.readline()
         except:
             self.perror_clear(str(sys.exc_info()[1])+"\n")
+        s = ""
+        for l in text: s = s+l
+        self.poutput(s)
+        self.wg_output.see("end")
+        for lnk in links:
+            self.link_fence(lnk[0],lnk[1],False)
+        self.update_fence_link_marks()
         retval = prog.poll()
         if retval != None and retval != 0:
             if retval == -11:
@@ -886,11 +900,12 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
             if t.startswith("error_tag"):
                 self.wg_code.tag_delete(t)
  
-    def link_fence(self,pos):
+    def link_fence(self,pos,line,do_update):
         self.fence_links.append({'pos':pos,
-                                 'output_line':len(self.output_text.split('\n'))-1
+                                 'output_line':line
                                  })
-        self.update_fence_link_marks()
+        if do_update:
+            self.update_fence_link_marks()
 
     # Remove links from the output widget, but keep remembering the links
     def clear_fence_link_marks_in_output(self):
