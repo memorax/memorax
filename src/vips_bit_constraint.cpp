@@ -171,12 +171,12 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
 };
 
 VipsBitConstraint *VipsBitConstraint::Common::alloc(){
-  if(next_buffer >= vbc_buffers.size() || next_elem >= buffer_multiplier){
+  if(next_buffer >= (int)vbc_buffers.size() || next_elem >= buffer_multiplier){
     /* Need to switch buffer */
-    if(next_buffer < vbc_buffers.size()){
+    if(next_buffer < (int)vbc_buffers.size()){
       ++next_buffer;
     }
-    if(next_buffer >= vbc_buffers.size()){
+    if(next_buffer >= (int)vbc_buffers.size()){
       /* The new buffer must be newly allocated */
       vbc_buffers.push_back(new char[buffer_multiplier*sizeof(VipsBitConstraint)]);
       if(!pointer_pack){

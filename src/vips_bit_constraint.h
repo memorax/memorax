@@ -205,6 +205,7 @@ public:
        * e >= 0
        * 0 < d < std::numeric_limits<data_t>::max()
        * 0 < m <= std::numeric_limits<data_t>::max()
+       * d*m <= std::numeric_limits<data_t>::max()+1
        */
       bitfield(int e, data_t d, data_t m, int off);
       /* Which element of the array pointed to by vbcbits contains
@@ -228,7 +229,16 @@ public:
         val -= offset;
         assert(0 <= val);
         assert((data_t)val < mod);
-        return (e - e%(div*mod)) + val*div + e%div;
+        assert(0 < div);
+        if((std::numeric_limits<data_t>::max() / div) + (std::numeric_limits<data_t>::max() % div == div - 1 ? 1 : 0) == mod){
+          /* div*mod == data_t::max() + 1 */
+          /* In this case the term (e - e%(div*mod)) is 0, but cannot
+           * be computed, since div*mod in data_t will overflow and
+           * take the value 0 */
+          return val*div + e%div;
+        }else{
+          return (e - e%(div*mod)) + val*div + e%div;
+        }
       };
       /* Updates the part of the element in vec described by this
        * bitfield, with the value val */

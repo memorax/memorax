@@ -139,14 +139,14 @@ int VipsBitReachability::CBuf::size() const{
 
 void VipsBitReachability::CBuf::push(const VipsBitConstraint *vbc){
   if(tp == QUEUE){
-    if(size() >= vec.size() - 1){
-      assert(size() == vec.size() - 1);
+    if(size() >= (int)vec.size() - 1){
+      assert(size() == (int)vec.size() - 1);
       /* Resize vec */
       int old_sz = vec.size();
       vec.resize(old_sz*2);
       if(back < front){
         /* Move the wrapped-around elements to the fresh parts of vec*/
-        for(unsigned i = 0; i < back; ++i){
+        for(int i = 0; i < back; ++i){
           vec[old_sz+i] = vec[i];
         }
         back += old_sz;

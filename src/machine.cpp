@@ -1206,7 +1206,7 @@ void Machine::test(){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
             return false;
           }
         }
@@ -1239,7 +1239,7 @@ void Machine::test(){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
             return false;
           }
         }
@@ -1272,7 +1272,7 @@ void Machine::test(){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
             return false;
           }
         }
@@ -1307,7 +1307,7 @@ void Machine::test(){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
             return false;
           }
         }
