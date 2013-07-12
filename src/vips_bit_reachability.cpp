@@ -35,8 +35,8 @@ Reachability::Result *VipsBitReachability::reachability(Arg *arg) const{
 
   VipsBitConstraint::Common common(machine);
 
-  /* stack contains constraints that have been found but not explored */
-  std::vector<const VipsBitConstraint*> stack;
+  /* buf contains constraints that have been found but not explored */
+  CBuf buf(CBuf::QUEUE);
 
   /* The set of keys of visited is the set of visited constraints.
    * Each visited constraint maps to a description of its parent.
@@ -53,14 +53,13 @@ Reachability::Result *VipsBitReachability::reachability(Arg *arg) const{
         result->result = REACHABLE;
         found_forbidden = true;
       }
-      stack.push_back(*it);
+      buf.push(*it);
       visited[*it] = parent_t();
     }
   }
 
-  while(!found_forbidden && stack.size()){
-    const VipsBitConstraint *vbc = stack.back();
-    stack.pop_back();
+  while(!found_forbidden && buf.size()){
+    const VipsBitConstraint *vbc = buf.pop();
 
     VecSet<const Machine::PTransition*> transes = vbc->partred(common);
 
@@ -72,7 +71,7 @@ Reachability::Result *VipsBitReachability::reachability(Arg *arg) const{
           common.dealloc(child);
         }else{
           visited[child] = parent_t(transes[i],vbc);
-          stack.push_back(child);
+          buf.push(child);
           if(child->is_forbidden(common)){
             result->result = REACHABLE;
             found_forbidden = true;
@@ -106,6 +105,71 @@ VipsBitReachability::vbcmp_t VipsBitReachability::get_comparator(const VipsBitCo
   return [&common](const VipsBitConstraint *a,const VipsBitConstraint *b){
     return common.compare(*a,*b) < 0;
   };
+};
+
+VipsBitReachability::CBuf::CBuf(buf_type_t tp) : tp(tp) {
+  if(tp == QUEUE){
+    /* The elements of the queue are stored in vec, with the first
+     * element at index first, and subsequent elements on subsequent
+     * indices, wrapping around at the end of vec. The last element of
+     * the queue is at index ((vec.size() + back)%vec.size()). The
+     * queue may contain at most vec.size()-1 elements. If more
+     * elements are pushed, then vec will be resized.
+     *
+     * Invariant:
+     * 0 <= front,back < vec.size()
+     */
+    front = back = 0;
+    vec.resize(1000);
+  }else if(tp == STACK){
+    /* The elements of the stack are stored in vec, with the oldest
+     * element at index 0, and newer elements at higher indices.
+     * All elements in vec are elements in the stack.
+     */
+  }
+}
+
+int VipsBitReachability::CBuf::size() const{
+  if(tp == QUEUE){
+    return (back < front) ? (back - front + vec.size()) : (back - front);
+  }else/* if(tp == STACK)*/{
+    return vec.size();
+  }
+};
+
+void VipsBitReachability::CBuf::push(const VipsBitConstraint *vbc){
+  if(tp == QUEUE){
+    if(size() >= vec.size() - 1){
+      assert(size() == vec.size() - 1);
+      /* Resize vec */
+      int old_sz = vec.size();
+      vec.resize(old_sz*2);
+      if(back < front){
+        /* Move the wrapped-around elements to the fresh parts of vec*/
+        for(unsigned i = 0; i < back; ++i){
+          vec[old_sz+i] = vec[i];
+        }
+        back += old_sz;
+      }
+    }
+    vec[back] = vbc;
+    back = (back+1)%vec.size();
+  }else if(tp == STACK){
+    vec.push_back(vbc);
+  }
+};
+
+const VipsBitConstraint *VipsBitReachability::CBuf::pop(){
+  if(tp == QUEUE){
+    assert(size() > 0);
+    const VipsBitConstraint *vbc = vec[front];
+    front = (front+1)%vec.size();
+    return vbc;
+  }else/* if(tp == STACK)*/{
+    const VipsBitConstraint *vbc = vec.back();
+    vec.pop_back();
+    return vbc;
+  }
 };
 
 void VipsBitReachability::test(){

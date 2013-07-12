@@ -56,6 +56,29 @@ private:
    */
   typedef std::function<bool(const VipsBitConstraint*,const VipsBitConstraint*)> vbcmp_t;
   static vbcmp_t get_comparator(const VipsBitConstraint::Common&);
+
+  /* CBuf implements a set of constraint pointers optimized for the
+   * operations push and pop.
+   *
+   * CBuf may act as a queue or as a stack.
+   *
+   * The underlying representation uses std::vector.
+   */
+  class CBuf{
+  public:
+    enum buf_type_t{
+      STACK,
+      QUEUE
+    };
+    CBuf(buf_type_t t);
+    void push(const VipsBitConstraint *vbc);
+    const VipsBitConstraint *pop();
+    int size() const;
+  private:
+    buf_type_t tp;
+    int front, back;
+    std::vector<const VipsBitConstraint*> vec;
+  };
 };
 
 #endif
