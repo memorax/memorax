@@ -426,6 +426,7 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
 
   switch(stmt.get_type()){
   case Lang::NOP: case Lang::GOTO: case Lang::UPDATE:
+  case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
     s.insert(pr_t(stmt,v));
     break;
   case Lang::ASSIGNMENT:
@@ -468,6 +469,14 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
       int val = stmt.get_expr().eval<std::vector<int>,int*>(v,0);
       if(get_var_decl(Lang::NML(stmt.get_memloc(),pid)).domain.member(val)){
         s.insert(pr_t(Lang::Stmt<int>::write(stmt.get_memloc(),Lang::Expr<int>::integer(val),pos),v));
+      }
+      break;
+    }
+  case Lang::SYNCWR:
+    {
+      int val = stmt.get_expr().eval<std::vector<int>,int*>(v,0);
+      if(get_var_decl(Lang::NML(stmt.get_memloc(),pid)).domain.member(val)){
+        s.insert(pr_t(Lang::Stmt<int>::syncwr(stmt.get_memloc(),Lang::Expr<int>::integer(val),pos),v));
       }
       break;
     }
@@ -550,6 +559,7 @@ void Machine::get_reg_relevant_aux(int reg, const Lang::Stmt<int> &stmt,
   *overwrites = false;
   switch(stmt.get_type()){
   case Lang::NOP: case Lang::GOTO: case Lang::UPDATE:
+  case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
     return;
   case Lang::ASSIGNMENT:
     *may_read = stmt.get_expr().get_registers().count(reg);
@@ -565,6 +575,9 @@ void Machine::get_reg_relevant_aux(int reg, const Lang::Stmt<int> &stmt,
     *overwrites = (stmt.get_reg() == reg);
     break;
   case Lang::WRITE:
+    *may_read = stmt.get_expr().get_registers().count(reg);
+    break;
+  case Lang::SYNCWR:
     *may_read = stmt.get_expr().get_registers().count(reg);
     break;
   case Lang::LOCKED:
@@ -980,9 +993,19 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
 
   switch(s.get_type()){
   case Lang::NOP: case Lang::ASSUME: case Lang::READASSERT:
+  case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
     ss.push_back(s);
     break;
   case Lang::WRITE:
+    {
+      Lang::VarDecl::Domain dom = get_declaration(s.get_memloc(),pid).domain;
+      if(dom.is_finite() && !expr_always_in_domain(s.get_expr(),pid,dom)){
+        ss.push_back(assume_in_domain(s.get_expr(),dom));
+      }
+      ss.push_back(s);
+      break;
+    }
+  case Lang::SYNCWR:
     {
       Lang::VarDecl::Domain dom = get_declaration(s.get_memloc(),pid).domain;
       if(dom.is_finite() && !expr_always_in_domain(s.get_expr(),pid,dom)){
