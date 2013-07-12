@@ -63,8 +63,25 @@ public:
   public:
     /* Construct a Common object for constraints of m. */
     Common(const Machine &m);
+    Common(const Common&) = delete;
+    Common &operator=(const Common&) = delete;
+    ~Common();
+    /* Compute and return some initial constraint of this->machine */
+    VipsBitConstraint *get_initial_constraint();
     /* Compute and return all initial constraints of this->machine. */
-    std::set<VipsBitConstraint*> get_initial_constraints() const;
+    std::set<VipsBitConstraint*> get_initial_constraints();
+    /* Return a clone of vbc. */
+    VipsBitConstraint *clone(const VipsBitConstraint &vbc);
+    /* Deallocate vbc.
+     *
+     * For efficient use, vbc should be the latest VipsBitConstraint
+     * that has been allocated by this Common object and has not yet
+     * been deallocated.
+     *
+     * Pre: vbc was created by this Common object.
+     *      vbc has not been deallocated.
+     */
+    void dealloc(VipsBitConstraint *vbc);
     /* Compare a and b by some total order.
      * Return 0 if a = b, -1 if a < b and 1 if b < a.
      */
@@ -72,6 +89,54 @@ public:
     /* The Machine which this Common object corresponds to. */
     const Machine &machine;
   private:
+    /*********************/
+    /* Memory management */
+    /*********************/
+    static const int buffer_multiplier;
+    /* Each element cp in vbc_buffers is an array of
+     * sizeof(VipsBitConstraint)*buffer_multiplier bytes. The buffers
+     * are used for keeping allocated VipsBitConstraints.
+     */
+    std::vector<char*> vbc_buffers;
+    /* Each element cp in data_buffers is an array of
+     * bits_len*sizeof(data_t)*buffer_multiplier bytes. The buffers
+     * are used for keeping allocated data_t arrays pointed to by
+     * VipsBitConstraints.
+     */
+    std::vector<char*> data_buffers;
+    /* (next_buffer,next_elem) describes which elements in the
+     * vbc/data buffers are used, and which are available for
+     * allocation. An element vbc_buffers[i][j] is used if (i,j) <lex
+     * (next_buffer,next_elem*sizeof(VipsBitConstraint)). An element
+     * data_buffers[i][j] is used if (i,j) <lex
+     * (next_buffer,next_elem*sizeof(data_t)*bits_len).
+     *
+     * If pointer_pack is set, then data_buffers is empty, otherwise
+     * the bits member of the VipsBitConstraint
+     * vbc_buffers[i][j*sizeof(VipsBitConstraint)] points to
+     * data_buffers[i][j*bits_len*sizeof(data_t)].
+     *
+     * Invariant:
+     *   0 <= next_buffer <= vbc_buffers.size()
+     *   0 <= next_elem <= buffer_multiplier
+     *   If pointer_pack then data_buffers.empty()
+     *   Otherwise vbc_buffers.size() == data_buffers.size()
+     */
+    int next_buffer, next_elem;
+    /* Allocate space for a new VipsBitConstraint (and its
+     * data). Return the VipsBitConstraint. If !pointer_pack, then the
+     * bits member is set to point to freshly allocated data,
+     * otherwise bits is uninitialized.
+     */
+    VipsBitConstraint *alloc();
+    /* Counts the number of times a VipsBitConstraint has been
+     * dealloc'ed in this Common object without it being possible to
+     * recycle its memory. Only used for debugging.
+     */ 
+#ifndef NDEBUG
+    int bad_dealloc_count;
+#endif
+
     /*****************************/
     /* Information about machine */
     /*****************************/
@@ -302,17 +367,22 @@ public:
     const data_t *bits;
   };
 
-  /* Constructs an initial constraint based on common. All memory
-   * locations will be initialized to some initial value, but for
-   * memory locations where the initial value is not uniquely
-   * determined in common.machine, no guarantees are given as to
-   * which initial value will be used.
+  /* To construct VipsBitConstraint objects, use
+   * Common::get_initial_constraint or
+   * Common::get_initial_constraints.
    */
-  VipsBitConstraint(const Common &common);
-  VipsBitConstraint(const Common &common, const VipsBitConstraint&);
+  VipsBitConstraint() = delete;
   VipsBitConstraint(const VipsBitConstraint&) = delete;
   VipsBitConstraint &operator=(const VipsBitConstraint&) = delete;
-  ~VipsBitConstraint();
+  void *operator new(size_t) = delete;
+  /* To delete VipsBitConstraint objects, use Common::dealloc with the
+   * same Common object that created this constraint.
+   *
+   * All, not yet deallocated, VipsBitConstraints will be
+   * automatically deallocated upon destruction of the Common object
+   * that created them.
+   */
+  void operator delete(void*,size_t) = delete;
 
   /* Returns the set of transitions that should be explored from this
    * constraint.
@@ -329,7 +399,7 @@ public:
   /* Returns the result of applying t to this constraint.
    * Returns null if t cannot be applied to this constraint.
    */
-  VipsBitConstraint *post(const Common &common, 
+  VipsBitConstraint *post(Common &common, 
                           const Machine::PTransition &t) const;
 
   /* A vector v such that for each process pid, v[pid] is the control

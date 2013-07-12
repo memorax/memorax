@@ -68,7 +68,7 @@ Reachability::Result *VipsBitReachability::reachability(Arg *arg) const{
       if(child){
         ++result->generated_constraints;
         if(visited.count(child)){
-          delete child;
+          common.dealloc(child);
         }else{
           visited[child] = parent_t(transes[i],vbc);
           stack.push_back(child);
@@ -93,9 +93,8 @@ Reachability::Result *VipsBitReachability::reachability(Arg *arg) const{
   result->stored_constraints = visited.size();
 
   /* Cleanup */
-  for(auto it = visited.begin(); it != visited.end(); ++it){
-    delete it->first;
-  }
+  /* Destruction of common automatically cleans up the remaining
+   * constraints. */
 
   result->timer.stop();
   return result;
