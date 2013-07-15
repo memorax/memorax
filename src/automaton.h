@@ -134,11 +134,29 @@ public:
    * those states are created.
    */
   bool add_transition(const Transition &t);
+  /* If there is a transition identical to t in this automaton, then
+   * it is removed from this automaton and true is returned. Otherwise
+   * false is returned.
+   */
+  bool del_transition(const Transition &t);
   /* Sets the label lbl to the state i. If lbl was previously present
    * as a label in this automaton, the old label is removed. */
   void set_label(Lang::label_t lbl, int i) { label_map[lbl] = i; };
   /* Returns the total number of transitions in this automaton. */
   int get_transition_count() const;
+  /* Compares this automaton with the automaton a. Returns true if
+   * they are judged to be the same, false otherwise.
+   *
+   * The automata are judged the same if there is a one-to-one mapping
+   * between control states, preserving initial state, control state
+   * labels and transition instructions.
+   *
+   * If cmp_pos, then source code positions for transition
+   * instructions are compared (and should be preserved). Otherwise
+   * source code positions are ignored.
+   */
+  bool same_automaton(const Automaton &a, bool cmp_pos) const;
+  static void test();
 private:
   void clear_and_copy(const Automaton &); // Used for copy constructor and assignment
   /* Throw Exception if fwd and bwd transitions are inconsistent */

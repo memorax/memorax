@@ -664,8 +664,8 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
   throw new std::logic_error("Lang::Stmt::to_string: Invalid statement type.");
 };
 
-template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt) const throw(){
-  {
+template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,bool cmp_pos) const throw(){
+  if(cmp_pos){
     int c = pos.compare(stmt.pos);
     if(c != 0) return c;
   }

@@ -727,8 +727,11 @@ namespace Lang {
      * Returns 0 iff this <= stmt and stmt <= this
      * Otherwise returns -1 iff this <= stmt and
      * returns 1 iff stmt <= this.
+     *
+     * If cmp_pos, then the source code position of the statements are
+     * compared as well, otherwise the position is ignored.
      */
-    int compare(const Stmt &stmt) const throw();
+    int compare(const Stmt &stmt,bool cmp_pos = true) const throw();
     bool operator==(const Stmt &stmt) const throw() { return compare(stmt) == 0; };
     bool operator<(const Stmt &stmt) const throw() { return compare(stmt) < 0; };
     bool operator>(const Stmt &stmt) const throw() { return compare(stmt) > 0; };

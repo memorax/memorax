@@ -19,6 +19,13 @@
  */
 
 #include "automaton.h"
+#include "lexer.h"
+#include "machine.h"
+#include "parser.h"
+#include "test.h"
+
+#include <functional>
+#include <sstream>
 
 Automaton::Automaton(){
   states.resize(1);
@@ -129,7 +136,17 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
         }
       }
 
-      if(source >= 0 && source != i){ // Insert a nop before goto
+      if(states.size() == 1){
+        /* Goto is the first statement in the AST.
+         * Add a nop from state 0, before goto
+         */
+        states.push_back(State());
+        ++i;
+        source = 0;
+        Transition *nopt = new Transition(0,Lang::Stmt<int>::nop(),i);
+        states[0].fwd_transitions.insert(nopt);
+        states[1].bwd_transitions.insert(nopt);
+      }else if(source >= 0 && source != i){ // Insert a nop before goto
         Transition *nopt = new Transition(source,Lang::Stmt<int>::nop(),i);
         states[source].fwd_transitions.insert(nopt);
         states[i].bwd_transitions.insert(nopt);
@@ -337,6 +354,11 @@ std::string Automaton::to_string(const std::function<std::string(const int&)> &r
                                  int indentation) const throw(){
   std::string s;
   std::string ind(indentation,' ');
+  for(auto it = label_map.begin(); it != label_map.end(); ++it){
+    std::stringstream ss;
+    ss << ind << it->first << ": Q" << it->second << "\n";
+    s += ss.str();
+  }
   for(unsigned i = 0; i < states.size(); i++){
     for(std::set<Transition*>::const_iterator it = states[i].fwd_transitions.begin();
         it != states[i].fwd_transitions.end(); it++){
@@ -434,6 +456,43 @@ bool Automaton::add_transition(const Transition &t){
   }
 }
 
+bool Automaton::del_transition(const Transition &t){
+  if(t.source >= int(states.size()) || t.target >= int(states.size())) return false;
+  bool found = false;
+  for(auto it = states[t.source].fwd_transitions.begin(); it != states[t.source].fwd_transitions.end(); ){
+    if(**it == t){
+      states[t.source].fwd_transitions.erase(it);
+      it = states[t.source].fwd_transitions.end();
+      found = true;
+    }else{
+      ++it;
+    }
+  }
+
+  if(!found) return false;
+
+  found = false;
+  for(auto it = states[t.target].bwd_transitions.begin(); it != states[t.target].bwd_transitions.end(); ){
+    if(**it == t){
+      delete *it;
+      states[t.target].bwd_transitions.erase(it);
+      it = states[t.target].bwd_transitions.end();
+      found = true;
+    }else{
+      ++it;
+    }
+  }
+
+  /* If !found then the transition t was present in
+   * states[t.source].fwd_transitions, but not in
+   * states[t.target].bwd_transitions. This violates the invariant of
+   * Automaton. Also it causes a memory leak in this method.
+   */
+  assert(found);
+
+  return true;
+};
+
 int Automaton::get_transition_count() const{
   int tc = 0;
   for(unsigned i = 0; i < states.size(); ++i){
@@ -441,3 +500,331 @@ int Automaton::get_transition_count() const{
   }
   return tc;
 }
+
+bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
+  if(states.size() != a2.states.size()) return false;
+
+  class state_t{
+  public:
+    state_t(const Automaton &a1, const Automaton &a2, bool cmp_pos) : a1(a1), a2(a2), cmp_pos(cmp_pos) {
+      std::set<int> all;
+      for(int q = 0; q < int(a1.states.size()); ++q){
+        all.insert(q);
+      }
+      qmap.resize(a1.states.size(),all);
+      limit_to(0,0);
+      label_limit();
+      edge_limit();
+      propagate();
+    };
+    const Automaton &a1;
+    const Automaton &a2;
+    bool cmp_pos;
+    /* Maps control states q in a1 to sets of control states in a2
+     * that are currently considered possible matches for q. */
+    std::vector<std::set<int> > qmap;
+    std::vector<int> prop_stack;
+    void propagate(){
+      while(prop_stack.size()){
+        int q = prop_stack.back();
+        const State &qstate = a1.states[q];
+        prop_stack.pop_back();
+        assert(qmap[q].size() <= 1);
+        if(qmap[q].size() == 0){
+          fail();
+          return;
+        }else{
+          int q2 = *qmap[q].begin();
+          const State &qstate2 = a2.states[q2];
+          /* Eliminate the state q2 from all other qmap[q'] */
+          for(int qq = 0; qq < int(qmap.size()); ++qq){
+            if(qq != q){
+              limit_rem(qq,q2);
+            }
+          }
+
+          /* Consider in- and out-going transitions to limit other
+           * state maps. */
+          for(auto it = qstate.bwd_transitions.begin(); it != qstate.bwd_transitions.end(); ++it){
+            int src = (*it)->source;
+            /* Find possibilities for src2 */
+            std::set<int> newqmap;
+            for(auto it2 = qstate2.bwd_transitions.begin(); it2 != qstate2.bwd_transitions.end(); ++it2){
+              if(stmt_eq((*it)->instruction,(*it2)->instruction)){
+                newqmap.insert((*it2)->source);
+              }
+            }
+            limit_to(src,newqmap);
+          }
+          for(auto it = qstate.fwd_transitions.begin(); it != qstate.fwd_transitions.end(); ++it){
+            int tgt = (*it)->target;
+            /* Find possibilities for tgt2 */
+            std::set<int> newqmap;
+            for(auto it2 = qstate2.fwd_transitions.begin(); it2 != qstate2.fwd_transitions.end(); ++it2){
+              if(stmt_eq((*it)->instruction,(*it2)->instruction)){
+                newqmap.insert((*it2)->target);
+              }
+            }
+            limit_to(tgt,newqmap);
+          }
+        }
+      }
+    };
+    void fail(){
+      qmap[0].clear();
+    };
+    void limit_to(int q, int q2){
+      if(qmap[q].count(q2)){
+        if(qmap[q].size() > 1){
+          prop_stack.push_back(q);
+        }
+        qmap[q].clear();
+        qmap[q].insert(q2);
+      }else{
+        fail();
+        return;
+      }
+    };
+    void limit_to(int q, const std::set<int> &q2s){
+      /* Find the intersection of q2s and qmap[q] */
+      std::set<int> q2sq;
+      for(auto it = q2s.begin(); it != q2s.end(); ++it){
+        if(qmap[q].count(*it)){
+          q2sq.insert(*it);
+        }
+      }
+
+      /* Set qmap[q] = q2sq */
+      if(qmap[q] != q2sq){
+        assert(q2sq.size() < qmap[q].size());
+        qmap[q] = q2sq;
+        if(q2sq.size() == 0){
+          fail();
+        }else if(q2sq.size() == 1){
+          prop_stack.push_back(q);
+        }
+      }
+    };
+    void limit_rem(int q, int q2){
+      if(qmap[q].count(q2)){
+        qmap[q].erase(q2);
+        if(qmap[q].size() == 0){
+          fail();
+        }else if(qmap[q].size() == 1){
+          prop_stack.push_back(q);
+        }
+      }
+    }
+    bool stmt_eq(const Lang::Stmt<int> &a, const Lang::Stmt<int> &b) const{
+      return a.compare(b,cmp_pos) == 0;
+    };
+    bool same_instrs(const std::set<Transition*> &s0, const std::set<Transition*> &s1){
+      if(s0.size() != s1.size()) return false;
+
+      /* Compare the number of occurrences of each statement in
+       * transitions in s0 and s1 */
+      std::set<Transition*> s1cpy = s1;
+      for(auto it = s0.begin(); it != s0.end(); ++it){
+        bool found = false;
+        for(auto it2 = s1cpy.begin(); !found && it2 != s1cpy.end(); ++it2){
+          if(stmt_eq((*it)->instruction,(*it2)->instruction)){
+            s1cpy.erase(it2);
+            found = true;
+          }
+        }
+        if(!found){
+          return false;
+        }
+      }
+      assert(s1cpy.empty());
+      return true;
+    }
+    void edge_limit(){
+      for(int q = 0; q < int(qmap.size()); ++q){
+        std::set<int> newqmap;
+        for(auto it = qmap[q].begin(); it != qmap[q].end(); ++it){
+          int q2 = *it;
+          const State &qstate = a1.states[q];
+          const State &q2state = a2.states[q2];
+          if(same_instrs(qstate.bwd_transitions,q2state.bwd_transitions) &&
+             same_instrs(qstate.fwd_transitions,q2state.fwd_transitions)){
+            newqmap.insert(q2);
+          }
+        }
+        limit_to(q,newqmap);
+      }
+    };
+    void label_limit(){
+      /* Check that both automata have the same labels */
+      if(a1.label_map.size() != a2.label_map.size()){
+        fail();
+        return;
+      }
+      for(auto it = a1.label_map.begin(); it != a1.label_map.end(); ++it){
+        if(a2.label_map.count(it->first) == 0){
+          fail();
+          return;
+        }
+      }
+      /* Limit the control state mapping */
+      for(auto it = a1.label_map.begin(); it != a1.label_map.end(); ++it){
+        int q = it->second;
+        assert(a2.label_map.count(it->first));
+        int q2 = a2.label_map.at(it->first);
+        limit_to(q,q2);
+      }
+    };
+    std::string to_string() const{
+      std::stringstream ss;
+      for(unsigned i = 0; i < a1.states.size(); ++i){
+        ss << "Q" << i << ": {";
+        for(auto it = qmap[i].begin(); it != qmap[i].end(); ++it){
+          if(it != qmap[i].begin()) ss << ", ";
+          ss << "q" << *it;
+        }
+        ss << "}\n";
+      }
+      return ss.str();
+    };
+    enum search_t {
+      SEARCH, // Need to search
+      SUCCESS, // The automata are equal
+      FAILURE // The automata are different
+    };
+    search_t search(int *searchvar,std::set<int> *A, std::set<int> *B) const{
+      for(int q = 0; q < int(qmap.size()); ++q){
+        if(qmap[q].empty()){
+          return FAILURE;
+        }else if(qmap[q].size() > 1){
+          // Pick this q for search variable
+          *searchvar = q;
+          // Divide the search space
+          // Let the first set have one option
+          A->clear();
+          A->insert(*qmap[q].begin());
+          // Let the second set have all other options
+          *B = qmap[q];
+          B->erase(*qmap[q].begin());
+          return SEARCH;
+        }
+      }
+      return SUCCESS;
+    };
+  };
+
+  std::vector<state_t> stack;
+  stack.push_back(state_t(*this,a2,cmp_pos));
+  while(stack.size()){
+    state_t &st = stack.back();
+    int searchvar;
+    std::set<int> A, B;
+    switch(st.search(&searchvar,&A,&B)){
+    case state_t::FAILURE:
+      // Try the next search branch
+      stack.pop_back();
+      break;
+    case state_t::SUCCESS:
+      return true;
+    case state_t::SEARCH:
+      // Split st into two states
+      state_t st2 = st;
+      st.limit_to(searchvar,A);
+      st.propagate();
+      st2.limit_to(searchvar,B);
+      st2.propagate();
+      stack.push_back(st2);
+      break;
+    }
+  }
+
+  return false; // All search branches failed
+};
+
+void Automaton::test(){
+  /* Test same_automaton */
+  {
+    std::function<Automaton(std::string)> auto_stmt = 
+      [](std::string s){
+      std::stringstream ss;
+      ss << "forbidden\n"
+      << "  *\n"
+      << "data\n"
+      << "  s = *\n"
+      << "  t = *\n"
+      << "  u = *\n"
+      << "  v = *\n"
+      << "  w = *\n"
+      << "  x = *\n"
+      << "  y = *\n"
+      << "  z = *\n"
+      << "process\n"
+      << "registers\n"
+      << "  $r0 = *\n"
+      << "  $r1 = *\n"
+      << "  $r2 = *\n"
+      << "  $r3 = *\n"
+      << "  $r4 = *\n"
+      << "text\n"
+      << s;
+      Lexer lex(ss);
+      Machine m(Parser::p_test(lex));
+      return m.automata[0];
+    };
+
+    std::function<bool(std::string,std::string,bool)> tst =
+      [&auto_stmt](std::string A, std::string B, bool expected_res){
+      Automaton a = auto_stmt(A);
+      Automaton b = auto_stmt(B);
+      return a.same_automaton(b,false) == expected_res;
+    };
+
+    /* Test labels */
+    Test::inner_test("same_automaton #1",
+                     tst("write: x := 1; A: write: y := 2; write: z := 3",
+                         "write: x := 1; A: write: y := 2; write: z := 3",true));
+    Test::inner_test("same_automaton #2",
+                     tst("write: x := 1; A: write: y := 2; write: z := 3",
+                         "write: x := 1; write: y := 2; A: write: z := 3",false));
+    Test::inner_test("same_automaton #3",
+                     tst("write: x := 1; A: write: y := 2; write: z := 3",
+                         "write: x := 1; A: write: y := 2; B: write: z := 3",false));
+    Test::inner_test("same_automaton #4",
+                     tst("write: x := 1; A: write: y := 2; write: z := 3",
+                         "write: x := 1; write: y := 2; write: z := 3",false));
+
+    /* Test searching */
+    Test::inner_test("same_automaton #5",
+                     tst("either{write: x := 1; nop or write: x := 1; nop}",
+                         "either{write: x := 1; nop or write: x := 1; nop}",true));
+    Test::inner_test("same_automaton #6",
+                     tst("either{write: x := 1; nop; nop or write: x := 1; nop; nop; nop}",
+                         "either{write: x := 1; nop; nop or write: x := 1; nop; nop; nop}",true));
+    Test::inner_test("same_automaton #7",
+                     tst("either{write: x := 1; A: nop; nop or write: x := 1; nop; nop; nop}",
+                         "either{write: x := 1; nop; nop or write: x := 1; A: nop; nop; nop}",false));
+
+    /* Various */
+    Test::inner_test("same_automaton #8",
+                     tst(std::string("write: x := 1; write: x := 1; either{write: x := 1 or write: y := 2}; ")+
+                         "write: x := 1; either{write: x := 1 or write: y := 2}; write: x := 1; write: x := 1",
+                         std::string("write: x := 1; write: x := 1; either{write: x := 1 or write: y := 2}; ")+
+                         "write: x := 1; either{write: x := 1 or write: y := 2}; write: x := 1; write: x := 1",true));
+    Test::inner_test("same_automaton #9",
+                     tst("nop","nop",true));
+    Test::inner_test("same_automaton #10",
+                     tst("$r0 := 0","$r0 := 1",false));
+    Test::inner_test("same_automaton #11",
+                     /* Disconnected parts of automata */
+                     tst("nop; L0: $r0 := 0; $r0 := 1; $r0 := 2; goto L0; L1: $r1 := 0; $r1 := 1; $r1 := 2; goto L1",
+                         "goto L0; L1: $r1 := 0; $r1 := 1; $r1 := 2; goto L1; L0: $r0 := 0; $r0 := 1; $r0 := 2; goto L0",true));
+    Test::inner_test("same_automaton #12",
+                     /* Test obscure gotos */
+                     tst("goto L0; goto L1; $r1 := 1; L0: $r0 := 0; L1: $r2 := 2",
+                         "nop; goto L0; $r1 := 1; L0: $r0 := 0; L1: $r2 := 2",true));
+    Test::inner_test("same_automaton #13",
+                     /* More obscure gotos */
+                     tst("L0: $r0:=0; goto L0; $r1:=1; goto L1; goto L0; $r2:=2; L1: $r3:=3",
+                         "L0: $r0:=0; goto L0; $r2:=2; goto L1; $r1:=1; L1: $r3:=3",true));
+
+  }
+};
