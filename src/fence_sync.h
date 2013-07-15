@@ -53,8 +53,17 @@ public:
             std::set<Automaton::Transition> IN, 
             std::set<Automaton::Transition> OUT);
   virtual ~FenceSync() {};
-  virtual Machine *insert(const Machine &m) const;
+
+  class InsInfo : public Sync::InsInfo{
+  public:
+    InsInfo(const FenceSync *creator_copy) : Sync::InsInfo(creator_copy) {};
+    virtual ~InsInfo(){};
+  };
+
+  virtual Machine *insert(const Machine &m, std::vector<const Sync::InsInfo*> m_infos, Sync::InsInfo **info) const;
   virtual bool prevents(const Trace &t) const = 0;
+  /* Return a deep copy of this object. */
+  virtual FenceSync *clone() const = 0;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
   static void test();

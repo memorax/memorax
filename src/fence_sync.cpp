@@ -43,8 +43,10 @@ std::string FenceSync::to_string(const Machine &m) const{
   return to_string_aux(m.reg_pretty_vts(pid),m.ml_pretty_vts(pid));
 };
 
-Machine *FenceSync::insert(const Machine &m) const{
+Machine *FenceSync::insert(const Machine &m, std::vector<const Sync::InsInfo*> m_infos, Sync::InsInfo **info) const{
   assert(applies_to(m));
+
+  *info = new InsInfo(clone());
 
   Log::warning << "FenceSync::insert: Unclean handling of forbidden\n";
   /* Consider forbidden specifications using '*'.
@@ -301,6 +303,9 @@ void FenceSync::test(){
       : FenceSync(f,pid,q,IN,OUT) {};
     ~Dummy() {};
     virtual bool prevents(const Trace &t) const{return false;};
+    virtual FenceSync *clone() const{
+      return new Dummy(f,pid,q,IN,OUT);
+    };
     bool operator==(const Dummy &d) const{
       return f == d.f && pid == d.pid && q == d.q &&
         IN == d.IN && OUT == d.OUT;
@@ -624,10 +629,12 @@ void FenceSync::test(){
          );
 
       Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0}to{$r0 := 1}");
-      Machine *m2 = d.insert(*m);
+      Sync::InsInfo *info;
+      Machine *m2 = d.insert(*m,std::vector<const Sync::InsInfo*>(),&info);
 
       Test::inner_test("insert #1",m2->automata[1].same_automaton(m2->automata[0],false));
 
+      delete info;
       delete m2;
       delete m;
     }
@@ -656,10 +663,12 @@ void FenceSync::test(){
          );
 
       Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0}to{$r0 := 1}");
-      Machine *m2 = d.insert(*m);
+      Sync::InsInfo *info;
+      Machine *m2 = d.insert(*m,std::vector<const Sync::InsInfo*>(),&info);
 
       Test::inner_test("insert #2",m2->automata[1].same_automaton(m2->automata[0],false));
 
+      delete info;
       delete m2;
       delete m;
     }
@@ -702,10 +711,12 @@ void FenceSync::test(){
          );
 
       Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0; $r0 := 1}to{$r0 := 2; $r0 := 3}");
-      Machine *m2 = d.insert(*m);
+      Sync::InsInfo *info;
+      Machine *m2 = d.insert(*m,std::vector<const Sync::InsInfo*>(),&info);
 
       Test::inner_test("insert #3",m2->automata[1].same_automaton(m2->automata[0],false));
 
+      delete info;
       delete m2;
       delete m;
     }
@@ -748,10 +759,12 @@ void FenceSync::test(){
          );
 
       Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0}to{$r0 := 2; $r0 := 3}");
-      Machine *m2 = d.insert(*m);
+      Sync::InsInfo *info;
+      Machine *m2 = d.insert(*m,std::vector<const Sync::InsInfo*>(),&info);
 
       Test::inner_test("insert #4",m2->automata[1].same_automaton(m2->automata[0],false));
 
+      delete info;
       delete m2;
       delete m;
     }
@@ -794,10 +807,12 @@ void FenceSync::test(){
          );
 
       Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0; $r0 := 1}to{$r0 := 2}");
-      Machine *m2 = d.insert(*m);
+      Sync::InsInfo *info;
+      Machine *m2 = d.insert(*m,std::vector<const Sync::InsInfo*>(),&info);
 
       Test::inner_test("insert #5",m2->automata[1].same_automaton(m2->automata[0],false));
 
+      delete info;
       delete m2;
       delete m;
     }

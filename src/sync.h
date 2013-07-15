@@ -31,8 +31,46 @@
  */
 class Sync{
 public:
+  /* An InsInfo object is created by a Sync derivative s when s is
+   * inserted into a Machine m. The InsInfo object describes the
+   * changes to m by s, such that Sync derivatives that are inserted
+   * later can relate the changed m with the original.
+   *
+   * What exactly is kept in an InsInfo object depends on the Sync
+   * derivative that created it. Different classes extending Sync
+   * should make sure to understand each others' InsInfo objects if it
+   * should be possible to use the different Sync derivatives in the
+   * same Machine.
+   *
+   * InsInfo should be overloaded.
+   */
+  class InsInfo{
+  public:
+    /* Construct an InsInfo object with a copy creator_copy of the
+     * Sync derivative that created it.
+     *
+     * InsInfo takes ownership over creator_copy.
+     */
+    InsInfo(const Sync *creator_copy) : sync(creator_copy) {};
+    virtual ~InsInfo() { if(sync) delete sync; };
+    /* A copy of the Sync that created this InsInfo. */
+    const Sync *sync;
+  };
+
   virtual ~Sync() {};
-  virtual Machine *insert(const Machine &m) const = 0;
+  /* Inserts this synchronization into m. Returns the result. Sets
+   * *info to point to a new InsInfo object that describes the changes
+   * in the returned Machine, compared to m.
+   *
+   * If this Sync is created with respect to a Machine m_org, then
+   * m_infos should contain all InsInfo objects corresponding to Sync
+   * insertions performed to m_org, turning m_org into m. The InsInfo
+   * objects in m_infos should be in the order the corresponding Sync
+   * insertions were performed.
+   *
+   * This Sync surrenders ownership of *info to the caller.
+   */
+  virtual Machine *insert(const Machine &m, std::vector<const InsInfo*> m_infos, InsInfo **info) const = 0;
   virtual bool prevents(const Trace &t) const = 0;
   virtual std::string to_raw_string() const = 0;
   virtual std::string to_string() const { return to_raw_string(); };
