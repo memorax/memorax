@@ -126,13 +126,13 @@ public:
       return (pid > pt.pid) ||
         (pid == pt.pid && Automaton::Transition::operator>(pt));
     };
-    int compare(const PTransition &pt) const throw(){
+    int compare(const PTransition &pt,bool cmp_pos = true) const throw(){
       if(pid < pt.pid){
         return -1;
       }else if(pid > pt.pid){
         return 1;
       }else{
-        return Automaton::Transition::compare(pt);
+        return Automaton::Transition::compare(pt,cmp_pos);
       }
     }
 

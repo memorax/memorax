@@ -86,7 +86,7 @@ public:
     virtual bool operator==(const Transition &t) const throw(){ return compare(t) == 0; };
     virtual bool operator<(const Transition &t) const throw(){ return compare(t) < 0; };
     virtual bool operator>(const Transition &t) const throw(){ return compare(t) > 0; }
-    int compare(const Transition &t) const throw(){
+    int compare(const Transition &t,bool cmp_pos = true) const throw(){
       if(source < t.source){
         return -1;
       }else if(source > t.source){
@@ -96,7 +96,7 @@ public:
       }else if(target > t.target){
         return 1;
       }else{
-        return instruction.compare(t.instruction);
+        return instruction.compare(t.instruction,cmp_pos);
       }
     };
     int source; // Source state index

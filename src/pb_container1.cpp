@@ -21,8 +21,7 @@
 #include "pb_container1.h"
 
 PbContainer1::PbContainer1(const Machine &m)
-: machine(m),
-  edges(EDGES_SIZE), edge_count(0), 
+: edges(EDGES_SIZE), edge_count(0), 
   f_size(0), 
   clean_q(Q_SIZE), dirty_q(Q_SIZE), q_size(0)
 {

@@ -456,7 +456,9 @@ bool Automaton::add_transition(const Transition &t){
   }
 }
 
-bool Automaton::del_transition(const Transition &t){
+bool Automaton::del_transition(const Transition &targ){
+  Transition t = targ;
+
   if(t.source >= int(states.size()) || t.target >= int(states.size())) return false;
   bool found = false;
   for(auto it = states[t.source].fwd_transitions.begin(); it != states[t.source].fwd_transitions.end(); ){
