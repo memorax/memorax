@@ -19,6 +19,7 @@
  */
 
 #include "fence_sync.h"
+#include "log.h"
 #include "parser.h"
 #include "preprocessor.h"
 #include "test.h"
@@ -43,7 +44,122 @@ std::string FenceSync::to_string(const Machine &m) const{
 };
 
 Machine *FenceSync::insert(const Machine &m) const{
-  throw new std::logic_error("FenceSync::insert: Not implemented.");
+  assert(applies_to(m));
+
+  Log::warning << "FenceSync::insert: Unclean handling of forbidden\n";
+  /* Consider forbidden specifications using '*'.
+   * The new control states should also be forbidden.
+   */
+  Machine *m2 = new Machine(m);
+
+  const Automaton::State &state = m.automata[pid].get_states()[q];
+
+  /* Get the transition in m2 which is identical modulo statement
+   * position to t. */
+  std::function<const Automaton::Transition*(const Automaton::Transition&)> find_transition = 
+    [m2,this](const Automaton::Transition &t)->const Automaton::Transition*{
+    const Automaton::State &state = m2->automata[this->pid].get_states()[t.source];
+    for(auto it = state.fwd_transitions.begin(); it != state.fwd_transitions.end(); ++it){
+      if((*it)->compare(t,false) == 0){
+        return *it;
+      }
+    }
+    return 0;
+  };
+
+  if(IN.size() == state.bwd_transitions.size()){
+    /* All incoming transitions should go through the fence. Relink as
+     * follows:
+     * 1) Introduce a new state q'
+     * 2) Change each OUT transition (q,i,q2) into (q',i,q2)
+     * 3) Add transition (q,fence,q')
+     */
+    int qp = m2->automata[pid].get_states().size(); // q'
+    /* Change transitions */
+    for(auto it = OUT.begin(); it != OUT.end(); ++it){
+      const Automaton::Transition *t = find_transition(*it);
+      assert(t);
+      m2->automata[pid].add_transition(Automaton::Transition(qp,t->instruction,t->target));
+      m2->automata[pid].del_transition(*t);
+    }
+    /* Insert fence */
+    m2->automata[pid].add_transition(Automaton::Transition(q,f,qp));
+  }else if(OUT.size() == state.fwd_transitions.size()){
+    /* All outgoing transitions should go through the fence. Relink as
+     * follows:
+     * 1) Introduce a new state q'
+     * 2) Change each IN transition (q2,i,q) into (q2,i,q')
+     * 3) Add transition (q',fence,q)
+     */
+    int qp = m2->automata[pid].get_states().size(); // q'
+    /* Change transitions */
+    for(auto it = IN.begin(); it != IN.end(); ++it){
+      const Automaton::Transition *t = find_transition(*it);
+      assert(t);
+      m2->automata[pid].add_transition(Automaton::Transition(t->source,t->instruction,qp));
+      m2->automata[pid].del_transition(*t);
+    }
+    /* Insert fence */
+    m2->automata[pid].add_transition(Automaton::Transition(qp,f,q));
+  }else{
+    /* Some incoming and some outgoing transitions should go through
+     * the fence. Relink as follows:
+     * 1) Introduce new states q' and q''
+     * 2) Add transition (q',fence,q'')
+     * 3) Change each IN transition (q2,i,q) into (q2,i,q')
+     * 4) Change each OUT transition (q,i,q2) into (q'',i,q2)
+     */
+
+    /* What happens with labels? */
+    /* What about forbidden control states? */
+    /* What about other Syncs that depend on control states? */
+    delete m2;
+    throw new std::logic_error("FenceSync: Both IN and OUT are partial. Not supported.");
+  }
+
+  return m2;
+};
+
+bool FenceSync::applies_to(const Machine &m) const{
+  if(pid < 0){
+    std::stringstream ss;
+    ss << "FenceSync::insert: Invalid process: " << pid;
+    throw new std::logic_error(ss.str());
+  }
+  if((int)m.automata.size() <= pid){
+    return false;
+  }
+  if(q < 0){
+    std::stringstream ss;
+    ss << "FenceSync::insert: Invalid control state: " << q;
+    throw new std::logic_error(ss.str());
+  }
+  if((int)m.automata[pid].get_states().size() <= q){
+    return false;
+  }
+
+  /* Returns true iff each transitions in S equals some transition
+   * pointed to by a member of T. */
+  std::function<bool(const std::set<Automaton::Transition> &,const std::set<Automaton::Transition*> &)> is_subset = 
+    [](const std::set<Automaton::Transition> &S,
+       const std::set<Automaton::Transition*> &T){
+    for(auto it = S.begin(); it != S.end(); ++it){
+      if(!std::any_of(T.begin(),T.end(),
+                      [&it](const Automaton::Transition *t){
+                        return it->compare(*t,false) == 0;
+                      })){
+        return false;
+      }
+    }
+    return true;
+  };
+
+  if(!is_subset(IN,m.automata[pid].get_states()[q].bwd_transitions) ||
+     !is_subset(OUT,m.automata[pid].get_states()[q].fwd_transitions)){
+    return false;
+  }
+
+  return true;
 };
 
 std::string FenceSync::to_string_aux(const std::function<std::string(const int&)> &regts, 
@@ -170,6 +286,120 @@ void FenceSync::test(){
     return new Machine(Parser::p_test(pp));
   };
 
+  class StmtCmp{
+  public:
+    bool operator()(const Lang::Stmt<int> &a, const Lang::Stmt<int> &b) const{
+      return a.compare(b,false) < 0;
+    }
+  };
+  /* Dummy concrete implementation of FenceSync. */
+  class Dummy : public FenceSync{
+  public:
+    Dummy(Lang::Stmt<int> f, int pid, int q, 
+          std::set<Automaton::Transition> IN, 
+          std::set<Automaton::Transition> OUT)
+      : FenceSync(f,pid,q,IN,OUT) {};
+    ~Dummy() {};
+    virtual bool prevents(const Trace &t) const{return false;};
+    bool operator==(const Dummy &d) const{
+      return f == d.f && pid == d.pid && q == d.q &&
+        IN == d.IN && OUT == d.OUT;
+    };
+    bool operator<(const Dummy &d) const{
+      return 
+        (f < d.f) ||
+        (f == d.f && pid < d.pid) ||
+        (f == d.f && pid == d.pid && q < d.q) ||
+        (f == d.f && pid == d.pid && q == d.q && IN < d.IN) ||
+        (f == d.f && pid == d.pid && q == d.q && IN == d.IN && OUT < d.OUT);
+    };
+    static Dummy parse_dummy(const Machine *m, std::string s){
+      int pid;
+      {
+        std::stringstream ss(s);
+        ss >> pid;
+        s = s.substr(s.find('{')); // Skip until after pid
+      }
+      std::set<Lang::Stmt<int>,StmtCmp> IN_stmts, OUT_stmts;
+      {
+        std::string pre = 
+          "forbidden *\n"
+          "data\n"
+          "  fnc = *\n"
+          "  x = *\n"
+          "  y = *\n"
+          "process\n"
+          "registers\n"
+          "  $r0 = *\n"
+          "  $r1 = *\n"
+          "  $r2 = *\n"
+          "text\n";
+        std::string IN_s, OUT_s;
+        int i = s.find("to");
+        IN_s = s.substr(0,i);
+        OUT_s = s.substr(i+2);
+        {
+          std::stringstream ss(pre+IN_s);
+          PPLexer lex(ss);
+          Machine m(Parser::p_test(lex));
+          for(unsigned j = 0; j < m.automata[0].get_states().size(); ++j){
+            const std::set<Automaton::Transition*> &s = 
+              m.automata[0].get_states()[j].fwd_transitions;
+            for(auto it = s.begin(); it != s.end(); ++it){
+              IN_stmts.insert((*it)->instruction);
+            }
+          }
+        }
+        {
+          std::stringstream ss(pre+OUT_s);
+          PPLexer lex(ss);
+          Machine m(Parser::p_test(lex));
+          for(unsigned j = 0; j < m.automata[0].get_states().size(); ++j){
+            const std::set<Automaton::Transition*> &s = 
+              m.automata[0].get_states()[j].fwd_transitions;
+            for(auto it = s.begin(); it != s.end(); ++it){
+              OUT_stmts.insert((*it)->instruction);
+            }
+          }
+        }
+      }
+      int q = -1;
+      {
+        /* Find the right control location */
+        const std::vector<Automaton::State> &states = m->automata[pid].get_states();
+        for(unsigned i = 0; i < states.size(); ++i){
+          if(std::any_of(states[i].fwd_transitions.begin(),states[i].fwd_transitions.end(),
+                         [&OUT_stmts](const Automaton::Transition *pt){
+                           return OUT_stmts.count(pt->instruction) > 0;
+                         })){
+            q = i;
+            break;
+          }
+        }
+      }
+
+      assert(q >= 0);
+
+      std::set<Automaton::Transition> IN, OUT;
+      {
+        for(auto it = m->automata[pid].get_states()[q].bwd_transitions.begin();
+            it != m->automata[pid].get_states()[q].bwd_transitions.end(); ++it){
+          if(IN_stmts.count((*it)->instruction)){
+            IN.insert(**it);
+          }
+        }
+        for(auto it = m->automata[pid].get_states()[q].fwd_transitions.begin();
+            it != m->automata[pid].get_states()[q].fwd_transitions.end(); ++it){
+          if(OUT_stmts.count((*it)->instruction)){
+            OUT.insert(**it);
+          }
+        }
+      }
+      Lang::Stmt<int> fence = Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),Lang::Expr<int>::integer(0));
+      return Dummy(fence,pid,q,IN,OUT);
+    };
+  };
+
   /* Test get_all_possible */
   {
 
@@ -178,31 +408,6 @@ void FenceSync::test(){
      * (global(0)) acts as a total fence. */
     fs0.insert(Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),
                                              Lang::Expr<int>::integer(0)));
-
-    /* Dummy concrete implementation of FenceSync. */
-    class Dummy : public FenceSync{
-    public:
-      Dummy(Lang::Stmt<int> f, int pid, int q, 
-            std::set<Automaton::Transition> IN, 
-            std::set<Automaton::Transition> OUT)
-        : FenceSync(f,pid,q,IN,OUT) {};
-      ~Dummy() {};
-      virtual Machine *insert(const Machine &m) const{return 0;};
-      virtual bool prevents(const Trace &t) const{return false;};
-      virtual std::string to_raw_string() const{return "";};
-      bool operator==(const Dummy &d) const{
-        return f == d.f && pid == d.pid && q == d.q &&
-          IN == d.IN && OUT == d.OUT;
-      };
-      bool operator<(const Dummy &d) const{
-        return 
-          (f < d.f) ||
-          (f == d.f && pid < d.pid) ||
-          (f == d.f && pid == d.pid && q < d.q) ||
-          (f == d.f && pid == d.pid && q == d.q && IN < d.IN) ||
-          (f == d.f && pid == d.pid && q == d.q && IN == d.IN && OUT < d.OUT);
-      };
-    };
 
     fs_init_t fsinit = 
       [](Lang::Stmt<int> f, int pid, int q, 
@@ -218,12 +423,6 @@ void FenceSync::test(){
      * All statements in m should be unique and may reference global
      * memory locations fnc, x, y, and registers $r0, $r1, $r2.
      */
-    class StmtCmp{
-    public:
-      bool operator()(const Lang::Stmt<int> &a, const Lang::Stmt<int> &b) const{
-        return a.compare(b,false) < 0;
-      }
-    };
     std::function<bool(const Machine*,const std::set<Sync*>&,std::string)> tst = 
       [](const Machine *m,const std::set<Sync*> &syncset,std::string tgt_s){
       /* Parse tgt_s, create target Dummys */
@@ -233,90 +432,13 @@ void FenceSync::test(){
         std::size_t lnend;
         while(lnbegin < tgt_s.size()){
           lnend = tgt_s.find('\n',lnbegin);
-          int pid;
-          {
-            std::stringstream ss(tgt_s.substr(lnbegin));
-            ss >> pid;
-            lnbegin = tgt_s.find('{',lnbegin); // Skip until after pid
-          }
-          std::set<Lang::Stmt<int>,StmtCmp> IN_stmts, OUT_stmts;
-          {
-            std::string pre = 
-              "forbidden *\n"
-              "data\n"
-              "  fnc = *\n"
-              "  x = *\n"
-              "  y = *\n"
-              "process\n"
-              "registers\n"
-              "  $r0 = *\n"
-              "  $r1 = *\n"
-              "  $r2 = *\n"
-              "text\n";
-            std::string IN_s, OUT_s;
-            int i = tgt_s.find("to",lnbegin);
-            IN_s = tgt_s.substr(lnbegin,i - lnbegin);
-            OUT_s = tgt_s.substr(i+2,(lnend == std::string::npos) ? std::string::npos : lnend - i - 2);
-            {
-              std::stringstream ss(pre+IN_s);
-              PPLexer lex(ss);
-              Machine m(Parser::p_test(lex));
-              for(unsigned j = 0; j < m.automata[0].get_states().size(); ++j){
-                const std::set<Automaton::Transition*> &s = 
-                  m.automata[0].get_states()[j].fwd_transitions;
-                for(auto it = s.begin(); it != s.end(); ++it){
-                  IN_stmts.insert((*it)->instruction);
-                }
-              }
-            }
-            {
-              std::stringstream ss(pre+OUT_s);
-              PPLexer lex(ss);
-              Machine m(Parser::p_test(lex));
-              for(unsigned j = 0; j < m.automata[0].get_states().size(); ++j){
-                const std::set<Automaton::Transition*> &s = 
-                  m.automata[0].get_states()[j].fwd_transitions;
-                for(auto it = s.begin(); it != s.end(); ++it){
-                  OUT_stmts.insert((*it)->instruction);
-                }
-              }
-            }
-          }
-          int q = -1;
-          {
-            /* Find the right control location */
-            const std::vector<Automaton::State> &states = m->automata[pid].get_states();
-            for(unsigned i = 0; i < states.size(); ++i){
-              if(std::any_of(states[i].fwd_transitions.begin(),states[i].fwd_transitions.end(),
-                             [&OUT_stmts](const Automaton::Transition *pt){
-                               return OUT_stmts.count(pt->instruction) > 0;
-                             })){
-                q = i;
-                break;
-              }
-            }
+
+          if(lnend == std::string::npos){
+            dummys.insert(Dummy::parse_dummy(m,tgt_s.substr(lnbegin)));
+          }else{
+            dummys.insert(Dummy::parse_dummy(m,tgt_s.substr(lnbegin,lnend - lnbegin)));
           }
 
-          assert(q >= 0);
-
-          std::set<Automaton::Transition> IN, OUT;
-          {
-            for(auto it = m->automata[pid].get_states()[q].bwd_transitions.begin();
-                it != m->automata[pid].get_states()[q].bwd_transitions.end(); ++it){
-              if(IN_stmts.count((*it)->instruction)){
-                IN.insert(**it);
-              }
-            }
-            for(auto it = m->automata[pid].get_states()[q].fwd_transitions.begin();
-                it != m->automata[pid].get_states()[q].fwd_transitions.end(); ++it){
-              if(OUT_stmts.count((*it)->instruction)){
-                OUT.insert(**it);
-              }
-            }
-          }
-
-          dummys.insert(Dummy(Lang::Stmt<int>::nop(),pid,q,IN,OUT));
-          
           lnbegin = (lnend == std::string::npos) ? tgt_s.size() : lnend+1;
         }
       }
@@ -474,6 +596,209 @@ void FenceSync::test(){
         delete *it;
       }
 
+      delete m;
+    }
+  }
+
+  /* Test insert */
+  {
+    /* Test 1: Simple */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  fnc = 0 : [0:0]\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  $r0 := 0;\n"
+         "  $r0 := 1\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  $r0 := 0;\n"
+         "  locked write: fnc := 0;\n"
+         "  $r0 := 1"
+         );
+
+      Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0}to{$r0 := 1}");
+      Machine *m2 = d.insert(*m);
+
+      Test::inner_test("insert #1",m2->automata[1].same_automaton(m2->automata[0],false));
+
+      delete m2;
+      delete m;
+    }
+
+    /* Test 2: Simple */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  fnc = 0 : [0:0]\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  $r0 := 0;\n"
+         "  $r0 := 1;\n"
+         "  $r0 := 2"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  $r0 := 0;\n"
+         "  locked write: fnc := 0;\n"
+         "  $r0 := 1;\n"
+         "  $r0 := 2"
+         );
+
+      Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0}to{$r0 := 1}");
+      Machine *m2 = d.insert(*m);
+
+      Test::inner_test("insert #2",m2->automata[1].same_automaton(m2->automata[0],false));
+
+      delete m2;
+      delete m;
+    }
+
+    /* Test 3: Multiple transitions */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  fnc = 0 : [0:0]\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0\n"
+         "  or\n"
+         "    $r0 := 1\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 2\n"
+         "  or\n"
+         "    $r0 := 3\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0\n"
+         "  or\n"
+         "    $r0 := 1\n"
+         "  };\n"
+         "  locked write: fnc := 0;\n"
+         "  either{\n"
+         "    $r0 := 2\n"
+         "  or\n"
+         "    $r0 := 3\n"
+         "  }\n"
+         );
+
+      Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0; $r0 := 1}to{$r0 := 2; $r0 := 3}");
+      Machine *m2 = d.insert(*m);
+
+      Test::inner_test("insert #3",m2->automata[1].same_automaton(m2->automata[0],false));
+
+      delete m2;
+      delete m;
+    }
+
+    /* Test 4: Multiple transitions */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  fnc = 0 : [0:0]\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0\n"
+         "  or\n"
+         "    $r0 := 1\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 2\n"
+         "  or\n"
+         "    $r0 := 3\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    locked write: fnc := 0\n"
+         "  or\n"
+         "    $r0 := 1\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 2\n"
+         "  or\n"
+         "    $r0 := 3\n"
+         "  }\n"
+         );
+
+      Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0}to{$r0 := 2; $r0 := 3}");
+      Machine *m2 = d.insert(*m);
+
+      Test::inner_test("insert #4",m2->automata[1].same_automaton(m2->automata[0],false));
+
+      delete m2;
+      delete m;
+    }
+
+    /* Test 5: Multiple transitions */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  fnc = 0 : [0:0]\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0\n"
+         "  or\n"
+         "    $r0 := 1\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 2\n"
+         "  or\n"
+         "    $r0 := 3\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0\n"
+         "  or\n"
+         "    $r0 := 1\n"
+         "  };\n"
+         "  either{\n"
+         "    locked write: fnc := 0;\n"
+         "    $r0 := 2\n"
+         "  or\n"
+         "    $r0 := 3\n"
+         "  }\n"
+         );
+
+      Dummy d = Dummy::parse_dummy(m,"0{$r0 := 0; $r0 := 1}to{$r0 := 2}");
+      Machine *m2 = d.insert(*m);
+
+      Test::inner_test("insert #5",m2->automata[1].same_automaton(m2->automata[0],false));
+
+      delete m2;
       delete m;
     }
   }

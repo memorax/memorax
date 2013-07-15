@@ -88,6 +88,13 @@ private:
   /* Returns the power set of s. */
   template<class T>
   static std::set<std::set<T> > powerset(const std::set<T> &s);
+
+  /* Checks if this FenceSync is correct with respect to m.
+   * I.e. that process pid exists in m, and has a control state q.
+   * IN is a (non-strict) subset of the transitions targeting q, and
+   * OUT is a (non-strict) subset of the transitions originating in q.
+   */
+  bool applies_to(const Machine &m) const;
 };
 
 #endif
