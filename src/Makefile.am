@@ -39,6 +39,7 @@ timer.h timer.cpp \
 trace.cpp trace.h \
 tso_cycle.cpp tso_cycle.h \
 tso_cycle_lock.cpp tso_cycle_lock.h \
+tso_fence_sync.h tso_fence_sync.cpp \
 tso_fencins.cpp tso_fencins.h \
 tso_var.cpp tso_var.h \
 vecset.h vecset.tcc \

@@ -48,6 +48,7 @@
 #include "timer.h"
 #include <iomanip>
 #include "fence_sync.h"
+#include "tso_fence_sync.h"
 
 struct Flag{
   Flag() {};
@@ -599,10 +600,11 @@ int main(int argc, char *argv[]){
       break;
     case TEST:
       Test::add_test("Automaton",Automaton::test);
+      Test::add_test("FenceSync",FenceSync::test);
+      Test::add_test("Machine",Machine::test);
       Test::add_test("Test",Test::test_testing);
       Test::add_test("ZStar",ZStar<int>::test);
-      Test::add_test("Machine",Machine::test);
-      Test::add_test("FenceSync",FenceSync::test);
+      Test::add_test("TsoFenceSync",TsoFenceSync::test);
       retval = Test::run_tests();
       break;
     default: 

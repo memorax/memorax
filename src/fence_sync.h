@@ -93,6 +93,14 @@ public:
   virtual std::string to_string(const Machine &m) const;
   static void test();
 protected:
+  /* This FenceSync is (f,pid,q,IN,OUT) as described at the main
+   * description of FenceSync at the top of this file. */
+  Lang::Stmt<int> f;
+  int pid;
+  int q;
+  std::set<Automaton::Transition> IN;
+  std::set<Automaton::Transition> OUT;
+
   /* Returns a set S of Sync objects, such that for each FenceSync
    * object (f,pid,q,IN,OUT) corresponding to some fence f in fs that
    * can be inserted into m, the object fsinit(f,pid,q,IN,OUT) is in
@@ -108,13 +116,6 @@ protected:
                                           const std::set<Lang::Stmt<int> > &fs,
                                           const fs_init_t &fsinit);
 private:
-  /* This FenceSync is (f,pid,q,IN,OUT) as described at the main
-   * description of FenceSync at the top of this file. */
-  Lang::Stmt<int> f;
-  int pid;
-  int q;
-  std::set<Automaton::Transition> IN;
-  std::set<Automaton::Transition> OUT;
 
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
