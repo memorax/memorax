@@ -46,7 +46,7 @@ std::string FenceSync::to_string(const Machine &m) const{
 Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const{
   assert(applies_to(m,m_infos));
 
-  InsInfo *myinfo = new InsInfo(clone());
+  InsInfo *myinfo = new InsInfo((FenceSync*)clone());
   *info = myinfo;
 
   Log::warning << "FenceSync::insert: Unclean handling of forbidden\n";

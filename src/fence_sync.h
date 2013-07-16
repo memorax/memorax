@@ -57,6 +57,8 @@ public:
   class InsInfo : public Sync::InsInfo{
   public:
     InsInfo(const FenceSync *creator_copy) : Sync::InsInfo(creator_copy) {};
+    InsInfo(const InsInfo &) = default;
+    virtual InsInfo &operator=(const InsInfo &) = default;
     virtual ~InsInfo(){};
     /* When a FenceSync is inserted into a Machine m, creating the
      * Machine m', for each transition t in m, tchanges[t] is that
@@ -87,8 +89,7 @@ public:
 
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
   virtual bool prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const = 0;
-  /* Return a deep copy of this object. */
-  virtual FenceSync *clone() const = 0;
+  virtual Sync *clone() const = 0;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
   static void test();

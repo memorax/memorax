@@ -43,6 +43,8 @@ public:
   class InsInfo : public FenceSync::InsInfo{
   public:
     InsInfo(const FenceSync::InsInfo &fs_info, const Lang::NML &fence_nml);
+    InsInfo(const InsInfo &) = default;
+    virtual InsInfo &operator=(const InsInfo &) = default;
     virtual ~InsInfo();
     /* The dummy memory location that was used for the inserted fence
      * instruction. */
@@ -50,7 +52,7 @@ public:
   };
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
   virtual bool prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
-  virtual FenceSync *clone() const;
+  virtual Sync *clone() const;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
   static void test();
@@ -60,6 +62,13 @@ public:
 private:
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
+
+  /* Get a pair (m2,nml) where m2 is a clone of m, where additionally
+   * nml is declared. The memory location nml is a memory location
+   * with a singleton domain. If there is a TsoFenceSync::InsInfo
+   * object info in m_infos, then nml == info.fence_nml.
+   */
+  static std::pair<Machine*,Lang::NML> get_dummy_nml(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos);
 };
 
 #endif

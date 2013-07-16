@@ -52,6 +52,14 @@ public:
      * InsInfo takes ownership over creator_copy.
      */
     InsInfo(const Sync *creator_copy) : sync(creator_copy) {};
+    InsInfo(const InsInfo &ii) : sync(ii.sync ? ii.sync->clone() : 0) {};
+    virtual InsInfo &operator=(const InsInfo &ii){
+      if(&ii != this){
+        if(sync) delete sync;
+        sync = ii.sync;
+      }
+      return *this;
+    };
     virtual ~InsInfo() { if(sync) delete sync; };
     /* A copy of the Sync that created this InsInfo. */
     const Sync *sync;
@@ -72,6 +80,8 @@ public:
    */
   virtual Machine *insert(const Machine &m, const std::vector<const InsInfo*> &m_infos, InsInfo **info) const = 0;
   virtual bool prevents(const Trace &t, const std::vector<const InsInfo*> &m_infos) const = 0;
+  /* Return a deep copy of this object. */
+  virtual Sync *clone() const = 0;
   virtual std::string to_raw_string() const = 0;
   virtual std::string to_string() const { return to_raw_string(); };
   virtual std::string to_string(const Machine &m) const { return to_string(); };
