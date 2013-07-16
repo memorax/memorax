@@ -58,10 +58,35 @@ public:
   public:
     InsInfo(const FenceSync *creator_copy) : Sync::InsInfo(creator_copy) {};
     virtual ~InsInfo(){};
+    /* When a FenceSync is inserted into a Machine m, creating the
+     * Machine m', for each transition t in m, tchanges[t] is that
+     * transition as it occurs in tchanges.
+     *
+     * This means that some transitions will map to themselves, while
+     * others on the form (q0,i,q1) will map to (q0',i,q1') where
+     * either q0' != q0 or q1' != q1.
+     *
+     * tchanges[t] is defined for all transitions t in m.
+     */
+    std::map<Machine::PTransition,Machine::PTransition> tchanges;
+    /* Insert a->b into tchanges. */
+    void bind(const Machine::PTransition &a,const Machine::PTransition &b);
+    /* Shorthand for tchanges[t]. */
+    const Machine::PTransition &operator[](const Machine::PTransition &t) const;
+
+    /* If ivec = [&a,&b,...,&z] then the returned transition is
+     *
+     * z[...b[a[t]]...]
+     *
+     * Pre: All elements in ivec are pointers to FenceSync::InsInfo
+     * objects (or derivatives).
+     */
+    static Machine::PTransition all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
+                                             const Machine::PTransition &t);
   };
 
-  virtual Machine *insert(const Machine &m, std::vector<const Sync::InsInfo*> m_infos, Sync::InsInfo **info) const;
-  virtual bool prevents(const Trace &t) const = 0;
+  virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
+  virtual bool prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const = 0;
   /* Return a deep copy of this object. */
   virtual FenceSync *clone() const = 0;
   virtual std::string to_raw_string() const;
@@ -102,8 +127,11 @@ private:
    * I.e. that process pid exists in m, and has a control state q.
    * IN is a (non-strict) subset of the transitions targeting q, and
    * OUT is a (non-strict) subset of the transitions originating in q.
+   *
+   * m is assumed to be the result of applying the changes described
+   * in m_infos to to the Machine that this FenceSync was created for.
    */
-  bool applies_to(const Machine &m) const;
+  bool applies_to(const Machine &m,const std::vector<const Sync::InsInfo*> &m_infos) const;
 };
 
 #endif

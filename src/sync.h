@@ -70,8 +70,8 @@ public:
    *
    * This Sync surrenders ownership of *info to the caller.
    */
-  virtual Machine *insert(const Machine &m, std::vector<const InsInfo*> m_infos, InsInfo **info) const = 0;
-  virtual bool prevents(const Trace &t) const = 0;
+  virtual Machine *insert(const Machine &m, const std::vector<const InsInfo*> &m_infos, InsInfo **info) const = 0;
+  virtual bool prevents(const Trace &t, const std::vector<const InsInfo*> &m_infos) const = 0;
   virtual std::string to_raw_string() const = 0;
   virtual std::string to_string() const { return to_raw_string(); };
   virtual std::string to_string(const Machine &m) const { return to_string(); };
