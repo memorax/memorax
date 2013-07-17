@@ -51,7 +51,6 @@ public:
     Lang::NML fence_nml;
   };
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
-  virtual bool prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
   virtual Sync *clone() const;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;

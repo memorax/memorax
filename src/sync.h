@@ -22,7 +22,6 @@
 #define __SYNC_H__
 
 #include "machine.h"
-#include "trace.h"
 
 /* Sync is an abstract class representing a piece of synchronization
  * that can be inserted into a machine. Derived classes could
@@ -79,7 +78,6 @@ public:
    * This Sync surrenders ownership of *info to the caller.
    */
   virtual Machine *insert(const Machine &m, const std::vector<const InsInfo*> &m_infos, InsInfo **info) const = 0;
-  virtual bool prevents(const Trace &t, const std::vector<const InsInfo*> &m_infos) const = 0;
   /* Return a deep copy of this object. */
   virtual Sync *clone() const = 0;
   virtual std::string to_raw_string() const = 0;

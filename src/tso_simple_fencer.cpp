@@ -1,0 +1,547 @@
+/*
+ * Copyright (C) 2013 Carl Leonardsson
+ * 
+ * This file is part of Memorax.
+ *
+ * Memorax is free software: you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * Memorax is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
+ * License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
+
+#include "preprocessor.h"
+#include "test.h"
+#include "tso_fence_sync.h"
+#include "tso_simple_fencer.h"
+#include "vecset.h"
+
+#include <stdexcept>
+
+TsoSimpleFencer::TsoSimpleFencer(const Machine &m,fence_rule_t rule)
+  : TraceFencer(m), fence_rule(rule){
+  if(fence_rule != FENCE){
+    throw new std::logic_error("TsoSimpleFencer: Only rule FENCE is currently supported.");
+  }
+  /* Get all fences for m */
+  {
+    for(unsigned p = 0; p < machine.automata.size(); ++p){
+      fences_by_pq.push_back(std::vector<std::set<TsoFenceSync*> >(machine.automata[p].get_states().size()));
+    }
+    std::set<Sync*> tfs = TsoFenceSync::get_all_possible(machine);
+    for(auto it = tfs.begin(); it != tfs.end(); ++it){
+      assert(dynamic_cast<TsoFenceSync*>(*it));
+      TsoFenceSync *f = static_cast<TsoFenceSync*>(*it);
+      all_fences.insert(f);
+      fences_by_pq[f->get_pid()][f->get_q()].insert(f);
+    }
+  }
+};
+
+TsoSimpleFencer::~TsoSimpleFencer(){
+  for(auto it = all_fences.begin(); it != all_fences.end(); ++it){
+    delete *it;
+  }
+};
+
+std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{
+  /* buf_sizes[p] is the current buffer length for process p. */
+  std::vector<int> buf_sizes(machine.automata.size(),0);
+  /* pcs[p] is the current control state of process p. */
+  std::vector<int> pcs(machine.automata.size(),0);
+  /* The synchronizations that prevent some reordering in t. */
+  std::set<Sync*> preventing_syncs;
+  /* When the buffer of process p is non-empty, collect
+   * synchronizations in pending_syncs[p] that would force the buffer
+   * to flush. If a read of p is encountered before the buffer of p
+   * empties, the synchronizations in pending_syncs[p] have been shown
+   * to prevent reordering, and so are removed from pending_syncs[p]
+   * and inserted into preventing_syncs.
+   */
+  std::vector<std::set<Sync*> > pending_syncs(machine.automata.size());
+
+  for(int i = 1; i <= t.size(); ++i){
+    int pid = t[i]->pid;
+    switch(t[i]->instruction.get_type()){
+    case Lang::WRITE:
+      ++buf_sizes[pid];
+      break;
+    case Lang::UPDATE:
+      --buf_sizes[pid];
+      if(buf_sizes[pid] == 0){
+        /* The delayed writes did not delay past any read */
+        pending_syncs[pid].clear();
+      }
+      break;
+    default:
+      // Do nothing
+      break;
+    }
+    pcs[pid] = t[i]->target;
+    if(t[i]->instruction.get_reads().size() > 0){
+      for(auto it = pending_syncs[pid].begin(); it != pending_syncs[pid].end(); ++it){
+        preventing_syncs.insert((*it)->clone());
+      }
+      pending_syncs[pid].clear();
+    }
+    /* Should we look for synchronization to insert? */
+    if(buf_sizes[pid] > 0
+       && t[i]->instruction.get_type() != Lang::UPDATE
+       && pcs[pid] < (int)fences_by_pq[pid].size()){
+      /* Find the next instruction of pid */
+      const Automaton::Transition *next_instr = 0;
+      for(int j = i+1; next_instr == 0 && j <= t.size(); ++j){
+        if(t[j]->pid == pid && t[j]->instruction.get_type() != Lang::UPDATE){
+          next_instr = t[j];
+        }
+      }
+      if(next_instr){
+        std::set<Sync*> fs = fences_between(pid,*t[i],*next_instr,m_infos);
+        pending_syncs[pid].insert(fs.begin(),fs.end());
+      }
+    }
+  }
+
+  if(preventing_syncs.empty()){
+    /* No W->R relaxation, hence there can be no cycles in the trace
+     * graph of t.
+     */
+    return std::set<std::set<Sync*> >();
+  }else{
+    std::set<std::set<Sync*> > s;
+    s.insert(preventing_syncs);
+    return s;
+  }
+};
+
+std::set<Sync*> TsoSimpleFencer::fences_between(int pid,
+                                                const Automaton::Transition &in,
+                                                const Automaton::Transition &out,
+                                                const std::vector<const Sync::InsInfo*> &m_infos) const{
+  assert(in.target == out.source);
+  int q = in.target;
+
+  if(q >= (int)fences_by_pq[pid].size()){
+    /* q is a control state that does not exist in the original
+     * machine. Hence it has been inserted by some FenceSync. Then all
+     * paths through q already passes through a fence that is adjacent
+     * to q. Return no synchronization.
+     */
+    return std::set<Sync*>();
+  }
+
+  const std::set<TsoFenceSync*> &pqs = fences_by_pq[pid][q];
+
+  /* Return true iff there is some t' in S such that t' changed
+   * according to m_infos equals t.
+   */
+  std::function<bool(const Automaton::Transition&,const std::set<Automaton::Transition>&)> member = 
+    [&m_infos,pid](const Automaton::Transition &t,const std::set<Automaton::Transition> &S){
+    for(auto it = S.begin(); it != S.end(); ++it){
+      if(t.compare(FenceSync::InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid)),false) == 0){
+        return true;
+      }
+    }
+    return false;
+  };
+
+  std::set<Sync*> syncs;
+
+  for(auto it = pqs.begin(); it != pqs.end(); ++it){
+    /* Check that in and out are in IN and OUT of *it. */
+    if(member(in,(*it)->get_IN()) && member(out,(*it)->get_OUT())){
+      syncs.insert(*it);
+    }
+  }
+
+  return syncs;
+};
+
+void TsoSimpleFencer::test(){
+  std::function<Machine*(std::string)> get_machine = 
+    [](std::string rmm){
+    std::stringstream ss(rmm);
+    PPLexer pp(ss);
+    return new Machine(Parser::p_test(pp));
+  };
+
+  /* Returns the transition from m of process pid going from (and to)
+   * the control state labeled src_lbl (and tgt_lbl) with an
+   * instruction like instr.
+   *
+   * The global memory locations in m should be u,v,w,x,y,z in that
+   * order. instr may only access global memory locations.
+   */
+  std::function<Machine::PTransition(const Machine*,int,std::string,std::string,std::string)> trans = 
+    [&get_machine](const Machine *m,int pid,std::string src_lbl,std::string instr, std::string tgt_lbl){
+    Machine *m2 = get_machine
+    ("forbidden *\n"
+     "data\n"
+     "  u = *\n"
+     "  v = *\n"
+     "  w = *\n"
+     "  x = *\n"
+     "  y = *\n"
+     "  z = *\n"
+     "process\n"
+     "text\n"+instr);
+    Lang::Stmt<int> stmt = (*m2->automata[0].get_states()[0].fwd_transitions.begin())->instruction;
+    delete m2;
+    int src = m->automata[pid].state_index_of_label(src_lbl);
+    int tgt = m->automata[pid].state_index_of_label(tgt_lbl);
+    Automaton::Transition t_like(src,stmt,tgt);
+    const Automaton::State &s = m->automata[pid].get_states()[src];
+    for(auto it = s.fwd_transitions.begin(); it != s.fwd_transitions.end(); ++it){
+      if((*it)->compare(t_like,false) == 0){
+        return Machine::PTransition(**it,pid);
+      }
+    }
+    throw new std::logic_error("TsoSimpleFencer::test::trans: No such transition.");
+  };
+
+  std::function<int(const Machine*,int,std::string)> cs =
+    [](const Machine *m,int pid,std::string lbl){
+    return m->automata[pid].state_index_of_label(lbl);
+  };
+
+  std::function<Machine::PTransition(const Machine*,int,Lang::NML,std::string)> update =
+    [&cs](const Machine *m,int pid,Lang::NML nml,std::string lbl){
+    VecSet<Lang::MemLoc<int> > mls;
+    mls.insert(nml.localize(pid));
+    Lang::Stmt<int> stmt = Lang::Stmt<int>::update(pid,mls);
+    int q = cs(m,pid,lbl);
+    return Machine::PTransition(q,stmt,q,pid);
+  };
+
+  Lang::NML u = Lang::NML::global(0);
+  Lang::NML v = Lang::NML::global(1);
+  Lang::NML w = Lang::NML::global(2);
+  Lang::NML x = Lang::NML::global(3);
+
+  /* Test fence */
+  {
+    std::function<bool(const std::set<std::set<Sync*> > &,const Machine*,int,int,std::string)> check_S = 
+      [&cs](const std::set<std::set<Sync*> > &S,const Machine *m,int sz,int pid,std::string lbl){
+      if(S.size() != 1){
+        return false;
+      }
+      std::set<Sync*> Z = *S.begin();
+      if((int)Z.size() != sz){
+        return false;
+      }
+      return std::any_of(Z.begin(),Z.end(),
+                         [m,&cs,pid,lbl](const Sync *s){
+                           const FenceSync *fs = static_cast<const FenceSync*>(s);
+                           return fs->get_pid() == pid && fs->get_q() == cs(m,pid,lbl);
+                         });
+    };
+
+    /* Test 1,2 */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: x := 1;\n"
+         "  L1: read: y = 0;\n"
+         "  L2: nop\n"
+         );
+
+      TsoSimpleFencer tsf(*m,FENCE);
+      Trace t(0);
+      t.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t.push_back(trans(m,0,"L1","read: y = 0","L2"),0);
+      t.push_back(update(m,0,x,"L2"),0);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+      std::set<Sync*> f = *fs.begin();
+      Test::inner_test("fence #1",
+                       fs.size() == 1 &&
+                       f.size() == 1 &&
+                       static_cast<const FenceSync*>(*f.begin())->get_q() == cs(m,0,"L1"));
+
+      Trace t2(0);
+      t2.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t2.push_back(update(m,0,x,"L1"),0);
+      t2.push_back(trans(m,0,"L1","read: y = 0","L2"),0);
+
+      std::set<std::set<Sync*> > fs2 = tsf.fence(t2,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #2",fs2.size() == 0);
+
+      for(auto it = fs.begin(); it != fs.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+
+      for(auto it = fs2.begin(); it != fs2.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+
+      delete m;
+    }
+
+    /* Test 3,4: ROWE */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: x := 1;\n"
+         "  L1: read: x = 1;\n"
+         "  L2: read: y = 0;\n"
+         "  L3: nop\n"
+         );
+
+      TsoSimpleFencer tsf(*m,FENCE);
+      Trace t(0);
+      t.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t.push_back(trans(m,0,"L1","read: x = 1","L2"),0);
+      t.push_back(trans(m,0,"L2","read: y = 0","L3"),0);
+      t.push_back(update(m,0,x,"L3"),0);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #3",check_S(fs,m,2,0,"L1") && check_S(fs,m,2,0,"L2"));
+
+      for(auto it = fs.begin(); it != fs.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+
+      Trace t2(0);
+      t2.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t2.push_back(trans(m,0,"L1","read: x = 1","L2"),0);
+      t2.push_back(update(m,0,x,"L2"),0);
+      t2.push_back(trans(m,0,"L2","read: y = 0","L3"),0);
+
+      std::set<std::set<Sync*> > fs2 = tsf.fence(t2,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #4",fs2.size() == 0);
+
+      for(auto it = fs2.begin(); it != fs2.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+
+      delete m;
+    }
+
+    /* Test 5: Multiple insert before fence */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: nop;\n"
+         /* insert fence here (f0) */
+         "  L1: either{\n"
+         "    write: x := 1\n"
+         "  or\n"
+         "    nop\n"
+         "  };\n"
+         "  L2: read: y = 0;\n"
+         /* insert fence here (f1) */
+         "  L3: either{\n"
+         "    write: u := 1\n"
+         "  or\n"
+         "    nop\n"
+         "  };\n"
+         "  L4: read: v = 0;\n"
+         "  L5: nop\n"
+         );
+
+      std::set<Automaton::Transition> tmp_IN, tmp_OUT;
+      tmp_IN.insert(trans(m,0,"L0","nop","L1"));
+      tmp_OUT.insert(trans(m,0,"L1","write: x := 1","L2"));
+      TsoFenceSync f0(0,cs(m,0,"L1"),tmp_IN,tmp_OUT);
+      tmp_IN.clear(); tmp_OUT.clear();
+      tmp_IN.insert(trans(m,0,"L2","read: y = 0","L3"));
+      tmp_OUT.insert(trans(m,0,"L3","write: u := 1","L4"));
+      TsoFenceSync f1(0,cs(m,0,"L3"),tmp_IN,tmp_OUT);
+
+      std::vector<const Sync::InsInfo*> m_infos;
+      Sync::InsInfo *info;
+      Machine *m2 = f0.insert(*m,m_infos,&info); m_infos.push_back(info);
+      Machine *m3 = f1.insert(*m2,m_infos,&info); m_infos.push_back(info);
+
+      Trace t(0);
+      {
+        int q = 0;
+        const std::vector<Automaton::State> &ss = m3->automata[0].get_states();
+
+        /* nop */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* fence */
+        assert(ss[q].fwd_transitions.size() == 2);
+        for(auto it = ss[q].fwd_transitions.begin(); it != ss[q].fwd_transitions.end(); ++it){
+          if((*it)->instruction.get_type() == Lang::LOCKED){
+            t.push_back(Machine::PTransition(**it,0),0);
+            q = (*it)->target;
+            break;
+          }
+        }
+        assert(t.size() == 2);
+
+        /* write: x := 1 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* read: y = 0 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* update x */
+        {
+          VecSet<Lang::MemLoc<int> > mls;
+          mls.insert(x.localize(0));
+          t.push_back(Machine::PTransition(q,Lang::Stmt<int>::update(0,mls),q,0),0);
+        }
+
+        /* fence */
+        assert(ss[q].fwd_transitions.size() == 2);
+        for(auto it = ss[q].fwd_transitions.begin(); it != ss[q].fwd_transitions.end(); ++it){
+          if((*it)->instruction.get_type() == Lang::LOCKED){
+            t.push_back(Machine::PTransition(**it,0),0);
+            q = (*it)->target;
+            break;
+          }
+        }
+        assert(t.size() == 6);
+
+        /* write: u := 1 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* read: v = 0 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* update u */
+        {
+          VecSet<Lang::MemLoc<int> > mls;
+          mls.insert(u.localize(0));
+          t.push_back(Machine::PTransition(q,Lang::Stmt<int>::update(0,mls),q,0),0);
+        }
+
+      }
+
+      TsoSimpleFencer tsf(*m,FENCE);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,m_infos);
+
+      Test::inner_test("fence #5", check_S(fs,m,4,0,"L2") && check_S(fs,m,4,0,"L4"));
+
+      for(auto it = fs.begin(); it != fs.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+      for(unsigned i = 0; i < m_infos.size(); ++i){
+        delete m_infos[i];
+      }
+      delete m3;
+      delete m2;
+      delete m;
+    }
+
+    /* Test 6: Stacking writes */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: u := 1;\n"
+         "  L1: write: v := 1;\n"
+         "  L2: write: w := 1;\n"
+         "  L3: read: v = 1;\n"
+         "  L4: read: z = 0;\n"
+         "  L5: read: z = 1;\n"
+         "  L6: write: x := 1;\n"
+         "  L7: read: y = 0;\n"
+         "  L8: nop;\n"
+         "  L9: nop;\n"
+         "  L10: nop"
+         );
+
+      TsoSimpleFencer tsf(*m,FENCE);
+
+      Trace t(0);
+      t.push_back(trans(m,0,"L0","write: u := 1","L1"),0);
+      t.push_back(trans(m,0,"L1","write: v := 1","L2"),0);
+      t.push_back(trans(m,0,"L2","write: w := 1","L3"),0);
+      t.push_back(trans(m,0,"L3","read: v = 1","L4"),0);
+      t.push_back(trans(m,0,"L4","read: z = 0","L5"),0);
+      t.push_back(update(m,0,u,"L5"),0);
+      t.push_back(update(m,0,v,"L5"),0);
+      t.push_back(update(m,0,w,"L5"),0);
+      t.push_back(trans(m,0,"L5","read: z = 1","L6"),0);
+      t.push_back(trans(m,0,"L6","write: x := 1","L7"),0);
+      t.push_back(trans(m,0,"L7","read: y = 0","L8"),0);
+      t.push_back(trans(m,0,"L8","nop","L9"),0);
+      t.push_back(trans(m,0,"L9","nop","L10"),0);
+      t.push_back(update(m,0,x,"L10"),0);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+
+      Test::inner_test("fence #6",
+                       check_S(fs,m,5,0,"L1") &&
+                       check_S(fs,m,5,0,"L2") &&
+                       check_S(fs,m,5,0,"L3") &&
+                       check_S(fs,m,5,0,"L4") &&
+                       check_S(fs,m,5,0,"L7"));
+
+      for(auto it = fs.begin(); it != fs.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+      delete m;      
+    }
+  }
+};

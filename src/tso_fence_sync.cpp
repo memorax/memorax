@@ -69,10 +69,6 @@ Machine *TsoFenceSync::insert(const Machine &m, const std::vector<const Sync::In
   return m3;
 };
 
-bool TsoFenceSync::prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{
-  throw new std::logic_error("TsoFenceSync::prevents: Not implemented.");
-};
-
 Sync *TsoFenceSync::clone() const{
   return new TsoFenceSync(pid,q,IN,OUT);
 };

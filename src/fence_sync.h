@@ -22,6 +22,7 @@
 #define __FENCE_SYNC_H__
 
 #include "sync.h"
+#include "trace.h"
 
 #include <functional>
 #include <set>
@@ -88,10 +89,15 @@ public:
   };
 
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
-  virtual bool prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const = 0;
   virtual Sync *clone() const = 0;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
+  /* Getters for the parts in (f,pid,q,IN,OUT) */
+  Lang::Stmt<int> get_f() const { return f; };
+  virtual int get_pid() const { return pid; };
+  virtual int get_q() const { return q; };
+  virtual const std::set<Automaton::Transition> &get_IN() const { return IN; };
+  virtual const std::set<Automaton::Transition> &get_OUT() const { return OUT; };
   static void test();
 protected:
   /* This FenceSync is (f,pid,q,IN,OUT) as described at the main

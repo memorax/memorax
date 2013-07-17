@@ -49,6 +49,7 @@
 #include <iomanip>
 #include "fence_sync.h"
 #include "tso_fence_sync.h"
+#include "tso_simple_fencer.h"
 
 struct Flag{
   Flag() {};
@@ -605,6 +606,7 @@ int main(int argc, char *argv[]){
       Test::add_test("Test",Test::test_testing);
       Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("TsoFenceSync",TsoFenceSync::test);
+      Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
       retval = Test::run_tests();
       break;
     default: 

@@ -357,7 +357,6 @@ void FenceSync::test(){
           std::set<Automaton::Transition> OUT)
       : FenceSync(f,pid,q,IN,OUT) {};
     ~Dummy() {};
-    virtual bool prevents(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{return false;};
     virtual FenceSync *clone() const{
       return new Dummy(f,pid,q,IN,OUT);
     };
