@@ -24,7 +24,9 @@
 #include "tso_simple_fencer.h"
 #include "vecset.h"
 
+#include <list>
 #include <stdexcept>
+#include <vector>
 
 TsoSimpleFencer::TsoSimpleFencer(const Machine &m,fence_rule_t rule)
   : TraceFencer(m), fence_rule(rule){
@@ -53,8 +55,12 @@ TsoSimpleFencer::~TsoSimpleFencer(){
 };
 
 std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{
-  /* buf_sizes[p] is the current buffer length for process p. */
-  std::vector<int> buf_sizes(machine.automata.size(),0);
+  /* buffers[p] is the current buffer content for process p. Each
+   * element b in buffers[p] is a set of the memory locations modified
+   * by one message in the buffer. Elements closer to the front are
+   * older.
+   */
+  std::vector<std::list<VecSet<Lang::MemLoc<int> > > > buffers(machine.automata.size());
   /* pcs[p] is the current control state of process p. */
   std::vector<int> pcs(machine.automata.size(),0);
   /* The synchronizations that prevent some reordering in t. */
@@ -68,17 +74,29 @@ std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vec
    */
   std::vector<std::set<Sync*> > pending_syncs(machine.automata.size());
 
+  bool check_rowe = true;
+
   for(int i = 1; i <= t.size(); ++i){
     int pid = t[i]->pid;
     switch(t[i]->instruction.get_type()){
     case Lang::WRITE:
-      ++buf_sizes[pid];
+      buffers[pid].push_back(VecSet<Lang::MemLoc<int> >(t[i]->instruction.get_writes()));
       break;
     case Lang::UPDATE:
-      --buf_sizes[pid];
-      if(buf_sizes[pid] == 0){
+      buffers[pid].pop_front();
+      if(buffers[pid].empty()){
         /* The delayed writes did not delay past any read */
         pending_syncs[pid].clear();
+      }
+      break;
+    case Lang::LOCKED:
+      if(t[i]->instruction.get_statement_count() > 1){
+        /* Non-deterministic locked statement. ROWE checking does not
+         * work reliably. Disable it. This may cause unnecessary
+         * fences to be returned, but it will not affect correctness
+         * of this method according to specification.
+         */
+        check_rowe = false;
       }
       break;
     default:
@@ -86,14 +104,14 @@ std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vec
       break;
     }
     pcs[pid] = t[i]->target;
-    if(t[i]->instruction.get_reads().size() > 0){
+    if(t[i]->instruction.get_reads().size() > 0 && (!check_rowe || !is_ROWE(t[i],buffers[pid]))){
       for(auto it = pending_syncs[pid].begin(); it != pending_syncs[pid].end(); ++it){
         preventing_syncs.insert((*it)->clone());
       }
       pending_syncs[pid].clear();
     }
     /* Should we look for synchronization to insert? */
-    if(buf_sizes[pid] > 0
+    if(buffers[pid].size() > 0
        && t[i]->instruction.get_type() != Lang::UPDATE
        && pcs[pid] < (int)fences_by_pq[pid].size()){
       /* Find the next instruction of pid */
@@ -120,6 +138,19 @@ std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vec
     s.insert(preventing_syncs);
     return s;
   }
+};
+
+bool TsoSimpleFencer::is_ROWE(const Machine::PTransition *t,
+                              const std::list<VecSet<Lang::MemLoc<int> > > &buf) const{
+  std::vector<Lang::MemLoc<int> > reads = t->instruction.get_reads();
+  std::set<Lang::MemLoc<int> > writes;
+  for(auto it = buf.begin(); it != buf.end(); ++it){
+    writes.insert(it->begin(),it->end());
+  }
+  return std::all_of(reads.begin(),reads.end(),
+                     [&writes](const Lang::MemLoc<int> &ml){
+                       return writes.count(ml);
+                     });
 };
 
 std::set<Sync*> TsoSimpleFencer::fences_between(int pid,

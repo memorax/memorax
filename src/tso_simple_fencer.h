@@ -22,6 +22,9 @@
 #define __TSO_SIMPLE_FENCER_H__
 
 #include "trace_fencer.h"
+#include "vecset.h"
+
+#include <list>
 
 /* TsoSimpleFencer is a TraceFencer for TSO traces. For a trace t, a
  * TsoSimpleFencer will compute all synchronizations that prevent some
@@ -75,6 +78,12 @@ private:
                                  const Automaton::Transition &in,
                                  const Automaton::Transition &out,
                                  const std::vector<const Sync::InsInfo*> &m_infos) const;
+
+  /* Returns true iff all memory locations read by t exist in the
+   * union of all elements of buf.
+   */
+  bool is_ROWE(const Machine::PTransition *t,
+               const std::list<VecSet<Lang::MemLoc<int> > > &buf) const;
 };
 
 #endif
