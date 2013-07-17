@@ -47,7 +47,8 @@ public:
    *
    * Returns a set S with the following properties.
    *
-   * For all s in S, and all z in s, z is a synchronization for m.
+   * For all s in S, and all z in s, z is a synchronization for m and
+   * z is not already inserted in m'.
    *
    * If S is empty, then the Shasha-Snir trace graph of t is acyclic.
    *
@@ -75,10 +76,10 @@ public:
    * set S = {s} where s is the set of all synchronizations that
    * prevent any reordering occuring in t. Another, naive, way is to,
    * regardless of t return the singleton set S = {s} where s is all
-   * synchronization that can be inserted into m'. The sets s in S may
-   * be pruned according to some normal form on synchronization in
-   * order to decrease searching in the main fence insertion
-   * procedure.
+   * synchronization that can be inserted into m and is not already in
+   * m'. The sets s in S may be pruned according to some normal form
+   * on synchronization in order to decrease searching in the main
+   * fence insertion procedure.
    */
   virtual std::set<std::set<Sync*> > fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const = 0;
 protected:
