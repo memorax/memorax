@@ -256,6 +256,8 @@ void TsoSimpleFencer::test(){
   Lang::NML v = Lang::NML::global(1);
   Lang::NML w = Lang::NML::global(2);
   Lang::NML x = Lang::NML::global(3);
+  Lang::NML y = Lang::NML::global(4);
+  Lang::NML z = Lang::NML::global(5);
 
   /* Test fence */
   {
@@ -573,6 +575,121 @@ void TsoSimpleFencer::test(){
         }
       }
       delete m;      
+    }
+
+    /* Test 7: Spontaneously locked writes */
+    /* A non-locked write executes as a locked write in this trace.
+     * (Artifact of TSO reachability implementations.)
+     * Should not interfere with fence insertion.
+     */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: u := 1;\n"
+         "  L1: write: x := 1;\n"
+         "  L2: read: y = 0;\n"
+         "  L3: nop\n"
+         );
+
+      Trace t(0);
+      {
+        Machine::PTransition lwu(cs(m,0,"L0"),
+                                 Lang::Stmt<int>::locked_write(u.localize(0),Lang::Expr<int>::integer(1)),
+                                 cs(m,0,"L1"),0);
+        t.push_back(lwu,0);
+      }
+      t.push_back(trans(m,0,"L1","write: x := 1","L2"),0);
+      t.push_back(trans(m,0,"L2","read: y = 0","L3"),0);
+      t.push_back(update(m,0,x,"L3"),0);
+
+      TsoSimpleFencer tsf(*m,FENCE);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+
+      Test::inner_test("fence #7", check_S(fs,m,1,0,"L2"));
+
+      for(auto it = fs.begin(); it != fs.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+      delete m;
+    }
+
+    /* Test 8: Multiple interleaved overtakings */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: u := 1;\n"
+         "  L1: read: v = 0;\n"
+         "  L2: write: x := 1;\n"
+         "  L3: write: z := 1;\n"
+         "  L4: read: y = 0;\n"
+         "  L5: read: w = 0;\n"
+         "  L6: nop\n"
+         "process\n"
+         "text\n"
+         "  K0: write: u := 1;\n"
+         "  K1: read: v = 0;\n"
+         "  L0: write: y := 1;\n"
+         "  L1: write: z := 2;\n"
+         "  L2: read: x = 0;\n"
+         "  L3: nop\n"
+         );
+
+      Trace t(0);
+      t.push_back(trans(m,1,"K0","write: u := 1","K1"),0);
+      t.push_back(trans(m,0,"L0","write: u := 1","L1"),0);
+      t.push_back(trans(m,1,"K1","read: v = 0","L0"),0);
+      t.push_back(trans(m,0,"L1","read: v = 0","L2"),0);
+      t.push_back(update(m,0,u,"L2"),0);
+      t.push_back(update(m,1,u,"L0"),0);
+      t.push_back(trans(m,0,"L2","write: x := 1","L3"),0);
+      t.push_back(trans(m,0,"L3","write: z := 1","L4"),0);
+      t.push_back(trans(m,1,"L0","write: y := 1","L1"),0);
+      t.push_back(trans(m,1,"L1","write: z := 2","L2"),0);
+      t.push_back(trans(m,0,"L4","read: y = 0","L5"),0);
+      t.push_back(update(m,1,y,"L2"),0);
+      t.push_back(update(m,1,z,"L2"),0);
+      t.push_back(trans(m,1,"L2","read: x = 0","L3"),0);
+      t.push_back(update(m,0,x,"L5"),0);
+      t.push_back(update(m,0,z,"L5"),0);
+      t.push_back(trans(m,0,"L5","read: w = 0","L6"),0);
+
+      TsoSimpleFencer tsf(*m,FENCE);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+
+      Test::inner_test("fence #8",
+                       check_S(fs,m,4,0,"L1") &&
+                       check_S(fs,m,4,0,"L3") &&
+                       check_S(fs,m,4,0,"L4") &&
+                       check_S(fs,m,4,1,"K1"));
+
+      for(auto it = fs.begin(); it != fs.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
+      delete m;
     }
   }
 };
