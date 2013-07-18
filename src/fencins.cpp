@@ -503,6 +503,8 @@ namespace Fencins{
         "  }\n";
       Test::inner_test("fencins only_one #4",
                        test_sb_only_one(rmm,"L2 | L2"));
+      Test::inner_test("fencins all #4.2",
+                       test_sb_all(rmm,"L2 | L2",0));
     }
 
     /* Test 5 */
