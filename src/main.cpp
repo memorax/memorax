@@ -19,6 +19,7 @@
  */
 
 
+#include "min_coverage.h"
 #include <iostream>
 #include "lexer.h"
 #include "preprocessor.h"
@@ -603,9 +604,10 @@ int main(int argc, char *argv[]){
       Test::add_test("Automaton",Automaton::test);
       Test::add_test("FenceSync",FenceSync::test);
       Test::add_test("Machine",Machine::test);
+      Test::add_test("MinCoverage",MinCoverage::test);
       Test::add_test("Test",Test::test_testing);
-      Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("TsoFenceSync",TsoFenceSync::test);
+      Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
       retval = Test::run_tests();
       break;
