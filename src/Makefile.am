@@ -12,6 +12,7 @@ constraint_container.h \
 constraint.h \
 exact_bwd.cpp exact_bwd.h \
 fence_sync.h fence_sync.cpp \
+fencins.h fencins.cpp \
 lang.tcc lang.h \
 lexer.cpp lexer.h \
 log.cpp log.h \
@@ -32,7 +33,7 @@ sb_tso_bwd.cpp sb_tso_bwd.h \
 shared.h \
 sharinglist.tcc sharinglist.h \
 shellcmd.cpp shellcmd.h \
-sync.h \
+sync.h sync.cpp \
 syntax_string.tcc syntax_string.h \
 test.h test.cpp \
 ticket_queue.h \

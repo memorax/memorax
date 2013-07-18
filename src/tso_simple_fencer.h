@@ -22,6 +22,7 @@
 #define __TSO_SIMPLE_FENCER_H__
 
 #include "trace_fencer.h"
+#include "tso_fence_sync.h"
 #include "vecset.h"
 
 #include <list>

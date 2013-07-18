@@ -122,6 +122,8 @@ protected:
   static std::set<Sync*> get_all_possible(const Machine &m,
                                           const std::set<Lang::Stmt<int> > &fs,
                                           const fs_init_t &fsinit);
+
+  virtual int compare(const Sync &s) const;
 private:
 
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 

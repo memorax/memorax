@@ -83,6 +83,10 @@ public:
   virtual std::string to_raw_string() const = 0;
   virtual std::string to_string() const { return to_raw_string(); };
   virtual std::string to_string(const Machine &m) const { return to_string(); };
+  bool operator<(const Sync &s) const;
+  bool operator==(const Sync &s) const;
+protected:
+  virtual int compare(const Sync &s) const = 0;
 };
 
 #endif

@@ -58,6 +58,8 @@ public:
 
   /* Returns all TsoFenceSyncs that can be inserted into m. */
   static std::set<Sync*> get_all_possible(const Machine &m);
+protected:
+  virtual int compare(const Sync &s) const { return FenceSync::compare(s); };
 private:
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;

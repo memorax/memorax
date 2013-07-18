@@ -280,6 +280,52 @@ Machine::PTransition FenceSync::InsInfo::all_tchanges(const std::vector<const Sy
   return t2;
 };
 
+int FenceSync::compare(const Sync &s) const{
+  assert(dynamic_cast<const FenceSync*>(&s));
+  const FenceSync *fs = static_cast<const FenceSync*>(&s);
+
+  int f_cmp = f.compare(fs->f,false);
+  if(f_cmp != 0) return f_cmp;
+
+  if(pid < fs->pid) return -1;
+  if(pid > fs->pid) return 1;
+
+  if(q < fs->q) return -1;
+  if(q > fs->q) return 1;
+
+  std::function<int(const std::set<Automaton::Transition> &,
+                    const std::set<Automaton::Transition> &)> cmp_sets = 
+    [](const std::set<Automaton::Transition> &S,
+       const std::set<Automaton::Transition> &T){
+
+    typedef std::function<bool(const Automaton::Transition&,
+                               const Automaton::Transition&)> 
+    cmp_fn_t;
+
+    cmp_fn_t cmp_fn = [](const Automaton::Transition &a,
+                         const Automaton::Transition &b){
+      return a.compare(b,false) < 0;
+    };
+
+    std::set<Automaton::Transition,cmp_fn_t> SS(cmp_fn), TT(cmp_fn);
+    SS.insert(S.begin(),S.end());
+    TT.insert(T.begin(),T.end());
+
+    if(SS < TT){
+      return -1;
+    }
+    if(TT > SS){
+      return 1;
+    }
+    return 0;
+  };
+
+  int c = cmp_sets(IN,fs->IN);
+  if(c != 0) return c;
+
+  return cmp_sets(OUT,fs->OUT);
+};
+
 void FenceSync::test(){
   /* Test powerset */
   {

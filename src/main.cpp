@@ -18,39 +18,40 @@
  *
  */
 
-
-#include "min_coverage.h"
-#include <iostream>
-#include "lexer.h"
-#include "preprocessor.h"
-#include "machine.h"
-#include "shellcmd.h"
-#include <stdexcept>
-#include <set>
-#include <map>
-#include <fstream>
-#include <cstdio>
-#include <unistd.h>
-#include <cstring>
-#include "predicates.h"
 #include "constraint.h"
-#include "pb_constraint.h"
 #include "exact_bwd.h"
+#include "fence_sync.h"
+#include "fencins.h"
+#include "lexer.h"
+#include "machine.h"
+#include "min_coverage.h"
 #include "pb_cegar.h"
-#include "tso_fencins.h"
-#include <cerrno>
+#include "pb_constraint.h"
 #include "pb_container2.h"
+#include "predicates.h"
+#include "preprocessor.h"
 #include "sb_constraint.h"
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
+#include "shellcmd.h"
 #include "test.h"
-#include "zstar.h"
-#include <config.h>
 #include "timer.h"
-#include <iomanip>
-#include "fence_sync.h"
 #include "tso_fence_sync.h"
+#include "tso_fencins.h"
 #include "tso_simple_fencer.h"
+#include "zstar.h"
+
+#include <cerrno>
+#include <config.h>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <set>
+#include <stdexcept>
+#include <unistd.h>
 
 struct Flag{
   Flag() {};
@@ -609,6 +610,7 @@ int main(int argc, char *argv[]){
       Test::add_test("TsoFenceSync",TsoFenceSync::test);
       Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
+      Test::add_test("Fencins",Fencins::test);
       retval = Test::run_tests();
       break;
     default: 
