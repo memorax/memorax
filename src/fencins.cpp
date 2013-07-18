@@ -129,11 +129,33 @@ namespace Fencins{
     std::map<Sync*,Sync*,sync_ptr_less_t> sync_ptr(sync_ptr_less);
 
     std::set<std::set<Sync*> > fence_sets;
+    std::set<std::set<Sync*> > fence_sets_uncloned;
 
     Reachability::Result *prev_result = 0;
     bool done = false;
     do{
-      std::set<Sync*> mc = MinCoverage::min_coverage<Sync*>(syncs,cost);
+      assert(fence_sets.size() == fence_sets_uncloned.size());
+      std::set<Sync*> mc;
+      if(fence_sets.empty()){
+        // We are still looking for the first fence set
+        mc = MinCoverage::min_coverage<Sync*>(syncs,cost);
+      }else{
+        // We have found at least one fence set, and are now looking for all the others
+        std::set<std::set<Sync*> > mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
+        assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
+        if(mcs.size() == fence_sets.size()){
+          // All correct fence sets are already in fence_sets
+          break;
+        }
+        // Otherwise find one which is not in fence_sets
+        for(auto it = mcs.begin(); it != mcs.end(); ++it){
+          if(fence_sets_uncloned.count(*it) == 0){
+            mc = *it;
+            break;
+          }
+        }
+        assert(mc.size() > 0);
+      }
       std::vector<const Sync::InsInfo*> m_infos;
       const Machine *m_synced = insert_syncs(m,mc,&m_infos);
       Reachability::Arg *rarg = reach_arg_init(*m_synced,prev_result);
@@ -179,16 +201,9 @@ namespace Fencins{
           fs.insert((*it)->clone());
         }
         fence_sets.insert(fs);
+        fence_sets_uncloned.insert(mc);
         if(only_one){
           done = true;
-        }else{
-          delete m_synced;
-          delete rarg;
-          delete res;
-          deep_delete(fence_sets);
-          deep_delete(syncs);
-          delete_and_clear(&m_infos);
-          throw new std::logic_error("Fencins: Not only one: Not implemented.");
         }
       }else{
         assert(res->result == Reachability::FAILURE);
@@ -234,15 +249,15 @@ namespace Fencins{
       SbTsoBwd reach;
       reach_arg_init_t arg_init =
         [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
-        Log::loglevel_t ll = Log::get_primary_loglevel();
-        Log::set_primary_loglevel(Log::SILENT);
         SbConstraint::Common *common = new SbConstraint::Common(m);
-        Log::set_primary_loglevel(ll);
         return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
       };
       TsoSimpleFencer fencer(*m,TsoSimpleFencer::FENCE);
+      Log::loglevel_t ll = Log::get_primary_loglevel();
+      Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
       std::set<std::set<Sync*> > fence_sets = 
       fencins(*m,reach,arg_init,fencer,true);
+        Log::set_primary_loglevel(ll);
 
       if(fence_sets.empty()){
         deep_delete(fence_sets);
@@ -296,6 +311,86 @@ namespace Fencins{
       delete m;
 
       return bool(allowed_fences.count(act_fences));
+    };
+
+    std::function<bool(std::string,std::string,
+                       std::function<int(const Sync*)>*)> test_sb_all = 
+      [&get_machine,&cs](std::string rmm, std::string fence_poses,
+                         std::function<int(const Sync*)> *cost){
+      Machine *m = get_machine(rmm);
+      SbTsoBwd reach;
+      reach_arg_init_t arg_init =
+        [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
+        SbConstraint::Common *common = new SbConstraint::Common(m);
+        return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
+      };
+      TsoSimpleFencer fencer(*m,TsoSimpleFencer::FENCE);
+      std::set<std::set<Sync*> > fence_sets;
+      Log::loglevel_t ll = Log::get_primary_loglevel();
+      Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
+      if(cost){
+        fence_sets = fencins(*m,reach,arg_init,fencer,false,*cost);
+      }else{
+        fence_sets = fencins(*m,reach,arg_init,fencer,false);
+      }
+      Log::set_primary_loglevel(ll);
+
+      if(fence_sets.empty()){
+        deep_delete(fence_sets);
+        delete m;
+        return fence_poses == "";
+      }
+
+      if(fence_poses == ""){
+        deep_delete(fence_sets);
+        delete m;
+        return false;
+      }
+
+      Log::result << "Fence Sets:\n";
+      for(auto it = fence_sets.begin(); it != fence_sets.end(); ++it){
+        Log::result << "  * Fence Set *\n";
+        for(auto fsit = it->begin(); fsit != it->end(); ++fsit){
+          Log::result << (*fsit)->to_string(*m) << "\n";
+        }
+      }
+
+      std::set<std::vector<std::set<int> > > act_fences;
+      for(auto it = fence_sets.begin(); it != fence_sets.end(); ++it){
+        std::vector<std::set<int> > v(m->automata.size());
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          TsoFenceSync *p = dynamic_cast<TsoFenceSync*>(*it2);
+          assert(p);
+          v[p->get_pid()].insert(p->get_q());
+        }
+        act_fences.insert(v);
+      }
+
+      std::set<std::vector<std::set<int> > > allowed_fences;
+      {
+        std::size_t i = 0, j;
+        while(i != std::string::npos){
+          j = fence_poses.find("\n",i);
+          std::stringstream ss(fence_poses.substr(i,(j == std::string::npos) ? std::string::npos : (j - i)));
+          i = (j == std::string::npos) ? std::string::npos : (j+1);
+          std::vector<std::set<int> > fences(m->automata.size());
+          int pid = 0;
+          std::string s;
+          while(ss >> s){
+            if(s == "|"){
+              ++pid;
+            }else{
+              fences[pid].insert(cs(*m,pid,s));
+            }
+          }
+          allowed_fences.insert(fences);
+        }
+      }
+
+      deep_delete(fence_sets);
+      delete m;
+
+      return allowed_fences == act_fences;
     };
 
     /* Test 1 */
@@ -408,6 +503,140 @@ namespace Fencins{
         "  }\n";
       Test::inner_test("fencins only_one #4",
                        test_sb_only_one(rmm,"L2 | L2"));
+    }
+
+    /* Test 5 */
+    {
+      std::string rmm = 
+        "forbidden CS CS\n"
+        "data\n"
+        "  x = 0 : [0:1]\n"
+        "  y = 0 : [0:1]\n"
+        "process\n"
+        "text\n"
+        "  L0: write: x := 1;\n"
+        "  L1: read: y = 0;\n"
+        "  CS: write: x := 0;\n"
+        "  goto L0\n"
+        "process\n"
+        "text\n"
+        "  L0: write: y := 1;\n"
+        "  L1: nop;\n"
+        "  L2: read: x = 0;\n"
+        "  CS: write: y := 0;\n"
+        "  goto L0\n";
+      Test::inner_test("fencins all #5 (small Dekker variant)",
+                       test_sb_all(rmm,"L1 | L1\nL1 | L2",0));
+    }
+
+    /* Test 6,7: empty set is solution */
+    {
+      std::string rmm = 
+        "forbidden CS CS\n"
+        "data\n"
+        "  x = 0 : [0:1]\n"
+        "  y = 0 : [0:1]\n"
+        "process\n"
+        "text\n"
+        "  L0: locked write: x := 1;\n"
+        "  read: y = 0;\n"
+        "  CS: write: x := 0;\n"
+        "  goto L0\n"
+        "process\n"
+        "text\n"
+        "  L0: locked write: y := 1;\n"
+        "  read: x = 0;\n"
+        "  CS: write: y := 0;\n"
+        "  goto L0\n";
+      Test::inner_test("fencins all #6",
+                       test_sb_all(rmm,"|",0));
+      Test::inner_test("fencins only_one #7",
+                       test_sb_only_one(rmm,"|"));
+    }
+
+    /* Test 8: disjunct solutions */
+    {
+      std::string rmm = 
+        "forbidden CS CS\n"
+        "data\n"
+        "  x0 = 0 : [0:1]\n"
+        "  x1 = 0 : [0:1]\n"
+        "  y0 = 0 : [0:1]\n"
+        "  y1 = 0 : [0:1]\n"
+        "process\n"
+        "text\n"
+        "  L0: write: x0 := 1;\n"
+        "  L1: read: y0 = 0;\n"
+        "  L2: write: x1 := 1;\n"
+        "  L3: read: y1 = 0;\n"
+        "  CS: nop\n"
+        "process\n"
+        "text\n"
+        "  L0: write: y0 := 1;\n"
+        "  L1: read: x0 = 0;\n"
+        "  L2: write: y1 := 1;\n"
+        "  L3: read: x1 = 0;\n"
+        "  CS: nop\n";
+      Test::inner_test("fencins all #8",
+                       test_sb_all(rmm,
+                                   "L1 | L1\n"
+                                   "L3 | L3",0));
+    }
+
+    /* Test 9,10: disjunct solutions with different costs */
+    {
+      std::string rmm = 
+        "forbidden CS CS\n"
+        "data\n"
+        "  x0 = 0 : [0:1]\n"
+        "  x1 = 0 : [0:1]\n"
+        "  y0 = 0 : [0:1]\n"
+        "  y1 = 0 : [0:1]\n"
+        "process\n"
+        "text\n"
+        "  L0: write: x0 := 1;\n"
+        "  L1: read: y0 = 0;\n"
+        "  L2: either{\n"
+        "    write: x1 := 1;\n"
+        "    L21: read: y1 = 0\n"
+        "  or\n"
+        "    write: x1 := 1;\n"
+        "    L22: read: y1 = 0\n"
+        "  };"
+        "  CS: nop\n"
+        "process\n"
+        "text\n"
+        "  L0: write: y0 := 1;\n"
+        "  L1: read: x0 = 0;\n"
+        "  L2: either{\n"
+        "    write: y1 := 1;\n"
+        "    L21: read: x1 = 0\n"
+        "  or\n"
+        "    write: y1 := 1;\n"
+        "    L22: read: x1 = 0\n"
+        "  };"
+        "  CS: nop\n";
+      Test::inner_test("fencins all #9",
+                       test_sb_all(rmm, "L1 | L1",0));
+      /* Should not return the set "L21 L22 | L21 L22" since it is
+       * more expensive than "L1 | L1".
+       *
+       * Next we increase the price of L1 so we get both sets.
+       */
+      std::function<int(const Sync*)> expensive_L1 = 
+        [](const Sync *s){
+        const FenceSync *p = dynamic_cast<const FenceSync*>(s);
+        if(p->get_q() == 1){
+          return 2;
+        }else{
+          return 1;
+        }
+      };
+      Test::inner_test("fencins all #10",
+                       test_sb_all(rmm, 
+                                   "L1 | L1\n"
+                                   "L21 L22 | L21 L22",
+                                   &expensive_L1));
     }
   };
 
