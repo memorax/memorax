@@ -240,7 +240,8 @@ void TsoFenceSync::test(){
          "text nop\n"
          );
 
-      InsInfo info(FenceSync::InsInfo(0),Lang::NML::global(1));
+      Lang::Stmt<int> f = Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(1),Lang::Expr<int>::integer(0));
+      InsInfo info(FenceSync::InsInfo(0,f),Lang::NML::global(1));
       auto pr = get_dummy_nml(*m,std::vector<const Sync::InsInfo*>(1,(const Sync::InsInfo*)&info));
 
       Test::inner_test("get_dummy_nml #3",

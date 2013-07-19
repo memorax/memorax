@@ -46,6 +46,11 @@
  * forbidden control state combination, then it remains so, but q'
  * will not be forbidden.
  *
+ * If two FenceSyncs (f,pid,q,IN,OUT) and (f,pid,q,IN',OUT') with the
+ * same fence f, process pid and control state q are inserted to the
+ * same machine, in any order, the result will be the same as
+ * inserting the single fence (f,pid,q,IN union IN', OUT union OUT').
+ *
  * Invariant: IN and OUT are non-empty.
  */
 class FenceSync : public Sync{
@@ -61,7 +66,7 @@ public:
 
   class InsInfo : public Sync::InsInfo{
   public:
-    InsInfo(const FenceSync *creator_copy) : Sync::InsInfo(creator_copy) {};
+    InsInfo(const FenceSync *creator_copy, const Lang::Stmt<int> &fence) : Sync::InsInfo(creator_copy), fence(fence) {};
     InsInfo(const InsInfo &) = default;
     virtual InsInfo &operator=(const InsInfo &) = default;
     virtual ~InsInfo(){};
@@ -80,6 +85,8 @@ public:
      * inserted.
      */
     int new_q;
+    /* The inserted fence instruction. */
+    Lang::Stmt<int> fence;
     /* Insert a->b into tchanges. */
     void bind(const Machine::PTransition &a,const Machine::PTransition &b);
     /* Shorthand for tchanges[t]. */

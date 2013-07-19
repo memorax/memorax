@@ -46,7 +46,7 @@ std::string FenceSync::to_string(const Machine &m) const{
 Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const{
   assert(applies_to(m,m_infos));
 
-  InsInfo *myinfo = new InsInfo((FenceSync*)clone());
+  InsInfo *myinfo = new InsInfo((FenceSync*)clone(),f);
   *info = myinfo;
   myinfo->new_q = m.automata[pid].get_states().size();
 
@@ -57,6 +57,19 @@ Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsIn
   if(IN.size() != state.bwd_transitions.size() && OUT.size() != state.fwd_transitions.size()){
     delete m2;
     throw new std::logic_error("FenceSync: Both IN and OUT are partial. Not supported.");
+  }
+
+  /* Setup info->tchanges as the identity map */
+  {
+    for(unsigned p = 0; p < m2->automata.size(); ++p){
+      const std::vector<Automaton::State> &states = m2->automata[p].get_states();
+      for(unsigned i = 0; i < states.size(); ++i){
+        for(auto it = states[i].fwd_transitions.begin();
+            it != states[i].fwd_transitions.end(); ++it){
+          myinfo->bind(Machine::PTransition(**it,p),Machine::PTransition(**it,p));
+        }
+      }
+    }
   }
 
   /* Get the transition in m2 which is identical modulo statement
@@ -71,19 +84,6 @@ Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsIn
     }
     return 0;
   };
-
-  /* Setup info->tchanges as the identity map */
-  {
-    for(unsigned p = 0; p < m2->automata.size(); ++p){
-      const std::vector<Automaton::State> &states = m2->automata[p].get_states();
-      for(unsigned i = 0; i < states.size(); ++i){
-        for(auto it = states[i].fwd_transitions.begin();
-            it != states[i].fwd_transitions.end(); ++it){
-          myinfo->bind(Machine::PTransition(**it,p),Machine::PTransition(**it,p));
-        }
-      }
-    }
-  }
 
   /* Calculate the transitions of IN and OUT as they appear in m */
   std::set<Automaton::Transition*> IN_m, OUT_m;
@@ -100,36 +100,91 @@ Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsIn
     OUT_m.insert(t);
   }
 
-  int qp = myinfo->new_q;
-  // Add fence
-  m2->automata[pid].add_transition(Automaton::Transition(qp,f,q));
+  /* Check if some previous fence has been inserted at the same
+   * control location */
+  int qp; // The new control location
+  {
+    bool ex_prev_fence = false;
+    for(unsigned i = 0; i < m_infos.size(); ++i){
+      const InsInfo *ii = dynamic_cast<const InsInfo*>(m_infos[i]);
+      if(ii){
+        assert(dynamic_cast<const FenceSync*>(m_infos[i]->sync));
+        const FenceSync *fs = static_cast<const FenceSync*>(m_infos[i]->sync);
+        if(fs->get_pid() == pid && fs->get_q() == q){
+          if(ex_prev_fence){
+            /* If there are more than one previous fence at the same
+             * location, they should all use the same new_q. */
+            assert(qp == ii->new_q);
+          }
+          ex_prev_fence = true;
+          qp = ii->new_q;
+          /* IN := IN union fs->IN */
+          for(auto it = fs->get_IN().begin(); it != fs->get_IN().end(); ++it){
+            Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
+            Automaton::Transition *t = find_transition(m,it_i);
+            assert(t);
+            IN_m.insert(t);
+          }
+          /* OUT := OUT union fs->OUT */
+          for(auto it = fs->get_OUT().begin(); it != fs->get_OUT().end(); ++it){
+            Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
+            Automaton::Transition *t = find_transition(m,it_i);
+            assert(t);
+            OUT_m.insert(t);
+          }
+        }
+      }
+    }
+    if(!ex_prev_fence){
+      qp = m.automata[pid].get_states().size();
+      // Add fence
+      m2->automata[pid].add_transition(Automaton::Transition(qp,f,q));
+    }
+    myinfo->new_q = qp;
+  }
+
+  /* Find transitions where change should be considered */
+  std::set<Automaton::Transition*> FWD_m = state.fwd_transitions;
+  std::set<Automaton::Transition*> BWD_m = state.bwd_transitions;
+  if(qp < m.automata[pid].get_states().size()){
+    const Automaton::State &qp_state = m.automata[pid].get_states()[qp];
+    FWD_m.insert(qp_state.fwd_transitions.begin(),qp_state.fwd_transitions.end());
+    BWD_m.insert(qp_state.bwd_transitions.begin(),qp_state.bwd_transitions.end());
+  }
+
   /* Change sources for outgoing transitions */
-  for(auto it = state.fwd_transitions.begin(); it != state.fwd_transitions.end(); ++it){
+  for(auto it = FWD_m.begin(); it != FWD_m.end(); ++it){
+    int src;
     if(OUT_m.count(*it)){
-      /* Should go through fence. Hence leave unchanged (source == q) */
+      /* Should go through fence. Set source == q */
+      src = q;
     }else{
       /* Should not go through fence. Change source from q to qp. */
-      Automaton::Transition t2(qp,(*it)->instruction,(*it)->target);
-      myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
-      Automaton::Transition *t_m2 = find_transition(*m2,**it);
-      assert(t_m2);
-      m2->automata[pid].del_transition(*t_m2);
-      m2->automata[pid].add_transition(t2);
+      src = qp;
     }
+    Automaton::Transition t2(src,(*it)->instruction,(*it)->target);
+    myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
+    Automaton::Transition *t_m2 = find_transition(*m2,**it);
+    assert(t_m2);
+    m2->automata[pid].del_transition(*t_m2);
+    m2->automata[pid].add_transition(t2);
   }
   /* Change targets for incoming transitions */
-  for(auto it = state.bwd_transitions.begin(); it != state.bwd_transitions.end(); ++it){
+  for(auto it = BWD_m.begin(); it != BWD_m.end(); ++it){
+    int tgt;
     if(IN_m.count(*it)){
       /* Should go through fence. Hence change target from q to qp */
-      Automaton::Transition t2((*it)->source,(*it)->instruction,qp);
-      myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
-      Automaton::Transition *t_m2 = find_transition(*m2,**it);
-      assert(t_m2);
-      m2->automata[pid].del_transition(*t_m2);
-      m2->automata[pid].add_transition(t2);
+      tgt = qp;
     }else{
-      /* Should not go through fence. Leave unchanged (target == q) */
+      /* Should not go through fence. Set target == q */
+      tgt = q;
     }
+    Automaton::Transition t2((*it)->source,(*it)->instruction,tgt);
+    myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
+    Automaton::Transition *t_m2 = find_transition(*m2,**it);
+    assert(t_m2);
+    m2->automata[pid].del_transition(*t_m2);
+    m2->automata[pid].add_transition(t2);
   }
 
   return m2;
@@ -154,40 +209,31 @@ bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsIn
   }
 
   for(unsigned i = 0; i < m_infos.size(); ++i){
-    const FenceSync *fs = dynamic_cast<const FenceSync*>(m_infos[i]->sync);
-    if(fs && fs->pid == pid && fs->q == q){
-      throw new std::logic_error("FenceSync: Attempt to apply multiple fences at the same control location. Not supported (yet).");
-      /* Perhaps it should be supported though... */
+    const FenceSync::InsInfo *info = dynamic_cast<const FenceSync::InsInfo*>(m_infos[i]);
+    if(!info){
+      throw new std::logic_error("FenceSync: Unsupported kind of Sync has been inserted before.");
+    }
+    
+    if(info->fence.compare(f,false) != 0){
+      throw new std::logic_error("Attempt to insert a different fence instruction at the same control location. Not supported (yet).");
     }
   }
 
-  /* Returns true iff each transitions in S equals some transition
-   * pointed to by a member of T, after changes described by m_infos
-   * have been applied to transitions in S.
-   *
-   * All transitions in S and T are assumed to belong to process pid.
+  /* Returns true iff t exists in m (after being subjected to the
+   * changes described by m_infos).
    */
-  std::function<bool(const std::set<Automaton::Transition> &,const std::set<Automaton::Transition*> &)> is_subset = 
-    [this,&m_infos](const std::set<Automaton::Transition> &S,
-       const std::set<Automaton::Transition*> &T){
-    for(auto it = S.begin(); it != S.end(); ++it){
-      Automaton::Transition s = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,this->pid));
-      if(!std::any_of(T.begin(),T.end(),
-                      [&s](const Automaton::Transition *t){
-                        return s.compare(*t,false) == 0;
-                      })){
-        return false;
-      }
-    }
-    return true;
+  std::function<bool(const Automaton::Transition &)> trans_exists = 
+    [&m,this,&m_infos](const Automaton::Transition &t){
+    Automaton::Transition s = InsInfo::all_tchanges(m_infos,Machine::PTransition(t,this->pid));
+    const Automaton::State &state = m.automata[this->pid].get_states()[s.source];
+    return std::any_of(state.fwd_transitions.begin(),state.fwd_transitions.end(),
+                       [&s](const Automaton::Transition *t2){
+                         return s.compare(*t2,false) == 0;
+                       });
   };
 
-  if(!is_subset(IN,m.automata[pid].get_states()[q].bwd_transitions) ||
-     !is_subset(OUT,m.automata[pid].get_states()[q].fwd_transitions)){
-    return false;
-  }
-
-  return true;
+  return std::all_of(IN.begin(),IN.end(),trans_exists) &&
+    std::all_of(OUT.begin(),OUT.end(),trans_exists);
 };
 
 std::string FenceSync::to_string_aux(const std::function<std::string(const int&)> &regts, 
@@ -954,9 +1000,9 @@ void FenceSync::test(){
 
       std::function<bool(const std::pair<Machine::PTransition,Machine::PTransition>&)> iiany =
         [m,m2](const std::pair<Machine::PTransition,Machine::PTransition> &pr){
-            return pr.first.source != pr.second.source;
+            return pr.first.source != pr.second.source || pr.first.target != pr.second.target;
           };
-        
+
       Test::inner_test("insert #6 (InsInfo)",
                        std::all_of(finfo->tchanges.begin(),finfo->tchanges.end(),iiall) &&
                        std::any_of(finfo->tchanges.begin(),finfo->tchanges.end(),iiany));
@@ -1480,7 +1526,159 @@ void FenceSync::test(){
       delete m;
     }
 
-    /* Test ?: Test multiple insertions to the same control state */
+    /* Test 14,15,16: Multiple insertions to the same control state */
+    {
+      Machine *m = get_machine
+        ("forbidden * * * *"
+         "data\n"
+         "  fnc = *\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    $r0 := 1\n"
+         "  or\n"
+         "    $r0 := 2;\n"
+         "    $r0 := 3\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 4;\n"
+         "    $r0 := 5\n"
+         "  or\n"
+         "    $r0 := 6;\n"
+         "    $r0 := 7\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    $r0 := 1\n"
+         "  or\n"
+         "    $r0 := 2;\n"
+         "    $r0 := 3\n"
+         "  };\n"
+         "  either{\n"
+         "    locked write: fnc := 0;\n"
+         "    $r0 := 4;\n"
+         "    $r0 := 5\n"
+         "  or\n"
+         "    $r0 := 6;\n"
+         "    $r0 := 7\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    $r0 := 1\n"
+         "  or\n"
+         "    $r0 := 2;\n"
+         "    $r0 := 3\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 4;\n"
+         "    $r0 := 5\n"
+         "  or\n"
+         "    locked write: fnc := 0;\n"
+         "    $r0 := 6;\n"
+         "    $r0 := 7\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    $r0 := 1\n"
+         "  or\n"
+         "    $r0 := 2;\n"
+         "    $r0 := 3\n"
+         "  };\n"
+         "  locked write: fnc := 0;\n"
+         "  either{\n"
+         "    $r0 := 4;\n"
+         "    $r0 := 5\n"
+         "  or\n"
+         "    $r0 := 6;\n"
+         "    $r0 := 7\n"
+         "  }\n"
+         );
+
+      Dummy d0 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=4}");
+      Dummy d1 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=6}");
+      Dummy d2 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=4;$r0:=6}");
+      Dummy d3 = Dummy::parse_dummy(m,"0{$r0:=1}to{$r0:=4;$r0:=6}");
+      Dummy d4 = Dummy::parse_dummy(m,"0{$r0:=3}to{$r0:=4;$r0:=6}");
+      
+      Sync::InsInfo *info;
+      std::vector<const Sync::InsInfo*> m_infos_01, m_infos_10;
+      Machine *m0 = d0.insert(*m,m_infos_01,&info); m_infos_01.push_back(info);
+      Machine *m1 = d1.insert(*m,m_infos_10,&info); m_infos_10.push_back(info);
+      Machine *m2 = d2.insert(*m,std::vector<const Sync::InsInfo*>(),&info); delete info;
+      Machine *m01 = d1.insert(*m0,m_infos_01,&info); delete info;
+      Machine *m10 = d0.insert(*m1,m_infos_10,&info); delete info;
+
+      Test::inner_test("insert #14 (multiple on same control state)",
+                       m->automata[1].same_automaton(m0->automata[0],false) &&
+                       m->automata[2].same_automaton(m1->automata[0],false) &&
+                       m->automata[3].same_automaton(m2->automata[0],false) &&
+                       m->automata[3].same_automaton(m01->automata[0],false) &&
+                       m->automata[3].same_automaton(m10->automata[0],false));
+
+      std::vector<const Sync::InsInfo*> m_infos_34, m_infos_43;
+      Machine *m3 = d3.insert(*m,m_infos_34,&info); m_infos_34.push_back(info);
+      Machine *m4 = d4.insert(*m,m_infos_43,&info); m_infos_43.push_back(info);
+      Machine *m34 = d4.insert(*m3,m_infos_34,&info); delete info;
+      Machine *m43 = d3.insert(*m4,m_infos_43,&info); delete info;
+
+      Test::inner_test("insert #15 (multiple on same control state)",
+                       m->automata[3].same_automaton(m34->automata[0],false) &&
+                       m->automata[3].same_automaton(m43->automata[0],false));
+
+      std::vector<const Sync::InsInfo*> m_infos_03, m_infos_30;
+      Machine *m03 = d3.insert(*m0,m_infos_01,&info); delete info;
+      Machine *m30 = d0.insert(*m3,m_infos_34,&info); delete info;
+
+      Test::inner_test("insert #16 (multiple on same control state)",
+                       m->automata[3].same_automaton(m03->automata[0],false) &&
+                       m->automata[3].same_automaton(m30->automata[0],false));
+
+      for(unsigned i = 0; i < m_infos_01.size(); ++i){
+        delete m_infos_01[i];
+      }
+      for(unsigned i = 0; i < m_infos_10.size(); ++i){
+        delete m_infos_10[i];
+      }
+      for(unsigned i = 0; i < m_infos_34.size(); ++i){
+        delete m_infos_34[i];
+      }
+      for(unsigned i = 0; i < m_infos_43.size(); ++i){
+        delete m_infos_43[i];
+      }
+      for(unsigned i = 0; i < m_infos_03.size(); ++i){
+        delete m_infos_03[i];
+      }
+      for(unsigned i = 0; i < m_infos_30.size(); ++i){
+        delete m_infos_30[i];
+      }
+      delete m0;
+      delete m1;
+      delete m2;
+      delete m01;
+      delete m10;
+      delete m3;
+      delete m4;
+      delete m34;
+      delete m43;
+      delete m03;
+      delete m30;
+      delete m;
+    }
 
   }
 };
