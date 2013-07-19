@@ -302,7 +302,8 @@ void TsoFenceSync::test(){
          "text\n"
          "  write: x := 1;\n"
          "  write: x := 2;\n"
-         "  F: locked write: tsofence := 0;\n"
+         "  locked write: tsofence := 0;\n"
+         "  F:\n"
          "  write: x := 3;\n"
          "  write: x := 4\n"
          );

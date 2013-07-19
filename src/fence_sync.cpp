@@ -48,20 +48,22 @@ Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsIn
 
   InsInfo *myinfo = new InsInfo((FenceSync*)clone());
   *info = myinfo;
+  myinfo->new_q = m.automata[pid].get_states().size();
 
-  Log::warning << "FenceSync::insert: Unclean handling of forbidden\n";
-  /* Consider forbidden specifications using '*'.
-   * The new control states should also be forbidden.
-   */
   Machine *m2 = new Machine(m);
 
   const Automaton::State &state = m.automata[pid].get_states()[q];
 
+  if(IN.size() != state.bwd_transitions.size() && OUT.size() != state.fwd_transitions.size()){
+    delete m2;
+    throw new std::logic_error("FenceSync: Both IN and OUT are partial. Not supported.");
+  }
+
   /* Get the transition in m2 which is identical modulo statement
    * position to t. */
-  std::function<const Automaton::Transition*(const Automaton::Transition&)> find_transition = 
-    [m2,this](const Automaton::Transition &t)->const Automaton::Transition*{
-    const Automaton::State &state = m2->automata[this->pid].get_states()[t.source];
+  std::function<Automaton::Transition*(const Machine &,const Automaton::Transition&)> find_transition = 
+    [this](const Machine &machine,const Automaton::Transition &t)->Automaton::Transition*{
+    const Automaton::State &state = machine.automata[this->pid].get_states()[t.source];
     for(auto it = state.fwd_transitions.begin(); it != state.fwd_transitions.end(); ++it){
       if((*it)->compare(t,false) == 0){
         return *it;
@@ -83,60 +85,51 @@ Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsIn
     }
   }
 
-  if(IN.size() == state.bwd_transitions.size()){
-    /* All incoming transitions should go through the fence. Relink as
-     * follows:
-     * 1) Introduce a new state q'
-     * 2) Change each OUT transition (q,i,q2) into (q',i,q2)
-     * 3) Add transition (q,fence,q')
-     */
-    int qp = m2->automata[pid].get_states().size(); // q'
-    /* Change transitions */
-    for(auto it = OUT.begin(); it != OUT.end(); ++it){
-      Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
-      const Automaton::Transition *t = find_transition(it_i);
-      assert(t);
-      Automaton::Transition t2(qp,t->instruction,t->target);
-      m2->automata[pid].add_transition(t2);
-      myinfo->bind(Machine::PTransition(*t,pid), Machine::PTransition(t2,pid));
-      m2->automata[pid].del_transition(*t);
-    }
-    /* Insert fence */
-    m2->automata[pid].add_transition(Automaton::Transition(q,f,qp));
-  }else if(OUT.size() == state.fwd_transitions.size()){
-    /* All outgoing transitions should go through the fence. Relink as
-     * follows:
-     * 1) Introduce a new state q'
-     * 2) Change each IN transition (q2,i,q) into (q2,i,q')
-     * 3) Add transition (q',fence,q)
-     */
-    int qp = m2->automata[pid].get_states().size(); // q'
-    /* Change transitions */
-    for(auto it = IN.begin(); it != IN.end(); ++it){
-      Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
-      const Automaton::Transition *t = find_transition(it_i);
-      assert(t);
-      Automaton::Transition t2(t->source,t->instruction,qp);
-      m2->automata[pid].add_transition(t2);
-      myinfo->bind(Machine::PTransition(*t,pid), Machine::PTransition(t2,pid));
-      m2->automata[pid].del_transition(*t);
-    }
-    /* Insert fence */
-    m2->automata[pid].add_transition(Automaton::Transition(qp,f,q));
-  }else{
-    /* Some incoming and some outgoing transitions should go through
-     * the fence. Relink as follows:
-     * 1) Introduce new states q' and q''
-     * 2) Add transition (q',fence,q'')
-     * 3) Change each IN transition (q2,i,q) into (q2,i,q')
-     * 4) Change each OUT transition (q,i,q2) into (q'',i,q2)
-     */
+  /* Calculate the transitions of IN and OUT as they appear in m */
+  std::set<Automaton::Transition*> IN_m, OUT_m;
+  for(auto it = IN.begin(); it != IN.end(); ++it){
+    Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
+    Automaton::Transition *t = find_transition(m,it_i);
+    assert(t);
+    IN_m.insert(t);
+  }
+  for(auto it = OUT.begin(); it != OUT.end(); ++it){
+    Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
+    Automaton::Transition *t = find_transition(m,it_i);
+    assert(t);
+    OUT_m.insert(t);
+  }
 
-    /* What happens with labels? */
-    /* What about forbidden control states? */
-    /* What about other Syncs that depend on control states? */
-    delete m2;
-    throw new std::logic_error("FenceSync: Both IN and OUT are partial. Not supported.");
+  int qp = myinfo->new_q;
+  // Add fence
+  m2->automata[pid].add_transition(Automaton::Transition(qp,f,q));
+  /* Change sources for outgoing transitions */
+  for(auto it = state.fwd_transitions.begin(); it != state.fwd_transitions.end(); ++it){
+    if(OUT_m.count(*it)){
+      /* Should go through fence. Hence leave unchanged (source == q) */
+    }else{
+      /* Should not go through fence. Change source from q to qp. */
+      Automaton::Transition t2(qp,(*it)->instruction,(*it)->target);
+      myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
+      Automaton::Transition *t_m2 = find_transition(*m2,**it);
+      assert(t_m2);
+      m2->automata[pid].del_transition(*t_m2);
+      m2->automata[pid].add_transition(t2);
+    }
+  }
+  /* Change targets for incoming transitions */
+  for(auto it = state.bwd_transitions.begin(); it != state.bwd_transitions.end(); ++it){
+    if(IN_m.count(*it)){
+      /* Should go through fence. Hence change target from q to qp */
+      Automaton::Transition t2((*it)->source,(*it)->instruction,qp);
+      myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
+      Automaton::Transition *t_m2 = find_transition(*m2,**it);
+      assert(t_m2);
+      m2->automata[pid].del_transition(*t_m2);
+      m2->automata[pid].add_transition(t2);
+    }else{
+      /* Should not go through fence. Leave unchanged (target == q) */
+    }
   }
 
   return m2;
@@ -278,6 +271,19 @@ Machine::PTransition FenceSync::InsInfo::all_tchanges(const std::vector<const Sy
     t2 = ii->tchanges.at(t2);
   }
   return t2;
+};
+
+int FenceSync::InsInfo::original_q(const std::vector<const Sync::InsInfo*> &ivec, int q){
+  for(int i = (int)ivec.size() - 1; i >= 0; --i){
+    assert(dynamic_cast<const InsInfo*>(ivec[i]));
+    const InsInfo *info = static_cast<const InsInfo*>(ivec[i]);
+    assert(dynamic_cast<const FenceSync*>(info->sync));
+    const FenceSync *fs = static_cast<const FenceSync*>(info->sync);
+    if(q == info->new_q){
+      q = fs->get_q();
+    }
+  }
+  return q;
 };
 
 int FenceSync::compare(const Sync &s) const{

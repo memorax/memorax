@@ -40,7 +40,11 @@
  * and the transitions originating in q. The fence should be inserted
  * such that whenever control flow goes through transitions i in IN
  * and then j in OUT, then control flow should go through f between i
- * and j.
+ * and j. To achieve this, the control state q is split into two
+ * control states q and q', with a fence transition from q' to q. If q
+ * was labeled, then it keeps the same labels. If q was part of some
+ * forbidden control state combination, then it remains so, but q'
+ * will not be forbidden.
  *
  * Invariant: IN and OUT are non-empty.
  */
@@ -72,6 +76,10 @@ public:
      * tchanges[t] is defined for all transitions t in m.
      */
     std::map<Machine::PTransition,Machine::PTransition> tchanges;
+    /* The new control state that was created when this fence was
+     * inserted.
+     */
+    int new_q;
     /* Insert a->b into tchanges. */
     void bind(const Machine::PTransition &a,const Machine::PTransition &b);
     /* Shorthand for tchanges[t]. */
@@ -86,6 +94,12 @@ public:
      */
     static Machine::PTransition all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
                                              const Machine::PTransition &t);
+    /* If q is a new control state that was created during the
+     * insertion corresponding to any element of ivec, then the
+     * control state qorg that was split into qorg and q in that
+     * insertion is returned. Otherwise q is returned.
+     */
+    static int original_q(const std::vector<const Sync::InsInfo*> &ivec, int q);
   };
 
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;

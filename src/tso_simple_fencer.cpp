@@ -112,8 +112,7 @@ std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vec
     }
     /* Should we look for synchronization to insert? */
     if(buffers[pid].size() > 0
-       && t[i]->instruction.get_type() != Lang::UPDATE
-       && pcs[pid] < (int)fences_by_pq[pid].size()){
+       && t[i]->instruction.get_type() != Lang::UPDATE){
       /* Find the next instruction of pid */
       const Automaton::Transition *next_instr = 0;
       for(int j = i+1; next_instr == 0 && j <= t.size(); ++j){
@@ -161,12 +160,7 @@ std::set<Sync*> TsoSimpleFencer::fences_between(int pid,
   int q = in.target;
 
   if(q >= (int)fences_by_pq[pid].size()){
-    /* q is a control state that does not exist in the original
-     * machine. Hence it has been inserted by some FenceSync. Then all
-     * paths through q already passes through a fence that is adjacent
-     * to q. Return no synchronization.
-     */
-    return std::set<Sync*>();
+    q = FenceSync::InsInfo::original_q(m_infos,q);
   }
 
   const std::set<TsoFenceSync*> &pqs = fences_by_pq[pid][q];
