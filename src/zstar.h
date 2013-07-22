@@ -92,6 +92,10 @@ public:
      * element i is set to val.
      */
     Vector assign(int i, const ZStar &val) const;
+    /* Return a new Vector which has val as its first element, and the elements
+     * of this one as the rest.
+     */
+    Vector push_front(ZStar val) const;
     /* If there is a least upper bound lub (by entailment_compare) of
      * this store and s, then *unifiable is set to true and lub is
      * returned. Otherwise *unifiable is set to false and an arbitrary

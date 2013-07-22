@@ -441,6 +441,15 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::update(int writer, VecSet<MemLoc<RegId> > m
 };
 
 template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::serialise(VecSet<MemLoc<RegId>> mls,
+                                               const Lexer::TokenPos &p) {
+  Stmt<RegId> s(p);
+  s.type = SERIALISE;
+  s.writes = mls;
+  return s;
+};
+
+template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b, 
                                              const labeled_stmt_t &s0,
                                              const Lexer::TokenPos &p){

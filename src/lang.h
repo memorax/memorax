@@ -481,6 +481,8 @@ namespace Lang {
     /* Update: An update concerning memory location writes[0], and a
      * write performed by process writer. */
     UPDATE,
+    /* Serialise: A serialisation of a write to memory location writes[0] */
+    SERIALISE,
     /* If statement:
      * If stmt_count == 1 then: if b then stmts[0]
      * If stmt_count == 2 then: if b then stmts[0] else stmts[1]
@@ -575,6 +577,11 @@ namespace Lang {
      * SB.
      */
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    /* Serialise: A serialisation of a write to memory location writes[0] 
+     * This operation concern only the PSO memory model abstraction PWS.
+     */
+    static Stmt<RegId> serialise(VecSet<MemLoc<RegId>> mls,
                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
     /* Type of a labeled statement. */
     struct labeled_stmt_t{
