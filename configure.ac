@@ -89,6 +89,8 @@ else
   AC_DEFINE([HAVE_LIBMATHSAT],[1],[Define to 1 if you have the `mathsat' library (-lmathsat).])
 fi
 
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
+
 AC_SUBST([MANUALDEP])
 AC_SUBST([MANUALBUILDRULE])
 AC_SUBST([FDLDEP])
@@ -96,8 +98,8 @@ AC_SUBST([FDLBUILDRULE])
 AC_SUBST([MANUALCLEANRULE])
 MANUALDEP='manual.tex fdl.pdf';
 FDLDEP='fdl-1.3.tex'
-MANUALBUILDRULE='pdflatex manual.tex && bibtex manual.aux && pdflatex manual.tex && pdflatex manual.tex';
-FDLBUILDRULE='pdflatex fdl-1.3.tex && pdflatex fdl-1.3.tex && mv fdl-1.3.pdf fdl.pdf'
+MANUALBUILDRULE='pdflatex -interaction=batchmode manual.tex && bibtex manual.aux && pdflatex -interaction=batchmode manual.tex && pdflatex -interaction=batchmode manual.tex';
+FDLBUILDRULE='pdflatex -interaction=batchmode fdl-1.3.tex && pdflatex -interaction=batchmode fdl-1.3.tex && mv fdl-1.3.pdf fdl.pdf'
 MANUALCLEANRULE='rm -f manual.aux manual.bbl manual.blg manual.log manual.out manual.toc manual.pdf fdl-1.3.out fdl-1.3.aux fdl-1.3.log fdl.pdf'
 AC_CHECK_FILE([doc/manual.tex],
               [AC_CHECK_FILE([doc/biblio.bib],

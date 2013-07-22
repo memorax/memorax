@@ -45,6 +45,7 @@ zstar.h zstar.tcc
 memorax_gui_SOURCES = gui.py
 
 memorax-gui$(EXEEXT): $(srcdir)/gui.py
-	cat $(srcdir)/gui.py | sed 's#%%PYTHON%%#$(PYTHON)#g' | \
+	$(AM_V_GEN)cat $(srcdir)/gui.py | sed 's#%%PYTHON%%#$(PYTHON)#g' | \
 	sed 's#%%BINARY%%#$(bindir)/memorax#g' | \
 	sed 's#%%GUI_STRING%%#@PACKAGE_NAME@ GUI @PACKAGE_VERSION@#g' > memorax-gui
+	$(AM_V_at)chmod +x memorax-gui
