@@ -24,8 +24,8 @@
 /* Configuration */
 /*****************/
 
-const bool SbConstraint::use_last_msg = true;
-const bool SbConstraint::use_last_msgs_vec = true;
+const bool SbConstraint::use_last_msg = false;
+const bool SbConstraint::use_last_msgs_vec = false;
 const bool SbConstraint::use_updates_only_after_reads = true;
 const bool SbConstraint::use_channel_suffix_equality = true;
 const bool SbConstraint::use_can_have_pending = true;
@@ -495,26 +495,12 @@ std::string SbConstraint::Msg::to_short_string(const SbConstraint::Common &commo
   return ss.str();
 };
 
-VecSet<int> SbConstraint::possible_values(const Store &mem, const Lang::NML &nml) const{
-  return mem.possible_values(common.index(nml),common.machine.get_var_decl(nml));
-};
-
 VecSet<int> SbConstraint::possible_values(const Store &reg_store, int pid, const Lang::Expr<int> &e) const{
   return reg_store.possible_values(e,common.machine.regs[pid]);
 };
 
 bool SbConstraint::possibly_holds(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
   throw new std::logic_error("SbConstraint::possibly_holds: Not implemented");
-};
-
-VecSet<SbConstraint::Store> 
-SbConstraint::possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const{
-  return reg_store.possible_regs(e,value,common.machine.regs[pid]);
-};
-
-VecSet<SbConstraint::Store> 
-SbConstraint::possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
-  return reg_store.possible_regs(b,common.machine.regs[pid]);
 };
 
 int SbConstraint::index_of_read(Lang::NML nml, int pid) const{

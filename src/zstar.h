@@ -88,6 +88,8 @@ public:
     ~Vector();
     /* The ZValue at index i in this vector */
     const ZStar &operator[](int i) const;
+    /* The last ZValue in this vector */
+    const ZStar &back() const { return (*this)[size() - 1]; }
     /* Return a new Vector which is identical to this one, except that
      * element i is set to val.
      */
@@ -96,6 +98,10 @@ public:
      * of this one as the rest.
      */
     Vector push_front(ZStar val) const;
+    /* Return a new Vector which is identical to this one, except the very last
+     * element is removed.
+     */
+    Vector pop_back() const;
     /* If there is a least upper bound lub (by entailment_compare) of
      * this store and s, then *unifiable is set to true and lub is
      * returned. Otherwise *unifiable is set to false and an arbitrary

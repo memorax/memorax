@@ -11,6 +11,7 @@ constraint_container1.cpp constraint_container1.h \
 constraint_container.h \
 constraint.h \
 exact_bwd.cpp exact_bwd.h \
+intersection_iterator.h \
 lang.tcc lang.h \
 lexer.cpp lexer.h \
 log.cpp log.h \

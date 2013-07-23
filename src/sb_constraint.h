@@ -34,6 +34,7 @@ private:
   typedef ZStar<int> value_t;
   typedef ZStar<int>::Vector Store;
 
+protected:
   /* The class of SB channel messages. */
   class Msg{
   public:
@@ -186,7 +187,7 @@ public:
   static void test_possible_values();
   static void test_pre();
   static void test_comparison();
-private:
+protected:
   Common &common;
   /* pcs[pid] is the program counter of process pid. */
   std::vector<int> pcs;
@@ -209,7 +210,9 @@ private:
    * unique valuation given by mem, or if mem maps nml to STAR, the
    * whole domain of nml.
    */
-  VecSet<int> inline possible_values(const Store &mem, const Lang::NML &nml) const;
+  VecSet<int> inline possible_values(const Store &mem, const Lang::NML &nml) const{
+    return mem.possible_values(common.index(nml),common.machine.get_var_decl(nml));
+  };
   /* Returns the set of values that e can evaluate to when its
    * accessed registers are valuated as indicated by reg_store.
    *
@@ -230,11 +233,15 @@ private:
    * I.e. tries to instantiate any STAR in reg_store such that e will
    * evaluate to value.
    */
-  VecSet<Store> inline possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const;
+  VecSet<Store> inline possible_reg_stores(const Store &reg_store, int pid, const Lang::Expr<int> &e, int value) const{
+    return reg_store.possible_regs(e,value,common.machine.regs[pid]);
+  };
   /* Returns the set of stores which are entailed by reg_store and
    * where the expression b of process pid evaluates to true.
    */
-  VecSet<Store> inline possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const;
+  VecSet<Store> inline possible_reg_stores(const Store &reg_store, int pid, const Lang::BExpr<int> &b) const{
+    return reg_store.possible_regs(b,common.machine.regs[pid]);
+  };
   /* Returns the index into channel of the message from which process
    * pid would read the value of memory location nml if it were to
    * read in this constraint.
@@ -252,7 +259,7 @@ private:
    * Pre: channel.size() > 1
    */
   std::vector<SbConstraint*> channel_pop_back() const;
-
+private:
   /* Helper for the public pre */
   struct pre_constr_t{
     pre_constr_t(SbConstraint *sbc) : sbc(sbc), pop_back(false), written_nmls() {};
@@ -262,6 +269,7 @@ private:
     bool pop_back; // true iff the last message in sbc should be popped
     VecSet<Lang::NML> written_nmls; // NMLs that were written
   };
+private:
   virtual std::list<pre_constr_t> pre(const Machine::PTransition &, bool locked) const;
   /* Entailment compare this->channel with sbc.channel. Return the
    * combination (Constraint::comb_comp) of that comparison result and
@@ -321,7 +329,8 @@ private:
    * Messages where this does not hold can be discarded, since they
    * will never reach an initial state.
    */
-  bool ok_channel();
+protected: bool ok_channel();
+private:
   /* Update the stores in the channel such that all stores to the
    * right of and including message i in the channel have a consistent
    * value for the memory location nml. Here i is the index of the

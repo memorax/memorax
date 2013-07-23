@@ -169,6 +169,16 @@ ZStar<Z>::Vector::Vector::push_front(ZStar val) const{
 };
 
 template<class Z> inline typename ZStar<Z>::Vector
+ZStar<Z>::Vector::Vector::pop_back() const{
+  assert(size() > 0);
+  Vector v(size()-1);
+  for (int j = 0; j < v.size(); ++j){
+    v.vec[j+2] = vec[j+2];
+  }
+  return v;
+};
+
+template<class Z> inline typename ZStar<Z>::Vector
 ZStar<Z>::Vector::unify(const ZStar<Z>::Vector &v, bool *unifiable) const{
   assert(size() == v.size());
   ZStar<Z>::Vector lub(size());

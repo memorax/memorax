@@ -422,6 +422,40 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::cas(MemLoc<RegId> ml, const Expr<RegId> &e0
 };
 
 template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::slocked_block(const std::vector<Stmt> &ss,
+                                                   const Lexer::TokenPos &p){
+  if(ss.empty()){
+    throw new std::logic_error("Lang::Stmt::slocked_block: Empty statement set.");
+  }
+  /* Check that ss satisfies the invariant for stmts */
+  unsigned i;
+  for(i = 0; i < ss.size(); i++){
+    std::string cmt;
+    if(!check_slocked_invariant(ss[i],&cmt)){
+      throw new std::logic_error("Lang::Stmt::slocked_block: "+cmt);
+    }
+  }
+
+  Stmt<RegId> s(p);
+  s.type = SLOCKED;
+  s.stmt_count = ss.size();
+  s.stmts = new labeled_stmt_t[ss.size()];
+  for(i = 0; i < ss.size(); i++){
+    s.stmts[i].lbl = "";
+    s.stmts[i].stmt = ss[i];
+  }
+  s.populate_reads_writes();
+  s.fence = s.writes.size() > 0;
+  return s;
+}
+
+template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::slocked_write(MemLoc<RegId> ml, const Expr<RegId> &e,
+                                                   const Lexer::TokenPos &p){
+  return slocked_block(std::vector<Stmt<RegId> >(1,write(ml,e,p)),p);
+};
+
+template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::goto_stmt(label_t lbl,
                                                const Lexer::TokenPos &p){
   Stmt<RegId> s(p);
@@ -867,6 +901,11 @@ template<class RegId> bool Lang::Stmt<RegId>::check_locked_invariant(const Stmt 
   }
 }
 
+template<class RegId> bool Lang::Stmt<RegId>::check_slocked_invariant(const Stmt &stmt, std::string *comment){
+  if (stmt.get_type() != WRITE && comment) *comment = "Illegal type of statement in store-store locked block";
+  return stmt.get_type() == WRITE;
+}
+
 template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(const Stmt&)> &f, Stmt *ss) const throw(){
   if(f(*this)){
     if(ss) *ss = *this;
@@ -876,7 +915,7 @@ template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(co
     case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: 
     case WRITE: case GOTO: case UPDATE:
       return false;
-    case LOCKED: case IF: case WHILE: case EITHER: case SEQUENCE:
+    case LOCKED: case SLOCKED: case IF: case WHILE: case EITHER: case SEQUENCE:
       {
         for(int i = 0; i < stmt_count; i++){
           if(stmts[i].stmt.find_substmt(f,ss)){
@@ -937,7 +976,7 @@ template<class RegId> std::set<RegId> Lang::Stmt<RegId>::get_registers() const{
   case IF: case WHILE:
     set = b->get_registers();
     // Note: no break
-  case LOCKED: case EITHER: case SEQUENCE:
+  case LOCKED: case SLOCKED: case EITHER: case SEQUENCE:
     {
       for(int i = 0; i < stmt_count; i++){
         std::set<RegId> s2 = stmts[i].stmt.get_registers();
@@ -958,7 +997,7 @@ VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const 
     return no_writes;
   case WRITE: case UPDATE:
     return VecSet<VecSet<MemLoc<RegId> > >::singleton(writes);
-  case LOCKED: case EITHER: case IF:
+  case LOCKED: case SLOCKED: case EITHER: case IF:
     {
       VecSet<VecSet<MemLoc<RegId> > > s;
       for(int i = 0; i < stmt_count; ++i){

@@ -42,6 +42,7 @@
 #include "sb_constraint.h"
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
+#include "pws_constraint.h"
 #include "test.h"
 #include "zstar.h"
 #include <config.h>
@@ -309,6 +310,10 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
     reach = new SbTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
+  }else if(flags.find("a")->second.argument == "pws"){
+    PwsConstraint::Common *common = new PwsConstraint::Common(*machine);
+    reach = new SbTsoBwd();
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
@@ -525,6 +530,7 @@ int main(int argc, char *argv[]){
           return 1;
         }else if(i < argc-1){
           if(argv[i+1] == std::string("sb") ||
+             argv[i+1] == std::string("pws") ||
              argv[i+1] == std::string("pb")){
             flags["a"] = Flag("a",argv[i],true,argv[i+1]);
             i++;
