@@ -24,18 +24,23 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <functional>]],
                                    [[int j = 42; std::function<int(int)> f = [j](int i){ return i+j; }]])],
   [AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no]) ; 
-   AC_MSG_CHECKING([for lambdas with switch -std=c++0x]) ;
+   AC_MSG_CHECKING([for lambdas with switch -std=c++11]) ;
    OLDCXXFLAGS=$CXXFLAGS ;
-   CXXFLAGS="$CXXFLAGS -std=c++0x" ;
+   CXXFLAGS="$CXXFLAGS -std=c++11" ;
    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <functional>]],
                                        [[int j = 42; std::function<int(int)> f = [j](int i){ return i+j; }]])],
      [AC_MSG_RESULT([yes])],
-     [AC_MSG_FAILURE([Failed to compile lambda expression. Does your compiler support C++0x?])])])
+     [AC_MSG_FAILURE([Failed to compile lambda expression. Does your compiler support C++11?])])])
 AC_MSG_CHECKING([for automatic type inference])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <list>]],
                                    [[std::list<int> l; for(auto it = l.begin(); it != l.end(); ++it) ;]])],
                   [AC_MSG_RESULT([yes])],
-                  [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile auto-typed declaration. Does your compiler support C++0x?])])
+                  [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile auto-typed declaration. Does your compiler support C++11?])])
+AC_MSG_CHECKING([for range-based for loops])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <list>]],
+                                   [[std::list<int> l; for(int i : l) ;]])],
+                  [AC_MSG_RESULT([yes])],
+                  [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile range-based for loop. Does your compiler support C++11?])])
 AC_MSG_CHECKING([for gmpxx])
 OLDLIBS=$LIBS
 LIBS="$LIBS -lgmpxx -lgmp"
