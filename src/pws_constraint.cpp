@@ -85,14 +85,39 @@ PwsConstraint::PwsConstraint(const SbConstraint &s, Common &c)
 std::list<Constraint*> PwsConstraint::pre(const Machine::PTransition &t) const {
   std::list<Constraint*> res;
   std::list<pre_constr_t> r = pre(t, false, false);
-  for (const pre_constr_t &constr : r) {
-    if (constr.channel_pop_back) {
-      throw new std::logic_error("PwsConstraint::pre: channel_pop_back not implemented");
-    } else if (constr.buffer_pop_back) {
-      throw new std::logic_error("PwsConstraint::pre: buffer_pop_back not implemented");
-    } else {
-      if (constr.pwsc->unreachable()) delete constr.pwsc;
-      else                            res.push_back(constr.pwsc);
+  for (const pre_constr_t &c : r) {
+    bool move_p_to_last = false;
+    std::vector<PwsConstraint*> pwscs;
+    if (c.channel_pop_back) {
+      assert(c.pwsc->channel.back().nmls == c.written_nmls);
+      assert(c.pwsc->channel.size() > 1);
+
+      assert((c.pwsc->cpointers[t.pid] == int(c.pwsc->channel.size()) - 1)
+             ==
+             (t.instruction.get_type() == Lang::LOCKED));
+      if (c.pwsc->cpointers[t.pid] == int(c.pwsc->channel.size()) - 1) {
+        --c.pwsc->cpointers[t.pid];
+        /* Make sure after hidden messages have been added that
+         * process t.pid points to the rightmost message */
+        move_p_to_last = true;
+      }
+      pwscs = c.pwsc->channel_pop_back();
+      delete c.pwsc;
+    }
+    else if (c.buffer_pop_back) {
+      assert(c.written_nmls.size() == 1);
+      Lang::NML nml = c.written_nmls[0];
+      pwscs = c.pwsc->buffer_pop_back(t.pid, nml);
+      delete c.pwsc;
+    }
+    else {
+      pwscs.push_back(c.pwsc);
+    }
+
+    for (PwsConstraint *pwsc : pwscs) {
+      if (move_p_to_last) pwsc->cpointers[t.pid] = int(pwsc->channel.size()) - 1;
+      if (pwsc->unreachable()) delete pwsc;
+      else                     res.push_back(pwsc);
     }
   }
   return res;
@@ -104,6 +129,10 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   const Lang::Stmt<int> &s = t.instruction;
   if (SbConstraint::pcs[t.pid] != t.target)
     return res;
+
+  Log::extreme << "Conststraint " << to_string()  << " considering transition \""
+               << s.to_string(common.machine.reg_pretty_vts(t.pid), common.machine.ml_pretty_vts(t.pid))
+               << "\" (" << t.pid << ":" << t.source << "->" << t.target << ")\n";
 
   switch (s.get_type()) {
   case Lang::NOP/* 0 */: {
@@ -180,7 +209,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
           PwsConstraint *pwsc = new PwsConstraint(*this);
           pwsc->pcs[pid] = t.source;
           if (slocked) pwsc->channel.back().store = pwsc->channel.back().store.assign(nmli, val);
-          else         pwsc->write_buffers[pid][nmli] = val;
+          else         pwsc->write_buffers[pid][nmli].assign(pwsc->write_buffers[pid][nmli].size() - 1, val);
           pwsc->reg_stores[pid] = rstore;
           res.push_back(pre_constr_t(pwsc, slocked, !slocked, VecSet<Lang::NML>::singleton(nml)));
         }
@@ -292,6 +321,31 @@ bool PwsConstraint::is_fully_serialised(const std::vector<Lang::MemLoc<int>> &ml
   return true;
 }
 
+std::vector<PwsConstraint*> PwsConstraint::channel_pop_back() const {
+  std::vector<SbConstraint*> r = SbConstraint::channel_pop_back();
+  std::vector<PwsConstraint*> res;
+  for (SbConstraint *sbc : r) {
+    res.push_back(new PwsConstraint(*sbc, common));
+    res.back()->write_buffers = write_buffers;
+    delete sbc;
+  }
+  return res;
+}
+
+std::vector<PwsConstraint*> PwsConstraint::buffer_pop_back(int pid, Lang::NML nml) const {
+  // TODO: ponder the completeness of this
+  int nmli = common.index(nml);
+  assert(write_buffers[pid][nmli].size() > 0); // Precondition
+  std::vector<PwsConstraint*> res;
+  // Case one: no write was hidden by the popped one
+  res.push_back(new PwsConstraint(*this));
+  res.back()->write_buffers[pid][nmli].pop_back();
+  // Case two: some write was hidden by the popped one
+  res.push_back(new PwsConstraint(*this));
+  res.back()->write_buffers[pid][nmli].assign(write_buffers[pid][nmli].size() - 1, value_t::STAR);
+  return res;
+}
+
 std::string PwsConstraint::to_string() const throw() {
   std::stringstream ss(SbConstraint::to_string());
   for (uint p = 0; p < common.machine.automata.size(); p++) {
@@ -299,6 +353,9 @@ std::string PwsConstraint::to_string() const throw() {
     for (int g = 0; g < common.gvar_count; g++) {
       pretty_print_buffer(ss, write_buffers[p], Lang::NML::global(g));
     }
+    for (uint tp = 0; tp < common.machine.automata.size(); tp++)
+      for (int l = 0; l < common.max_lvar_count; l++)
+        pretty_print_buffer(ss, write_buffers[p], Lang::NML::local(l, tp));
     ss << "}\n";
   }
   return ss.str();

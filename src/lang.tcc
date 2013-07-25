@@ -609,6 +609,7 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
   case WRITE: 
     return indlbl+"write: "+mlts(writes[0])+" := "+e0->to_string(regts);
   case GOTO: return indlbl+"goto "+lbl;
+  case SERIALISE: return indlbl+"serialise: "+mlts(writes[0]);
   case UPDATE:
     {
       std::stringstream ss;
@@ -666,9 +667,9 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
       s += " }";
       return s;
     }
-  case LOCKED:
+  case SLOCKED: case LOCKED:
     if(indentation >= 0){
-      std::string s = indlbl+"locked{\n";
+      std::string s = indlbl+(type==SLOCKED?"slocked{\n":"locked{\n");
       for(int i = 0; i < stmt_count; i++){
         s += stmts[i].stmt.to_string(regts,mlts,indentation+2,stmts[i].lbl)+"\n";
         if(i < stmt_count-1) s += ind+"or\n";
@@ -676,7 +677,7 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
       s += ind+"}";
       return s;
     }else{
-      std::string s = indlbl+"locked{ ";
+      std::string s = indlbl+(type==SLOCKED?"slocked{\n":"locked{\n");
       for(int i = 0; i < stmt_count; i++){
         s += stmts[i].stmt.to_string(regts,mlts,indentation,stmts[i].lbl);
         if(i < stmt_count-1) s += " or ";
