@@ -86,6 +86,9 @@ public:
   /* Returns all TsoFenceSyncs that can be inserted into m. */
   static std::set<Sync*> get_all_possible(const Machine &m);
 
+  virtual int get_pid() const { return w.pid; };
+  virtual const Machine::PTransition &get_write() const { return w; };
+
   static void test();
 protected:
   virtual int compare(const Sync &s) const;

@@ -23,6 +23,7 @@
 
 #include "trace_fencer.h"
 #include "tso_fence_sync.h"
+#include "tso_lock_sync.h"
 #include "vecset.h"
 
 #include <list>
@@ -64,6 +65,8 @@ private:
   fence_rule_t fence_rule;
   /* All fences that can be inserted into machine. */
   std::set<TsoFenceSync*> all_fences;
+  /* All locks that can be inserted into machine. */
+  std::set<TsoLockSync*> all_locks;
   /* For each process p with a control state q, fences_by_pq[p][q] is
    * the subset of all_fences corresponding to that process and
    * control state.
@@ -71,6 +74,13 @@ private:
    * The pointers point to the same objects as those in all_fences.
    */
   std::vector<std::vector<std::set<TsoFenceSync*> > > fences_by_pq;
+  /* For each process p with a control state q, locks_by_pq[p][q] is
+   * the set of elements l of all_locks such that l locks a transition
+   * which has source or target q.
+   *
+   * The pointers point to the same objects as those in all_locks.
+   */
+  std::vector<std::vector<std::set<TsoLockSync*> > > locks_by_pq;
 
   /* Return the subset of all_fences of fences of process pid that fit
    * immediately between in and out.
@@ -79,6 +89,11 @@ private:
                                  const Automaton::Transition &in,
                                  const Automaton::Transition &out,
                                  const std::vector<const Sync::InsInfo*> &m_infos) const;
+
+  /* If in is a transition that can be locked, then the corresponding
+   * Sync from all_locks is returned. Otherwise null is returned.
+   */
+  Sync *lock_trans(int pid, const Automaton::Transition &in, const std::vector<const Sync::InsInfo*> &m_infos) const;
 
   /* Returns true iff all memory locations read by t exist in the
    * union of all elements of buf.

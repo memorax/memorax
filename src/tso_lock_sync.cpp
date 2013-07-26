@@ -122,7 +122,20 @@ int TsoLockSync::compare(const Sync &s) const{
 };
 
 std::set<Sync*> TsoLockSync::get_all_possible(const Machine &m){
-  throw new std::logic_error("Not implemented.");
+  std::set<Sync*> S;
+
+  for(unsigned p = 0; p < m.automata.size(); ++p){
+    const std::vector<Automaton::State> &states = m.automata[p].get_states();
+    for(unsigned i = 0; i < states.size(); ++i){
+      for(auto it = states[i].fwd_transitions.begin(); it != states[i].fwd_transitions.end(); ++it){
+        if((*it)->instruction.get_type() == Lang::WRITE){
+          S.insert(new TsoLockSync(Machine::PTransition(**it,p)));
+        }
+      }
+    }
+  }
+
+  return S;
 };
 
 void TsoLockSync::test(){
@@ -446,6 +459,8 @@ void TsoLockSync::test(){
 
       delete m;
       delete m2;
+      delete tfs;
+      delete tfs2;
     }
 
   }

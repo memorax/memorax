@@ -21,6 +21,7 @@
 #include "preprocessor.h"
 #include "test.h"
 #include "tso_fence_sync.h"
+#include "tso_lock_sync.h"
 #include "tso_simple_fencer.h"
 #include "vecset.h"
 
@@ -30,14 +31,12 @@
 
 TsoSimpleFencer::TsoSimpleFencer(const Machine &m,fence_rule_t rule)
   : TraceFencer(m), fence_rule(rule){
-  if(fence_rule != FENCE){
-    throw new std::logic_error("TsoSimpleFencer: Only rule FENCE is currently supported.");
+  for(unsigned p = 0; p < machine.automata.size(); ++p){
+    fences_by_pq.push_back(std::vector<std::set<TsoFenceSync*> >(machine.automata[p].get_states().size()));
+    locks_by_pq.push_back(std::vector<std::set<TsoLockSync*> >(machine.automata[p].get_states().size()));
   }
-  /* Get all fences for m */
-  {
-    for(unsigned p = 0; p < machine.automata.size(); ++p){
-      fences_by_pq.push_back(std::vector<std::set<TsoFenceSync*> >(machine.automata[p].get_states().size()));
-    }
+  if(fence_rule == FENCE || fence_rule == LOCKED_AND_FENCE){
+    /* Get all fences for m */
     std::set<Sync*> tfs = TsoFenceSync::get_all_possible(machine);
     for(auto it = tfs.begin(); it != tfs.end(); ++it){
       assert(dynamic_cast<TsoFenceSync*>(*it));
@@ -46,10 +45,24 @@ TsoSimpleFencer::TsoSimpleFencer(const Machine &m,fence_rule_t rule)
       fences_by_pq[f->get_pid()][f->get_q()].insert(f);
     }
   }
+  if(fence_rule == LOCKED || fence_rule == LOCKED_AND_FENCE){
+    /* Get all locks for m */
+    std::set<Sync*> tls = TsoLockSync::get_all_possible(machine);
+    for(auto it = tls.begin(); it != tls.end(); ++it){
+      assert(dynamic_cast<TsoLockSync*>(*it));
+      TsoLockSync *l = static_cast<TsoLockSync*>(*it);
+      all_locks.insert(l);
+      locks_by_pq[l->get_pid()][l->get_write().source].insert(l);
+      locks_by_pq[l->get_pid()][l->get_write().target].insert(l);
+    }
+  }
 };
 
 TsoSimpleFencer::~TsoSimpleFencer(){
   for(auto it = all_fences.begin(); it != all_fences.end(); ++it){
+    delete *it;
+  }
+  for(auto it = all_locks.begin(); it != all_locks.end(); ++it){
     delete *it;
   }
 };
@@ -123,6 +136,10 @@ std::set<std::set<Sync*> > TsoSimpleFencer::fence(const Trace &t, const std::vec
       if(next_instr){
         std::set<Sync*> fs = fences_between(pid,*t[i],*next_instr,m_infos);
         pending_syncs[pid].insert(fs.begin(),fs.end());
+        Sync *l = lock_trans(pid,*t[i],m_infos);
+        if(l){
+          pending_syncs[pid].insert(l);
+        }
       }
     }
   }
@@ -150,6 +167,31 @@ bool TsoSimpleFencer::is_ROWE(const Machine::PTransition *t,
                      [&writes](const Lang::MemLoc<int> &ml){
                        return writes.count(ml);
                      });
+};
+
+Sync *TsoSimpleFencer::lock_trans(int pid,
+                                  const Automaton::Transition &in,
+                                  const std::vector<const Sync::InsInfo*> &m_infos) const{
+  int q = in.source;
+  if(q >= (int)fences_by_pq[pid].size()){
+    q = FenceSync::InsInfo::original_q(m_infos,q);
+  }
+
+  const std::set<TsoLockSync*> &pqs = locks_by_pq[pid][q];
+
+  Machine::PTransition pt_in(in,pid);
+
+  for(auto it = pqs.begin(); it != pqs.end(); ++it){
+    Machine::PTransition pt =
+      TsoLockSync::InsInfo::all_tchanges(m_infos,
+                                         Machine::PTransition((*it)->get_write(),
+                                                              (*it)->get_pid()));
+    if(pt.compare(pt_in,false) == 0){
+      return *it;
+    }
+  }
+
+  return 0;
 };
 
 std::set<Sync*> TsoSimpleFencer::fences_between(int pid,
@@ -266,9 +308,38 @@ void TsoSimpleFencer::test(){
       }
       return std::any_of(Z.begin(),Z.end(),
                          [m,&cs,pid,lbl](const Sync *s){
-                           const FenceSync *fs = static_cast<const FenceSync*>(s);
-                           return fs->get_pid() == pid && fs->get_q() == cs(m,pid,lbl);
+                           const FenceSync *fs = dynamic_cast<const FenceSync*>(s);
+                           return fs && fs->get_pid() == pid && fs->get_q() == cs(m,pid,lbl);
                          });
+    };
+
+    std::function<bool(const std::set<std::set<Sync*> > &,const Machine*,int,int,std::string,Lang::NML)> check_S_lock = 
+      [&cs](const std::set<std::set<Sync*> > &S,const Machine *m,int sz,int pid,std::string lbl,Lang::NML v){
+      if(S.size() != 1){
+        return false;
+      }
+      std::set<Sync*> Z = *S.begin();
+      if((int)Z.size() != sz){
+        return false;
+      }
+      return std::any_of(Z.begin(),Z.end(),
+                         [m,&cs,pid,lbl,v](const Sync *s){
+                           const TsoLockSync *ls = dynamic_cast<const TsoLockSync*>(s);
+                           if(!ls) return false;
+                           Lang::NML w = Lang::NML(ls->get_write().instruction.get_memloc(),pid);
+                           return ls->get_pid() == pid && 
+                           ls->get_write().source == cs(m,pid,lbl) &&
+                           w == v;
+                         });
+    };
+
+    std::function<void(const std::set<std::set<Sync*> > &)> delete_S = 
+      [](const std::set<std::set<Sync*> > &S){
+      for(auto it = S.begin(); it != S.end(); ++it){
+        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+          delete *it2;
+        }
+      }
     };
 
     /* Test 1,2 */
@@ -310,17 +381,8 @@ void TsoSimpleFencer::test(){
       std::set<std::set<Sync*> > fs2 = tsf.fence(t2,std::vector<const Sync::InsInfo*>());
       Test::inner_test("fence #2",fs2.size() == 0);
 
-      for(auto it = fs.begin(); it != fs.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
-
-      for(auto it = fs2.begin(); it != fs2.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
+      delete_S(fs);
+      delete_S(fs2);
 
       delete m;
     }
@@ -354,11 +416,7 @@ void TsoSimpleFencer::test(){
       std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
       Test::inner_test("fence #3",check_S(fs,m,2,0,"L1") && check_S(fs,m,2,0,"L2"));
 
-      for(auto it = fs.begin(); it != fs.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
+      delete_S(fs);
 
       Trace t2(0);
       t2.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
@@ -369,11 +427,7 @@ void TsoSimpleFencer::test(){
       std::set<std::set<Sync*> > fs2 = tsf.fence(t2,std::vector<const Sync::InsInfo*>());
       Test::inner_test("fence #4",fs2.size() == 0);
 
-      for(auto it = fs2.begin(); it != fs2.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
+      delete_S(fs2);
 
       delete m;
     }
@@ -497,11 +551,7 @@ void TsoSimpleFencer::test(){
 
       Test::inner_test("fence #5", check_S(fs,m,4,0,"L2") && check_S(fs,m,4,0,"L4"));
 
-      for(auto it = fs.begin(); it != fs.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
+      delete_S(fs);
       for(unsigned i = 0; i < m_infos.size(); ++i){
         delete m_infos[i];
       }
@@ -563,12 +613,8 @@ void TsoSimpleFencer::test(){
                        check_S(fs,m,5,0,"L4") &&
                        check_S(fs,m,5,0,"L7"));
 
-      for(auto it = fs.begin(); it != fs.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
-      delete m;      
+      delete_S(fs);
+      delete m;
     }
 
     /* Test 7: Spontaneously locked writes */
@@ -611,11 +657,7 @@ void TsoSimpleFencer::test(){
 
       Test::inner_test("fence #7", check_S(fs,m,1,0,"L2"));
 
-      for(auto it = fs.begin(); it != fs.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
+      delete_S(fs);
       delete m;
     }
 
@@ -678,12 +720,409 @@ void TsoSimpleFencer::test(){
                        check_S(fs,m,4,0,"L4") &&
                        check_S(fs,m,4,1,"K1"));
 
-      for(auto it = fs.begin(); it != fs.end(); ++it){
-        for(auto it2 = it->begin(); it2 != it->end(); ++it2){
-          delete *it2;
-        }
-      }
+      delete_S(fs);
       delete m;
     }
+
+    /* Test 9,10,11,12: Test 1,2 with LOCKED and LOCKED_AND_FENCE */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: x := 1;\n"
+         "  L1: read: y = 0;\n"
+         "  L2: nop\n"
+         );
+
+      TsoSimpleFencer tsf_l(*m,LOCKED);
+      TsoSimpleFencer tsf_lf(*m,LOCKED_AND_FENCE);
+      Trace t(0);
+      t.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t.push_back(trans(m,0,"L1","read: y = 0","L2"),0);
+      t.push_back(update(m,0,x,"L2"),0);
+
+      std::set<std::set<Sync*> > fs_l = tsf_l.fence(t,std::vector<const Sync::InsInfo*>());
+      std::set<std::set<Sync*> > fs_lf = tsf_lf.fence(t,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #9",
+                       check_S_lock(fs_l,m,1,0,"L0",x));
+      Test::inner_test("fence #10",
+                       check_S(fs_lf,m,2,0,"L1") &&
+                       check_S_lock(fs_lf,m,2,0,"L0",x));
+
+      Trace t2(0);
+      t2.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t2.push_back(update(m,0,x,"L1"),0);
+      t2.push_back(trans(m,0,"L1","read: y = 0","L2"),0);
+
+      std::set<std::set<Sync*> > fs_l_2 = tsf_l.fence(t2,std::vector<const Sync::InsInfo*>());
+      std::set<std::set<Sync*> > fs_lf_2 = tsf_lf.fence(t2,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #11",fs_l_2.size() == 0);
+      Test::inner_test("fence #12",fs_lf_2.size() == 0);
+
+      delete_S(fs_l);
+      delete_S(fs_lf);
+      delete_S(fs_l_2);
+      delete_S(fs_lf_2);
+
+      delete m;
+    }
+
+    /* Test 13,14,15,16: ROWE with LOCKED and LOCKED_AND_FENCE */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: x := 1;\n"
+         "  L1: read: x = 1;\n"
+         "  L2: read: y = 0;\n"
+         "  L3: nop\n"
+         );
+
+      TsoSimpleFencer tsf_l(*m,LOCKED);
+      TsoSimpleFencer tsf_lf(*m,LOCKED_AND_FENCE);
+      Trace t(0);
+      t.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t.push_back(trans(m,0,"L1","read: x = 1","L2"),0);
+      t.push_back(trans(m,0,"L2","read: y = 0","L3"),0);
+      t.push_back(update(m,0,x,"L3"),0);
+
+      std::set<std::set<Sync*> > fs_l = tsf_l.fence(t,std::vector<const Sync::InsInfo*>());
+      std::set<std::set<Sync*> > fs_lf = tsf_lf.fence(t,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #13",check_S_lock(fs_l,m,1,0,"L0",x));
+      Test::inner_test("fence #14",
+                       check_S(fs_lf,m,3,0,"L1") && 
+                       check_S(fs_lf,m,3,0,"L2") &&
+                       check_S_lock(fs_lf,m,3,0,"L0",x));
+
+      delete_S(fs_l);
+      delete_S(fs_lf);
+
+      Trace t2(0);
+      t2.push_back(trans(m,0,"L0","write: x := 1","L1"),0);
+      t2.push_back(trans(m,0,"L1","read: x = 1","L2"),0);
+      t2.push_back(update(m,0,x,"L2"),0);
+      t2.push_back(trans(m,0,"L2","read: y = 0","L3"),0);
+
+      std::set<std::set<Sync*> > fs_l_2 = tsf_l.fence(t2,std::vector<const Sync::InsInfo*>());
+      std::set<std::set<Sync*> > fs_lf_2 = tsf_lf.fence(t2,std::vector<const Sync::InsInfo*>());
+      Test::inner_test("fence #15",fs_l_2.size() == 0);
+      Test::inner_test("fence #16",fs_lf_2.size() == 0);
+
+      delete_S(fs_l_2);
+      delete_S(fs_lf_2);
+
+      delete m;
+    }
+
+    /* Test 17: Multiple insert before fence with LOCKED */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: nop;\n"
+         /* insert fence here (f0) */
+         "  L1: either{\n"
+         "    write: x := 1\n"
+         "  or\n"
+         "    nop\n"
+         "  };\n"
+         "  L2: read: y = 0;\n"
+         /* insert fence here (f1) */
+         "  L3: either{\n"
+         "    write: u := 1\n"
+         "  or\n"
+         "    nop\n"
+         "  };\n"
+         "  L4: read: v = 0;\n"
+         "  L5: nop\n"
+         );
+
+      std::set<Automaton::Transition> tmp_IN, tmp_OUT;
+      tmp_IN.insert(trans(m,0,"L0","nop","L1"));
+      tmp_OUT.insert(trans(m,0,"L1","write: x := 1","L2"));
+      TsoFenceSync f0(0,cs(m,0,"L1"),tmp_IN,tmp_OUT);
+      tmp_IN.clear(); tmp_OUT.clear();
+      tmp_IN.insert(trans(m,0,"L2","read: y = 0","L3"));
+      tmp_OUT.insert(trans(m,0,"L3","write: u := 1","L4"));
+      TsoFenceSync f1(0,cs(m,0,"L3"),tmp_IN,tmp_OUT);
+
+      std::vector<const Sync::InsInfo*> m_infos;
+      Sync::InsInfo *info;
+      Machine *m2 = f0.insert(*m,m_infos,&info); m_infos.push_back(info);
+      Machine *m3 = f1.insert(*m2,m_infos,&info); m_infos.push_back(info);
+
+      Trace t(0);
+      {
+        int q = 0;
+        const std::vector<Automaton::State> &ss = m3->automata[0].get_states();
+
+        /* nop */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* fence */
+        assert(ss[q].fwd_transitions.size() == 2);
+        for(auto it = ss[q].fwd_transitions.begin(); it != ss[q].fwd_transitions.end(); ++it){
+          if((*it)->instruction.get_type() == Lang::LOCKED){
+            t.push_back(Machine::PTransition(**it,0),0);
+            q = (*it)->target;
+            break;
+          }
+        }
+        assert(t.size() == 2);
+
+        /* write: x := 1 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* read: y = 0 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* update x */
+        {
+          VecSet<Lang::MemLoc<int> > mls;
+          mls.insert(x.localize(0));
+          t.push_back(Machine::PTransition(q,Lang::Stmt<int>::update(0,mls),q,0),0);
+        }
+
+        /* fence */
+        assert(ss[q].fwd_transitions.size() == 2);
+        for(auto it = ss[q].fwd_transitions.begin(); it != ss[q].fwd_transitions.end(); ++it){
+          if((*it)->instruction.get_type() == Lang::LOCKED){
+            t.push_back(Machine::PTransition(**it,0),0);
+            q = (*it)->target;
+            break;
+          }
+        }
+        assert(t.size() == 6);
+
+        /* write: u := 1 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* read: v = 0 */
+        assert(ss[q].fwd_transitions.size() == 1);
+        t.push_back(Machine::PTransition(**ss[q].fwd_transitions.begin(),0),0);
+        q = (*ss[q].fwd_transitions.begin())->target;
+
+        /* update u */
+        {
+          VecSet<Lang::MemLoc<int> > mls;
+          mls.insert(u.localize(0));
+          t.push_back(Machine::PTransition(q,Lang::Stmt<int>::update(0,mls),q,0),0);
+        }
+
+      }
+
+      TsoSimpleFencer tsf(*m,LOCKED);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,m_infos);
+
+      Test::inner_test("fence #17", 
+                       check_S_lock(fs,m,2,0,"L1",x) &&
+                       check_S_lock(fs,m,2,0,"L3",u));
+
+      delete_S(fs);
+      for(unsigned i = 0; i < m_infos.size(); ++i){
+        delete m_infos[i];
+      }
+      delete m3;
+      delete m2;
+      delete m;
+    }
+
+    /* Test 18: Stacking writes with LOCKED */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: u := 1;\n"
+         "  L1: write: v := 1;\n"
+         "  L2: write: w := 1;\n"
+         "  L3: read: v = 1;\n"
+         "  L4: read: z = 0;\n"
+         "  L5: read: z = 1;\n"
+         "  L6: write: x := 1;\n"
+         "  L7: read: y = 0;\n"
+         "  L8: nop;\n"
+         "  L9: nop;\n"
+         "  L10: nop"
+         );
+
+      TsoSimpleFencer tsf(*m,LOCKED);
+
+      Trace t(0);
+      t.push_back(trans(m,0,"L0","write: u := 1","L1"),0);
+      t.push_back(trans(m,0,"L1","write: v := 1","L2"),0);
+      t.push_back(trans(m,0,"L2","write: w := 1","L3"),0);
+      t.push_back(trans(m,0,"L3","read: v = 1","L4"),0);
+      t.push_back(trans(m,0,"L4","read: z = 0","L5"),0);
+      t.push_back(update(m,0,u,"L5"),0);
+      t.push_back(update(m,0,v,"L5"),0);
+      t.push_back(update(m,0,w,"L5"),0);
+      t.push_back(trans(m,0,"L5","read: z = 1","L6"),0);
+      t.push_back(trans(m,0,"L6","write: x := 1","L7"),0);
+      t.push_back(trans(m,0,"L7","read: y = 0","L8"),0);
+      t.push_back(trans(m,0,"L8","nop","L9"),0);
+      t.push_back(trans(m,0,"L9","nop","L10"),0);
+      t.push_back(update(m,0,x,"L10"),0);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+
+      Test::inner_test("fence #18",
+                       check_S_lock(fs,m,4,0,"L0",u) &&
+                       check_S_lock(fs,m,4,0,"L1",v) &&
+                       check_S_lock(fs,m,4,0,"L2",w) &&
+                       check_S_lock(fs,m,4,0,"L6",x));
+
+      delete_S(fs);
+      delete m;
+    }
+
+    /* Test 19: Spontaneously locked writes with LOCKED */
+    /* A non-locked write executes as a locked write in this trace.
+     * (Artifact of TSO reachability implementations.)
+     * Should not interfere with fence insertion.
+     */
+    {
+      Machine *m = get_machine
+        ("forbidden *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: u := 1;\n"
+         "  L1: write: x := 1;\n"
+         "  L2: read: y = 0;\n"
+         "  L3: nop\n"
+         );
+
+      Trace t(0);
+      {
+        Machine::PTransition lwu(cs(m,0,"L0"),
+                                 Lang::Stmt<int>::locked_write(u.localize(0),Lang::Expr<int>::integer(1)),
+                                 cs(m,0,"L1"),0);
+        t.push_back(lwu,0);
+      }
+      t.push_back(trans(m,0,"L1","write: x := 1","L2"),0);
+      t.push_back(trans(m,0,"L2","read: y = 0","L3"),0);
+      t.push_back(update(m,0,x,"L3"),0);
+
+      TsoSimpleFencer tsf(*m,LOCKED);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+
+      Test::inner_test("fence #19", 
+                       check_S_lock(fs,m,1,0,"L1",x));
+
+      delete_S(fs);
+      delete m;
+    }
+
+    /* Test 20: Multiple interleaved overtakings with LOCKED */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  u = *\n"
+         "  v = *\n"
+         "  w = *\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "  L0: write: u := 1;\n"
+         "  L1: read: v = 0;\n"
+         "  L2: write: x := 1;\n"
+         "  L3: write: z := 1;\n"
+         "  L4: read: y = 0;\n"
+         "  L5: read: w = 0;\n"
+         "  L6: nop\n"
+         "process\n"
+         "text\n"
+         "  K0: write: u := 1;\n"
+         "  K1: read: v = 0;\n"
+         "  L0: write: y := 1;\n"
+         "  L1: write: z := 2;\n"
+         "  L2: read: x = 0;\n"
+         "  L3: nop\n"
+         );
+
+      Trace t(0);
+      t.push_back(trans(m,1,"K0","write: u := 1","K1"),0);
+      t.push_back(trans(m,0,"L0","write: u := 1","L1"),0);
+      t.push_back(trans(m,1,"K1","read: v = 0","L0"),0);
+      t.push_back(trans(m,0,"L1","read: v = 0","L2"),0);
+      t.push_back(update(m,0,u,"L2"),0);
+      t.push_back(update(m,1,u,"L0"),0);
+      t.push_back(trans(m,0,"L2","write: x := 1","L3"),0);
+      t.push_back(trans(m,0,"L3","write: z := 1","L4"),0);
+      t.push_back(trans(m,1,"L0","write: y := 1","L1"),0);
+      t.push_back(trans(m,1,"L1","write: z := 2","L2"),0);
+      t.push_back(trans(m,0,"L4","read: y = 0","L5"),0);
+      t.push_back(update(m,1,y,"L2"),0);
+      t.push_back(update(m,1,z,"L2"),0);
+      t.push_back(trans(m,1,"L2","read: x = 0","L3"),0);
+      t.push_back(update(m,0,x,"L5"),0);
+      t.push_back(update(m,0,z,"L5"),0);
+      t.push_back(trans(m,0,"L5","read: w = 0","L6"),0);
+
+      TsoSimpleFencer tsf(*m,LOCKED);
+
+      std::set<std::set<Sync*> > fs = tsf.fence(t,std::vector<const Sync::InsInfo*>());
+
+      Test::inner_test("fence #20",
+                       check_S_lock(fs,m,4,1,"K0",u) &&
+                       check_S_lock(fs,m,4,0,"L0",u) &&
+                       check_S_lock(fs,m,4,0,"L2",x) &&
+                       check_S_lock(fs,m,4,0,"L3",z));
+
+      delete_S(fs);
+      delete m;
+    }
+
   }
 };
