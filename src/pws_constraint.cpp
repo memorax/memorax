@@ -21,6 +21,7 @@
 #include "pws_constraint.h"
 #include "intersection_iterator.h"
 #include <iostream>
+#include <iterator>
 
 PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
   /* Messages contains every memory location that is ever written
@@ -130,9 +131,6 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   if (SbConstraint::pcs[t.pid] != t.target)
     return res;
 
-  Log::extreme << "Conststraint " << to_string()  << " considering transition \""
-               << s.to_string(common.machine.reg_pretty_vts(t.pid), common.machine.ml_pretty_vts(t.pid))
-               << "\" (" << t.pid << ":" << t.source << "->" << t.target << ")\n";
 
   switch (s.get_type()) {
   case Lang::NOP/* 0 */: {
@@ -161,7 +159,8 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       for (int j = 0; j < stores.size(); ++j) {
         PwsConstraint *pwsc = new PwsConstraint(*this);
         pwsc->pcs[t.pid] = t.source;
-        if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val_nml[i]);
+        if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
+                             pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val_nml[i]);
         else pwsc->channel[msgi].store = channel[msgi].store.assign(nmli, val_nml[i]);
         pwsc->reg_stores[t.pid] = stores[j];
         res.push_back(pwsc);
@@ -314,9 +313,8 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
 }
 
 bool PwsConstraint::is_fully_serialised(const std::vector<Lang::MemLoc<int>> &mls, int pid) const {
-  for (const Lang::MemLoc<int> &ml : mls) {
-    Lang::NML nml(ml, pid);
-    if (write_buffers[pid][common.index(nml)].size() != 0) return false;  
+  for (unsigned nmli = 0; nmli < write_buffers[pid].size(); nmli++) {
+    if (write_buffers[pid][nmli].size() != 0) return false;
   }
   return true;
 }
@@ -346,10 +344,22 @@ std::vector<PwsConstraint*> PwsConstraint::buffer_pop_back(int pid, Lang::NML nm
   return res;
 }
 
+
+bool PwsConstraint::is_init_state() const {
+  if (!SbConstraint::is_init_state()) return false;
+  for (auto pwb : write_buffers)
+    for (const Store &buffer : pwb)
+      if (buffer.size() > 0) return false;
+  return true;
+}
+
 std::string PwsConstraint::to_string() const throw() {
-  std::stringstream ss(SbConstraint::to_string());
+  std::istringstream iss(SbConstraint::to_string());
+  std::stringstream ss;
+  std::string line;
   for (uint p = 0; p < common.machine.automata.size(); p++) {
-    ss << "P" << p << " buffer={";
+    std::getline(iss, line, '\n');
+    ss << line << " buffer={";
     for (int g = 0; g < common.gvar_count; g++) {
       pretty_print_buffer(ss, write_buffers[p], Lang::NML::global(g));
     }
@@ -358,6 +368,10 @@ std::string PwsConstraint::to_string() const throw() {
         pretty_print_buffer(ss, write_buffers[p], Lang::NML::local(l, tp));
     ss << "}\n";
   }
+  std::copy(std::istream_iterator<char>(iss),
+            std::istream_iterator<char>(),
+            std::ostream_iterator<char>(ss));
+  ss << "\n";
   return ss.str();
 }
 

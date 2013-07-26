@@ -55,7 +55,7 @@ public:
   // virtual ~PwsConstraint() throw();
   // virtual void abstract(){};
   // virtual bool is_abstracted() const { return true; };
-  // virtual bool is_init_state() const;
+  virtual bool is_init_state() const;
   // virtual std::list<const Machine::PTransition*> partred() const;
   virtual std::list<Constraint*> pre(const Machine::PTransition &) const;
   virtual std::string to_string() const throw();
