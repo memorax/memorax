@@ -44,6 +44,7 @@ tso_cycle.cpp tso_cycle.h \
 tso_cycle_lock.cpp tso_cycle_lock.h \
 tso_fence_sync.h tso_fence_sync.cpp \
 tso_fencins.cpp tso_fencins.h \
+tso_lock_sync.h tso_lock_sync.cpp \
 tso_simple_fencer.h tso_simple_fencer.cpp \
 tso_var.cpp tso_var.h \
 vecset.h vecset.tcc \

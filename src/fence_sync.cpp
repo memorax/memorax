@@ -23,6 +23,7 @@
 #include "parser.h"
 #include "preprocessor.h"
 #include "test.h"
+#include "tso_lock_sync.h"
 
 #include <algorithm>
 #include <sstream>
@@ -209,13 +210,17 @@ bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsIn
   }
 
   for(unsigned i = 0; i < m_infos.size(); ++i){
-    const FenceSync::InsInfo *info = dynamic_cast<const FenceSync::InsInfo*>(m_infos[i]);
-    if(!info){
-      throw new std::logic_error("FenceSync: Unsupported kind of Sync has been inserted before.");
-    }
+    if(dynamic_cast<const FenceSync::InsInfo*>(m_infos[i])){
+      const FenceSync::InsInfo *info = dynamic_cast<const FenceSync::InsInfo*>(m_infos[i]);
     
-    if(info->fence.compare(f,false) != 0){
-      throw new std::logic_error("Attempt to insert a different fence instruction at the same control location. Not supported (yet).");
+      if(info->fence.compare(f,false) != 0){
+        throw new std::logic_error("Attempt to insert a different fence instruction at the same control location. "
+                                   "Not supported (yet).");
+      }
+    }else if(dynamic_cast<const TsoLockSync::InsInfo*>(m_infos[i])){
+      // Ok
+    }else{
+      throw new std::logic_error("FenceSync: Unsupported kind of Sync has been inserted before.");
     }
   }
 
@@ -312,21 +317,29 @@ Machine::PTransition FenceSync::InsInfo::all_tchanges(const std::vector<const Sy
                                                       const Machine::PTransition &t){
   Machine::PTransition t2 = t;
   for(unsigned i = 0; i < ivec.size(); ++i){
-    assert(dynamic_cast<const InsInfo*>(ivec[i]));
-    const InsInfo *ii = static_cast<const InsInfo*>(ivec[i]);
-    t2 = ii->tchanges.at(t2);
+    if(dynamic_cast<const InsInfo*>(ivec[i])){
+      const InsInfo *ii = static_cast<const InsInfo*>(ivec[i]);
+      t2 = ii->tchanges.at(t2);
+    }else{
+      assert(dynamic_cast<const TsoLockSync::InsInfo*>(ivec[i]));
+      const TsoLockSync::InsInfo *ii = static_cast<const TsoLockSync::InsInfo*>(ivec[i]);
+      t2 = ii->tchanges.at(t2);
+    }
   }
   return t2;
 };
 
 int FenceSync::InsInfo::original_q(const std::vector<const Sync::InsInfo*> &ivec, int q){
   for(int i = (int)ivec.size() - 1; i >= 0; --i){
-    assert(dynamic_cast<const InsInfo*>(ivec[i]));
-    const InsInfo *info = static_cast<const InsInfo*>(ivec[i]);
-    assert(dynamic_cast<const FenceSync*>(info->sync));
-    const FenceSync *fs = static_cast<const FenceSync*>(info->sync);
-    if(q == info->new_q){
-      q = fs->get_q();
+    if(dynamic_cast<const InsInfo*>(ivec[i])){
+      const InsInfo *info = static_cast<const InsInfo*>(ivec[i]);
+      assert(dynamic_cast<const FenceSync*>(info->sync));
+      const FenceSync *fs = static_cast<const FenceSync*>(info->sync);
+      if(q == info->new_q){
+        q = fs->get_q();
+      }
+    }else{
+      assert(dynamic_cast<const TsoLockSync::InsInfo*>(ivec[i]));
     }
   }
   return q;
