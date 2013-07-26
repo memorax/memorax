@@ -161,7 +161,7 @@ ZStar<Z>::Vector::assign(int i, const ZStar<Z> &val) const{
 template<class Z> inline typename ZStar<Z>::Vector
 ZStar<Z>::Vector::Vector::push_front(ZStar val) const{
   Vector v(size()+1);
-  std::swap(v.vec[2], val);
+  v.vec[2] = val;
   for (int j = 0; j < size(); ++j){
     v.vec[j+3] = vec[j+2];
   }

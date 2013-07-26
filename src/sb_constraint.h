@@ -322,6 +322,7 @@ private:
    */
   std::vector<MsgCharacterization> characterize_channel() const;
 
+protected:
   /* Checks that the channel is possible according to
    * common.last_msgs. Will constrain the possible values in message
    * stores where possible.
@@ -329,8 +330,7 @@ private:
    * Messages where this does not hold can be discarded, since they
    * will never reach an initial state.
    */
-protected: bool ok_channel();
-private:
+bool ok_channel();
   /* Update the stores in the channel such that all stores to the
    * right of and including message i in the channel have a consistent
    * value for the memory location nml. Here i is the index of the
@@ -342,7 +342,8 @@ private:
    *
    * If nmli >= 0, then nmli is assumed to equal common.index(nml).
    */
-  bool propagate_value_in_channel(const Lang::NML &nml, int nmli = -1);
+  virtual bool propagate_value_in_channel(const Lang::NML &nml, int nmli = -1);
+private:
   /* Same as propagate_value_in_channel(nml,nmli), but propagates in
    * ch instead of in this->channel.
    *

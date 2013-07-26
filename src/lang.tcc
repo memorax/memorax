@@ -777,6 +777,14 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt) co
       }else{
         return 0;
       }
+    case SERIALISE:
+      if(writes[0] < stmt.writes[0]){
+        return -1;
+      }else if(stmt.writes[0] < writes[0]){
+        return 1;
+      }else{
+        return 0;
+      }
     case IF:
       {
         int bc = b->compare(*stmt.b);

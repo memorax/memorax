@@ -24,6 +24,23 @@
 #include <iterator>
 
 PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
+  /* The optimisations to all_transitions in SbConstraint::Common does not apply
+     to PWS. We recompute all_transitions without them. */
+  all_transitions.clear();
+  for (unsigned p = 0; p < machine.automata.size(); ++p) {
+    const std::vector<Automaton::State> &states = machine.automata[p].get_states();
+    for (unsigned i = 0; i < states.size(); ++i) {
+      for (const Automaton::Transition *t : states[i].bwd_transitions)
+        all_transitions.push_back(Machine::PTransition(*t, p));
+      for (const MsgHdr &m : messages)
+        if (m.nmls.size() > 0) {
+          VecSet<Lang::MemLoc<int>> mls;
+          for (Lang::NML nml : m.nmls) mls.insert(nml.localize(p));
+          all_transitions.push_back(Machine::PTransition(i, Lang::Stmt<int>::update(m.wpid, mls), i, p));
+        }
+    }
+  }
+  
   /* Messages contains every memory location that is ever written
    * We insert serialise transitions for that memory location and the writing process
    * at each state. */
@@ -43,8 +60,7 @@ PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
     }
   }
 
-  /* We recompute transitions_by_pc in case the transitions has changed their
-   * memory addresses */
+  /* We recompute transitions_by_pc because we have modified all_transitions */
   transitions_by_pc.clear();
   for(unsigned p = 0; p < machine.automata.size(); ++p){
     transitions_by_pc.push_back(std::vector<std::vector<const Machine::PTransition*> >(machine.automata[p].get_states().size()));
@@ -146,7 +162,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
     VecSet<int> val_nml;
     int buffer_size = write_buffers[t.pid][nmli].size();
     if (buffer_size > 0) {
-      auto bufferValue = write_buffers[t.pid][nmli][buffer_size - 1];
+      value_t bufferValue = write_buffers[t.pid][nmli][buffer_size - 1];
       val_nml = possible_values(bufferValue, nml);
     } else {
       val_nml = SbConstraint::possible_values(channel[msgi].store, nml);
@@ -161,7 +177,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
         pwsc->pcs[t.pid] = t.source;
         if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
                              pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val_nml[i]);
-        else pwsc->channel[msgi].store = channel[msgi].store.assign(nmli, val_nml[i]);
+        else pwsc->channel[msgi].store = pwsc->channel[msgi].store.assign(nmli, val_nml[i]);
         pwsc->reg_stores[t.pid] = stores[j];
         res.push_back(pwsc);
       }
@@ -337,10 +353,12 @@ std::vector<PwsConstraint*> PwsConstraint::buffer_pop_back(int pid, Lang::NML nm
   std::vector<PwsConstraint*> res;
   // Case one: no write was hidden by the popped one
   res.push_back(new PwsConstraint(*this));
-  res.back()->write_buffers[pid][nmli].pop_back();
+  res.back()->write_buffers[pid][nmli] = 
+    res.back()->write_buffers[pid][nmli].pop_back();
   // Case two: some write was hidden by the popped one
   res.push_back(new PwsConstraint(*this));
-  res.back()->write_buffers[pid][nmli].assign(write_buffers[pid][nmli].size() - 1, value_t::STAR);
+  res.back()->write_buffers[pid][nmli] =
+    res.back()->write_buffers[pid][nmli].assign(write_buffers[pid][nmli].size() - 1, value_t::STAR);
   return res;
 }
 
@@ -433,4 +451,12 @@ bool PwsConstraint::unreachable() {
    * for different abstractions might be useful. */
   if (!SbConstraint::ok_channel()) return true; 
   return false;
+}
+
+bool PwsConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli) {
+  if (nmli < 0) nmli = common.index(nml);
+  for (const std::vector<Store> &processwb : write_buffers)
+    // This write is the last write and disallows any write propagation.
+    if (processwb[nmli].size() > 0) return true;
+  return SbConstraint::propagate_value_in_channel(nml, nmli);
 }
