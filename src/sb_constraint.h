@@ -181,7 +181,7 @@ public:
   virtual std::string to_string() const throw();
   virtual Comparison entailment_compare(const Constraint &c) const;
   virtual Comparison entailment_compare(const SbConstraint &sbc) const;
-  int get_channel_length() const { return channel.size(); };
+  virtual int get_weight() const { return channel.size(); };
 
   static void test();
   static void test_possible_values();
@@ -277,6 +277,7 @@ private:
    */
   virtual Constraint::Comparison entailment_compare_channels(const SbConstraint &sbc, Constraint::Comparison cmp) const;
 
+public:
   /* An MsgCharacterization keeps some information about a particular
    * message in an SB channel: The writing process, the written memory
    * locations and the set of processes whose cpointers point to this
@@ -375,13 +376,13 @@ private:
                                               const Common &common,
                                               bool *unifiable);
 
-  friend class SbContainer;
   friend class SbTsoBwd;
   friend class Common;
 
   /*****************/
   /* Configuration */
   /*****************/
+protected:
   static const bool use_last_msg;
   static const bool use_last_msgs_vec; // Note: will nullify use_last_msg
   static const bool use_updates_only_after_reads;

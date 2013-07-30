@@ -25,6 +25,7 @@ pb_container2.cpp pb_container2.h \
 predicates.tcc predicates.h \
 preprocessor.h preprocessor.cpp \
 pws_constraint.h pws_constraint.cpp pws_constraint.test.cpp \
+pws_container.h pws_container.cpp \
 reachability.cpp reachability.h \
 sb_constraint.cpp sb_constraint.h \
 sb_container.cpp sb_container.h \

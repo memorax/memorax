@@ -66,6 +66,11 @@ public:
   static void test();
   static void test_pre();
 
+  /* Return the set S such that the buffer of process p to memory location nml
+   * is non-empty iff (p, nml) is a member of S. S is represented as an ordered
+   * vector. */
+  std::vector<std::pair<int, Lang::NML> > get_filled_buffers() const;
+
 protected:
   virtual bool propagate_value_in_channel(const Lang::NML &nml, int nmli = -1);
 
@@ -100,10 +105,10 @@ private:
    */
   std::vector<PwsConstraint*> buffer_pop_back(int pid, Lang::NML nml) const;
 
-  /* Checks if a set of memory locations are fully serialised, which is a
-   * requirement in order to take a s- or mfence transition in the PWS model,
-   * and equivalently be able to do a write in a LOCKED or SLOCKED block. */
-  bool is_fully_serialised(const std::vector<Lang::MemLoc<int>> &mls, int pid) const;
+  /* Checks if all writes of a process are serialised, which is a requirement in
+   * order to take a s- or mfence transition in the PWS model, and equivalently
+   * be able to do a write in a LOCKED or SLOCKED block. */
+  bool is_fully_serialised(int pid) const;
 
     // Helper for the public pre
   struct pre_constr_t{

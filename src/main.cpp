@@ -43,6 +43,7 @@
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
 #include "pws_constraint.h"
+#include "pws_container.h"
 #include "test.h"
 #include "zstar.h"
 #include <config.h>
@@ -313,7 +314,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
   }else if(flags.find("a")->second.argument == "pws"){
     PwsConstraint::Common *common = new PwsConstraint::Common(*machine);
     reach = new ExactBwd(); //SbTsoBwd();
-    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new PwsContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;

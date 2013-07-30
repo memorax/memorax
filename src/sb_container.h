@@ -41,7 +41,7 @@ public:
   virtual int F_size() const { return f_size; };
   virtual Trace *clear_and_get_trace(Constraint *c);
   virtual void clear();
-private:
+protected:
   /* Keeps a SbConstraint and some extra information about it. */
   struct CWrapper{
     CWrapper(SbConstraint *sbc, CWrapper *parent = 0, const Machine::PTransition *pt = 0)
@@ -77,6 +77,17 @@ private:
     long Q_ticket;
   };
 
+  /* F is partitioned by some property p(c) of a constraint c such that p(a) !=
+   * p(b) only if a and b are incomparable.  
+   * 
+   * The partition sets are represented as distinct, unordered vectors.  In
+   * order to allow changing the property p via inheritance, access to F must be
+   * done through get_F_set(c) which returns the partition set of c and visit_F(f)
+   * which calls f(S) on each non-empty partition set S. */
+  virtual std::vector<CWrapper*> &get_F_set(CWrapper *);
+  virtual void visit_F(std::function<void(std::vector<CWrapper*>&)>);
+
+private:
   /* F[pcs][chr] maps to the set of all constraints in F that have
    * program counters pcs and channel characterization chr.
    *
@@ -115,10 +126,10 @@ private:
   class ChannelPrioTicketQueue{
   public:
     long push(CWrapper *cw){
-      if(int(queues.size()) <= cw->sbc->get_channel_length()){
-        queues.resize(cw->sbc->get_channel_length()+1);
+      if(int(queues.size()) <= cw->sbc->get_weight()){
+        queues.resize(cw->sbc->get_weight()+1);
       }
-      return queues[cw->sbc->get_channel_length()].push(cw);
+      return queues[cw->sbc->get_weight()].push(cw);
     };
     CWrapper *pop(){
       /* Give priority to shorter channels. */

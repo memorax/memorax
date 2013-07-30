@@ -24,8 +24,8 @@
 /* Configuration */
 /*****************/
 
-const bool SbConstraint::use_last_msg = false;
-const bool SbConstraint::use_last_msgs_vec = false;
+const bool SbConstraint::use_last_msg = true;
+const bool SbConstraint::use_last_msgs_vec = true;
 const bool SbConstraint::use_updates_only_after_reads = true;
 const bool SbConstraint::use_channel_suffix_equality = true;
 const bool SbConstraint::use_can_have_pending = true;
@@ -184,18 +184,18 @@ SbConstraint::Common::Common(const Machine &m)
       }
     }
     /* Printing */
-    Log::debug << "For process P" << p << "\n";
+    Log::extreme << "For process P" << p << "\n";
     for(unsigned i = 0; i < states.size(); ++i){
       std::function<std::string(const Msg&)> f = [this](const Msg &msg){
         return msg.to_short_string(*this);
       };
-      Log::debug << "  Q" << i << last_msgs[p][i].to_string_one_line(f);
+      Log::extreme << "  Q" << i << last_msgs[p][i].to_string_one_line(f);
       if(!can_have_pending[p][i]){
-        Log::debug << " (channel must be empty)";
+        Log::extreme << " (channel must be empty)";
       }
-      Log::debug << "\n";
+      Log::extreme << "\n";
     }
-    Log::debug << std::flush;
+    Log::extreme << std::flush;
   }
 
   /* Setup last_msgs_vec */
@@ -270,18 +270,18 @@ SbConstraint::Common::Common(const Machine &m)
     }
   }
   /* Printing */
-  Log::debug << "last_msgs_vec:\n";
+  Log::extreme << "last_msgs_vec:\n";
   for(unsigned p = 0; p < last_msgs_vec.size(); ++p){
-    Log::debug << "P" << p << ":\n";
+    Log::extreme << "P" << p << ":\n";
     for(unsigned i = 0; i < last_msgs_vec[p].size(); ++i){
-      Log::debug << "  Q" << i << ":\n";
+      Log::extreme << "  Q" << i << ":\n";
       for(auto it = last_msgs_vec[p][i].begin(); it != last_msgs_vec[p][i].end(); ++it){
-        Log::debug << "    [";
+        Log::extreme << "    [";
         for(unsigned j = 0; j < it->size(); ++j){
-          if(j != 0) Log::debug << ", ";
-          Log::debug << (*it)[j].to_short_string(*this);
+          if(j != 0) Log::extreme << ", ";
+          Log::extreme << (*it)[j].to_short_string(*this);
         }
-        Log::debug << "]\n";
+        Log::extreme << "]\n";
       }
     }
   }
@@ -295,7 +295,8 @@ SbConstraint::Store SbConstraint::Common::store_of_write(const Machine::PTransit
   if(t.instruction.get_type() == Lang::WRITE && t.instruction.get_expr().is_integer()){
     store = store.assign(index(Lang::NML(t.instruction.get_memloc(),t.pid)),
                          t.instruction.get_expr().get_integer());
-  }else if(t.instruction.get_type() == Lang::LOCKED &&
+  }else if((t.instruction.get_type() == Lang::LOCKED ||
+            t.instruction.get_type() == Lang::SLOCKED) &&
            t.instruction.get_statement_count() == 1 &&
            t.instruction.get_statement(0)->get_type() == Lang::WRITE &&
            t.instruction.get_statement(0)->get_expr().is_integer()){

@@ -69,20 +69,18 @@ PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
     transitions_by_pc[all_transitions[i].pid][all_transitions[i].target].push_back(&all_transitions[i]);
   }
 
-  // TODO: make last_msgs work for PSO (currently disabled)
   // TODO: Ponder if can_have_pending needs modification
   //throw new std::logic_error("PwsConstraint::Common::Common: Not implemented");
 }
 
 std::list<Constraint*> PwsConstraint::Common::get_bad_states() {
-  // Upgrade each SbConstraint to a PwsConstraint
-  std::list<Constraint*> l = SbConstraint::Common::get_bad_states();
-  for (Constraint *&c : l) {
-    SbConstraint *sbc = dynamic_cast<SbConstraint*>(c);
-    /* This constraint will have empty write buffers, but can generate arbitrary write buffers
-       by serialising "lost" write messages in the channel. */
-    c = new PwsConstraint(*sbc, *this);
-    delete sbc;
+  std::list<Constraint*> l;// = SbConstraint::Common::get_bad_states();
+  for (const std::vector<int> &pcs : machine.forbidden) {
+    for (const MsgHdr &msg : messages) {
+      PwsConstraint *pwsc = new PwsConstraint(pcs, msg, *this);
+      if (pwsc->unreachable()) delete pwsc;
+      else l.push_back(pwsc);
+    }
   }
   return l;
 };
@@ -146,7 +144,6 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   const Lang::Stmt<int> &s = t.instruction;
   if (SbConstraint::pcs[t.pid] != t.target)
     return res;
-
 
   switch (s.get_type()) {
   case Lang::NOP/* 0 */: {
@@ -234,7 +231,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
  
   case Lang::LOCKED: {
     if (s.get_writes().size() == 0 || (cpointers[t.pid] == int(channel.size()) - 1
-                                       && is_fully_serialised(s.get_writes(), t.pid))) {
+                                       && is_fully_serialised(t.pid))) {
       for (int i = 0; i < s.get_statement_count(); ++i) {
         Machine::PTransition ti(t.source, *s.get_statement(i), t.target, t.pid);
         std::list<pre_constr_t> v = pre(ti, true, true);
@@ -244,7 +241,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   } break;
 
   case Lang::SLOCKED: {
-    if (s.get_writes().size() == 0 || is_fully_serialised(s.get_writes(), t.pid))  {
+    if (s.get_writes().size() == 0 || is_fully_serialised(t.pid))  {
       for (int i = 0; i < s.get_statement_count(); ++i) {
         Machine::PTransition ti(t.source, *s.get_statement(i), t.target, t.pid);
         std::list<pre_constr_t> v = pre(ti, mlocked, true);
@@ -328,7 +325,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   return res;
 }
 
-bool PwsConstraint::is_fully_serialised(const std::vector<Lang::MemLoc<int>> &mls, int pid) const {
+bool PwsConstraint::is_fully_serialised(int pid) const {
   for (unsigned nmli = 0; nmli < write_buffers[pid].size(); nmli++) {
     if (write_buffers[pid][nmli].size() != 0) return false;
   }
@@ -445,11 +442,47 @@ Constraint::Comparison PwsConstraint::entailment_compare_buffer(const Store& a, 
   return LESS; // a is a subword of b
 }
 
+std::vector<std::pair<int, Lang::NML> > PwsConstraint::get_filled_buffers() const {
+  std::vector<std::pair<int, Lang::NML> > res;
+  for (int p = 0; p < write_buffers.size(); ++p) {
+    for (Lang::NML nml : common.nmls) {
+      if (write_buffers[p][common.index(nml)].size() > 0)
+        res.push_back(std::pair<int, Lang::NML>(p, nml));
+    }
+  }
+  return res;
+}
+
 bool PwsConstraint::unreachable() {
-  /* Note: this might not be safe if new heuristics which does not translate to
-   * pso/pws is added to ok_channel. A system to use different configurations
-   * for different abstractions might be useful. */
-  if (!SbConstraint::ok_channel()) return true; 
+  if (SbConstraint::use_channel_suffix_equality) {
+    /* For each memory location, check that in the suffix of channel
+     * to the right of the rightmost message updating that memory
+     * location, all messages can agree on a single value for that
+     * memory location.
+     */
+    for (auto nml : common.nmls) {
+      if (!propagate_value_in_channel(nml)) return true;
+    }
+  }
+
+  if (SbConstraint::use_can_have_pending) {
+    for (unsigned p = 0; p < common.machine.automata.size(); p++) {
+      if (!common.can_have_pending[p][pcs[p]]) {
+        if (!is_fully_serialised(p)) return true;
+      }
+    }
+
+    std::vector<bool> ps(pcs.size(),false);
+    for (int i = channel.size()-1; i >= 0; --i) {
+      int p = channel[i].wpid;
+      if (!ps[p]) { // Rightmost message for process p
+        /* Illegally pending? */
+        if (!common.can_have_pending[p][pcs[p]] && cpointers[p] < i)
+          return true;
+      }
+      ps[channel[i].wpid] = true;
+    }
+  }
   return false;
 }
 
