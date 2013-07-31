@@ -50,8 +50,13 @@ public:
     return res;
   };
 
-private:
+protected:
   virtual Trace *convert_trace(Trace *trace,SbConstraint::Common *common) const;
+private:
+  /* Returns true iff executing the statement would insert a message in the SB
+   * channel.
+   */
+  virtual bool produces_message(const Lang::Stmt<int>&) const;
   /* Helper to convert_trace.
    *
    * ch0 should be the channel of the pre, and ch1 the channel of the

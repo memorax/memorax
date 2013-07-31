@@ -31,8 +31,7 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
    */
   std::vector<std::pair<int,SbConstraint::Msg> > writes;
   for(int i = 1; i <= trace->size(); ++i){
-    if(trace->transition(i)->instruction.get_writes().size() > 0 &&
-       trace->transition(i)->instruction.get_type() != Lang::UPDATE){
+    if(produces_message(trace->transition(i)->instruction)){
       if(trace->constraint(i) == 0){
         throw new std::logic_error("SbTsoBwd::convert_trace: Trace is incomplete: Missing constraints.");
       }
@@ -73,7 +72,7 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
         }
         write_to_update[std::pair<int,int>(pid,writes[w].first)] = i;
         proc_seen_until[pid] = w;
-      }else if(trace->transition(i)->instruction.get_writes().size() > 0){
+      }else if(produces_message(trace->transition(i)->instruction)){
         if(sbc0->channel.size() + 1 == sbc1->channel.size()){
           /* No messages lost */
           channel.push_back(i);
@@ -192,3 +191,8 @@ void SbTsoBwd::messages_lost(const std::vector<SbConstraint::Msg> &ch0,
   ch->push_back(w);
   throw new std::logic_error("SbTsoBwd::messages_lost: Insufficiently tested.");
 };
+
+bool SbTsoBwd::produces_message(const Lang::Stmt<int> &s) const{
+  return (s.get_writes().size() > 0 &&
+          s.get_type() != Lang::UPDATE);
+}
