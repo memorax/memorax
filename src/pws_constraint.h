@@ -152,6 +152,8 @@ private:
   /*****************/
 protected:
   static const bool use_pending_sets;
+  static const bool use_shortcut_update_serialise;
+  static const bool use_serialisations_only_after_writes;
 };
 
 // Implementations

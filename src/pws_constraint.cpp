@@ -28,6 +28,8 @@
 /*****************/
 
 const bool PwsConstraint::use_pending_sets = true;
+const bool PwsConstraint::use_shortcut_update_serialise = false;
+const bool PwsConstraint::use_serialisations_only_after_writes = true;
 
 /*****************/
 
@@ -57,7 +59,6 @@ void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int
   }
 }
 
-
 void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<int>&)> pred,
                                             const std::vector<Automaton::State> &states,
                                             int state,
@@ -84,12 +85,35 @@ void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<
 PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
   /* The optimisations to all_transitions in SbConstraint::Common does not apply
      to PWS. We recompute all_transitions without them. */
+  std::vector<std::vector<bool> > has_writes;
   all_transitions.clear();
   for (unsigned p = 0; p < machine.automata.size(); ++p) {
     const std::vector<Automaton::State> &states = machine.automata[p].get_states();
+    has_writes.push_back(std::vector<bool>(states.size(), false));
     for (unsigned i = 0; i < states.size(); ++i) {
-      for (const Automaton::Transition *t : states[i].bwd_transitions)
+      for (const Automaton::Transition *t : states[i].bwd_transitions) {
         all_transitions.push_back(Machine::PTransition(*t, p));
+        if (t->instruction.get_writes().size() > 0 && !t->instruction.is_fence()) has_writes[p][i] = true;
+        if (use_shortcut_update_serialise && t->instruction.get_writes().size() > 0) {
+          switch (t->instruction.get_type()) {
+          case Lang::WRITE: {
+            Lang::Stmt<int> slw = Lang::Stmt<int>::slocked_block(std::vector<Lang::Stmt<int> >{t->instruction},
+                                                                 t->instruction.get_pos());
+            Lang::Stmt<int> lw = Lang::Stmt<int>::locked_block(std::vector<Lang::Stmt<int> >{t->instruction},
+                                                               t->instruction.get_pos());
+            all_transitions.push_back(Machine::PTransition(t->source, slw, t->target, p));
+            all_transitions.push_back(Machine::PTransition(t->source, lw, t->target, p));
+          } break;
+          case Lang::SLOCKED: {
+            assert(t->instruction.get_statement_count() == 1);
+            assert(t->instruction.get_statement(0)->get_type() == Lang::WRITE);
+            Lang::Stmt<int> lw = Lang::Stmt<int>::locked_block(std::vector<Lang::Stmt<int> >{*t->instruction.get_statement(0)},
+                                                               t->instruction.get_pos());
+            all_transitions.push_back(Machine::PTransition(t->source, lw, t->target, p));            
+          } break;
+          }
+        }
+      }
       for (const MsgHdr &m : messages)
         if (m.nmls.size() > 0) {
           VecSet<Lang::MemLoc<int>> mls;
@@ -105,15 +129,16 @@ PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
   for (const SbConstraint::Common::MsgHdr &header : messages) {
     int p = header.wpid;
     if (header.nmls.size() > 0) { //We are not interested in the dummy message
+      VecSet<Lang::MemLoc<int>> mls;
+      for (const Lang::NML &nml : header.nmls)
+        mls.insert(nml.localize(p));
       const std::vector<Automaton::State> &states = machine.automata[p].get_states();
       for (unsigned i = 0; i < states.size(); i++) {
-        VecSet<Lang::MemLoc<int>> mls;
-        for (const Lang::NML &nml : header.nmls)
-          mls.insert(nml.localize(p));
         /* Note: This does risk breaking memory address references to the
          * elements of all_transitions. We recompute transitions_by_pc below,
          * but there might be others */
-        all_transitions.push_back(Machine::PTransition(i, Lang::Stmt<int>::serialise(mls), i, p));
+        if (!use_serialisations_only_after_writes || has_writes[p][i])
+          all_transitions.push_back(Machine::PTransition(i, Lang::Stmt<int>::serialise(mls), i, p));
       }
     }
   }
