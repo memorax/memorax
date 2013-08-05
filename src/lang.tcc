@@ -445,7 +445,6 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::slocked_block(const std::vector<Stmt> &ss,
     s.stmts[i].stmt = ss[i];
   }
   s.populate_reads_writes();
-  s.fence = s.writes.size() > 0;
   return s;
 }
 
@@ -668,7 +667,10 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
       return s;
     }
   case SLOCKED: case LOCKED:
-    if(indentation >= 0){
+    if(stmt_count == 1 && stmts[0].stmt.get_type() == Lang::WRITE && stmts[0].lbl==""){
+      return indlbl+(type==SLOCKED?"slocked ":"locked ")+
+        stmts[0].stmt.to_string(regts,mlts,0,"");
+    }else if(indentation >= 0){
       std::string s = indlbl+(type==SLOCKED?"slocked{\n":"locked{\n");
       for(int i = 0; i < stmt_count; i++){
         s += stmts[i].stmt.to_string(regts,mlts,indentation+2,stmts[i].lbl)+"\n";
@@ -816,6 +818,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt) co
           return stmts[0].compare(stmt.stmts[0]);
         }
       }
+    case SLOCKED:
     case LOCKED:
       {
         if(fence < stmt.fence){
@@ -874,7 +877,7 @@ template<class RegId> int Lang::Stmt<RegId>::labeled_stmt_t::compare(const label
 
 template<class RegId> bool Lang::Stmt<RegId>::check_locked_invariant(const Stmt &stmt, std::string *comment){
   switch(stmt.get_type()){
-  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case LOCKED:
+  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case LOCKED: case SLOCKED:
     return true;
   case SEQUENCE:
     {

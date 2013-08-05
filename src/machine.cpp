@@ -464,6 +464,7 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
       }
       break;
     }
+  case Lang::SLOCKED:
   case Lang::LOCKED:
     {
       for(int i = 0; i < stmt.get_statement_count(); ++i){
@@ -471,7 +472,10 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
         for(unsigned j = 0; j < vs.size(); ++j){
           std::vector<Lang::Stmt<int> > seq;
           seq.push_back(vs[j].first);
-          s.insert(pr_t(Lang::Stmt<int>::locked_block(seq,pos),vs[j].second));
+          if (stmt.get_type() == Lang::SLOCKED)
+            s.insert(pr_t(Lang::Stmt<int>::slocked_block(seq,pos),vs[j].second));
+          else
+            s.insert(pr_t(Lang::Stmt<int>::locked_block(seq,pos),vs[j].second));
         }
       }
       break;
@@ -560,6 +564,7 @@ void Machine::get_reg_relevant_aux(int reg, const Lang::Stmt<int> &stmt,
   case Lang::WRITE:
     *may_read = stmt.get_expr().get_registers().count(reg);
     break;
+  case Lang::SLOCKED:
   case Lang::LOCKED:
     {
       bool mr;
@@ -1012,6 +1017,7 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
       ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
       break;
     }
+  case Lang::SLOCKED:
   case Lang::LOCKED:
     {
       std::vector<Lang::Stmt<int> > v;
@@ -1023,7 +1029,10 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
         }
         v.push_back(Lang::Stmt<int>::sequence(lv2,s.get_statement(i)->get_pos()));
       }
-      ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
+      if (s.get_type() == Lang::SLOCKED)
+        ss.push_back(Lang::Stmt<int>::slocked_block(v,s.get_pos()));
+      else
+        ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
       break;
     }
   case Lang::SEQUENCE:

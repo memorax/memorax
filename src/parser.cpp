@@ -385,6 +385,18 @@ Parser::stmt_t Parser::p_stmt(Lexer &lex,const Context &ctx)
         return stmt_t::locked_block(seq,pos0);
       }
     }
+ case Lexer::SLOCKED:
+    {
+      Lexer::TokenPos pos0 = tok.pos;
+      force(lex,Lexer::WRITE);
+      force(lex,Lexer::COLON);
+      Parser::memloc_or_pointer_t ml = p_memloc(lex,ctx);
+      force(lex,Lexer::ASSIGNMENT);
+      expr_t e = p_expr(lex);
+      return resolve_pointer(ml,[&e,&pos0](const memloc_t &ml){
+          return stmt_t::slocked_write(ml,e,pos0);
+        },ctx);
+    }
   case Lexer::LCURL:
     {
       stmt_t sl = p_stmt_list(lex,ctx);

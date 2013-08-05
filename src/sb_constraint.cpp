@@ -137,8 +137,8 @@ SbConstraint::Common::Common(const Machine &m)
   }
 
   /* Setup last_msgs */
-  Log::debug << "Last messages:\n";
   for(unsigned p = 0; p < machine.automata.size(); ++p){
+  Log::extreme << "Last messages:\n";
     last_msgs.push_back(std::vector<VecSet<Msg> >(machine.automata[p].get_states().size(),
                                                   VecSet<Msg>()));
     can_have_pending.push_back(std::vector<bool>(machine.automata[p].get_states().size(),false));

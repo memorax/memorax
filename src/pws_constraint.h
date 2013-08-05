@@ -42,6 +42,24 @@ public:
     /* Constructs and returns a list of bad states based on the
      * machine and possible initial messages in the channel. */
     std::list<Constraint*> get_bad_states();
+
+  private:
+    /* A process p in state q may only have a write m:=v for a memory location m
+     * and a value v pending (that is, in it's buffer or in the channel ahead of
+     * it's cpointer), if (m, v) is a member of pending_set[p][q] or (m, *) is a
+     * memver of pending_set[p][q]. */
+    std::vector<std::vector<std::map<Lang::NML, value_t> > > pending_set,
+    /* Likewise, but only for writes in the buffer. */
+                                                             pending_buffers;
+
+    /* Helpers to compute pending_set and pending_buffers */
+    void init_pending(std::function<bool(const Lang::Stmt<int>&)> ,
+                      const std::vector<Automaton::State> &,
+                      std::vector<std::vector<std::map<Lang::NML, value_t> > > &);
+    void iterate_pending(std::function<bool(const Lang::Stmt<int>&)>,
+                         const std::vector<Automaton::State>&, int,
+                         std::vector<std::map<Lang::NML, ZStar<int> > > &, bool &);
+    friend class PwsConstraint;
   };
   /* Constructs a constraint where process pid is at control state
    * pcs[pid], all registers and memory locations are unrestricted,
@@ -62,6 +80,7 @@ public:
   // virtual Comparison entailment_compare(const Constraint &c) const;
   virtual Comparison entailment_compare(const SbConstraint &sbc) const;
   virtual Comparison entailment_compare(const PwsConstraint &sbc) const;
+  virtual int get_weight() const;
 
   static void test();
   static void test_pre();
@@ -127,6 +146,12 @@ private:
   std::list<pre_constr_t> pre(const Machine::PTransition &, bool mlocked, bool slocked) const;
 
   friend class Common;
+
+  /*****************/
+  /* Configuration */
+  /*****************/
+protected:
+  static const bool use_pending_sets;
 };
 
 // Implementations

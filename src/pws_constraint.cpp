@@ -23,6 +23,64 @@
 #include <iostream>
 #include <iterator>
 
+/*****************/
+/* Configuration */
+/*****************/
+
+const bool PwsConstraint::use_pending_sets = true;
+
+/*****************/
+
+void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int>&)> pred,
+                                         const std::vector<Automaton::State> &states,
+                                         std::vector<std::vector<std::map<Lang::NML, value_t> > > &sets) {
+  sets.push_back(std::vector<std::map<Lang::NML, ZStar<int> > >(states.size()));
+  int pid = sets.size() - 1;
+  for (unsigned i = 0; i < states.size(); ++i) {
+    std::map<Lang::NML, value_t> &set = sets[pid][i];
+    for (const Automaton::Transition *trans : states[i].bwd_transitions) {
+      if (!pred(trans->instruction)) {
+        for (const VecSet<Lang::MemLoc<int>> &ws : trans->instruction.get_write_sets()) {
+          Store store = store_of_write(Machine::PTransition(*trans, pid));
+          for (Lang::MemLoc<int> ml : ws) {
+            Lang::NML nml(ml, pid);
+            value_t write = store[index(nml)];
+            if (set.count(nml)) {
+              if (set[nml] != write) set[nml] = value_t::STAR;
+            } else {
+              set[nml] = write;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+
+void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<int>&)> pred,
+                                            const std::vector<Automaton::State> &states,
+                                            int state,
+                                            std::vector<std::map<Lang::NML, ZStar<int> > > &set,
+                                            bool &changed) {
+  for (std::pair<Lang::NML, ZStar<int>> elem : set[state]) {
+    for (const Automaton::Transition *trans : states[state].fwd_transitions) {
+      if (!pred(trans->instruction)) {
+        std::map<Lang::NML, ZStar<int>> &target_set = set[trans->target];
+        if (target_set.count(elem.first)) {
+          if (target_set[elem.first] != elem.second && target_set[elem.first] != ZStar<int>::STAR) {
+            target_set[elem.first] = ZStar<int>::STAR;
+            changed = true;
+          }
+        } else {
+          target_set[elem.first] = elem.second;
+          changed = true;
+        }
+      }
+    }
+  }
+}
+
 PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
   /* The optimisations to all_transitions in SbConstraint::Common does not apply
      to PWS. We recompute all_transitions without them. */
@@ -69,12 +127,47 @@ PwsConstraint::Common::Common(const Machine &m) : SbConstraint::Common(m) {
     transitions_by_pc[all_transitions[i].pid][all_transitions[i].target].push_back(&all_transitions[i]);
   }
 
-  // TODO: Ponder if can_have_pending needs modification
-  //throw new std::logic_error("PwsConstraint::Common::Common: Not implemented");
+  auto is_sfence = [](const Lang::Stmt<int> &stmt) {
+    return (stmt.get_write_sets().size() > 0 && (stmt.get_type() == Lang::SLOCKED ||
+                                                 stmt.get_type() == Lang::LOCKED));
+  };
+
+  /* Setup pending_set and pending_buffers */
+  for (unsigned p = 0; p < machine.automata.size(); ++p) {
+    const std::vector<Automaton::State> &states = machine.automata[p].get_states();
+    init_pending(&Lang::Stmt<int>::is_fence, states, pending_set);
+    init_pending(is_sfence,                  states, pending_buffers);
+
+    /* Use a fix-point iteration to find the complete sets. */
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      const std::vector<Automaton::State> &states = machine.automata[p].get_states();
+      for (unsigned i = 0; i < states.size(); ++i) {
+        /* Complete pending_set */
+        iterate_pending(&Lang::Stmt<int>::is_fence, states, i, pending_set[p], changed);
+        /* Complete pending_buffers */
+        iterate_pending(is_sfence, states, i, pending_buffers[p], changed);
+      }
+    }
+  }
+  Log::extreme << "Pending sets\n";
+  for (unsigned p = 0; p < pending_set.size(); ++p) {
+    Log::extreme << "For process P" << p << "\n";
+    for (unsigned i = 0; i < pending_set[p].size(); ++i) {
+      Log::extreme << "  Q" << i << " {";
+      for (std::pair<Lang::NML, value_t> elem : pending_set[p][i])
+        Log::extreme << machine.pretty_string_nml.find(elem.first)->second << ":" << elem.second << ", ";
+      Log::extreme << "} buffer: {";
+      for (std::pair<Lang::NML, value_t> elem : pending_buffers[p][i])
+        Log::extreme << machine.pretty_string_nml.find(elem.first)->second << ":" << elem.second << ", ";
+      Log::extreme << "}\n";
+    }
+  }
 }
 
 std::list<Constraint*> PwsConstraint::Common::get_bad_states() {
-  std::list<Constraint*> l;// = SbConstraint::Common::get_bad_states();
+  std::list<Constraint*> l;
   for (const std::vector<int> &pcs : machine.forbidden) {
     for (const MsgHdr &msg : messages) {
       PwsConstraint *pwsc = new PwsConstraint(pcs, msg, *this);
@@ -228,6 +321,29 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       }
     }
   } break;
+
+  case Lang::SEQUENCE: {
+    assert(mlocked);
+    std::vector<pre_constr_t> V { new PwsConstraint(*this) };
+    for (int i = s.get_statement_count() - 1; i >= 0; --i) {
+      std::vector<pre_constr_t> W;
+      Machine::PTransition t2(t.target, *s.get_statement(i), t.target, t.pid);
+      for (pre_constr_t v : V) {
+        for (pre_constr_t w : v.pwsc->pre(t2, mlocked, slocked)) {
+          w.channel_pop_back = w.channel_pop_back || v.channel_pop_back;
+          w.buffer_pop_back  = w.buffer_pop_back  || v.buffer_pop_back;
+          w.written_nmls.insert(v.written_nmls);
+          W.push_back(w);
+        }
+        delete v.pwsc;
+      }
+      V = W;
+    }
+    for (pre_constr_t v : V) {
+      v.pwsc->pcs[t.pid] = t.source;
+      res.push_back(v);
+    }
+  } break;
  
   case Lang::LOCKED: {
     if (s.get_writes().size() == 0 || (cpointers[t.pid] == int(channel.size()) - 1
@@ -300,13 +416,10 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       // and the serialise action (and thus in the intersection of the sets) is
       // expanded to it's own new constraint since we cannot represent a write
       // to a set of memory locations in the buffers.
-      
       Intersection<VecSet<Lang::NML>, Lang::NML, VecSet<Lang::NML>::const_iterator> inter(channel.back().nmls, nmls);
       for (const Lang::NML &nml : inter) {
         int nmli = common.index(nml);
         PwsConstraint *pwsc = new PwsConstraint(*this);
-        /* TODO: Consider if we need to add constraints where a "lost" constraint
-         * preceeds the last message. Hmm, is this what channel_pop_back does? */
         pwsc->write_buffers[pid][nmli] = pwsc->write_buffers[pid][nmli].push_front(channel.back().store[nmli]);
         res.push_back(pre_constr_t(pwsc, true, false, VecSet<Lang::NML>::singleton(nml)));
       }
@@ -454,6 +567,44 @@ std::vector<std::pair<int, Lang::NML> > PwsConstraint::get_filled_buffers() cons
 }
 
 bool PwsConstraint::unreachable() {
+  if (PwsConstraint::use_pending_sets) {
+    for (uint pid = 0; pid < common.machine.automata.size(); ++pid) {
+      for (Lang::NML nml : common.nmls) {
+        int nmli = common.index(nml);
+        if (write_buffers[pid][nmli].size() > 0) {
+          if (!common.pending_buffers[pid][pcs[pid]].count(nml)) return true;
+          value_t possible_pending = common.pending_buffers[pid][pcs[pid]][nml];
+          if (possible_pending != value_t::STAR) {
+            for (int i = 0; i < write_buffers[pid][nmli].size(); ++i) {
+              if (write_buffers[pid][nmli][i] == value_t::STAR)
+                write_buffers[pid][nmli] = write_buffers[pid][nmli].assign(i, possible_pending);
+              else if (write_buffers[pid][nmli][i] != possible_pending)
+                return true;
+            }
+          }
+        }
+      }
+    }
+
+    // Check each message that is ahead of the writing process's cpointer
+    for (int ci = channel.size()-1; ci >= 0; --ci) {
+      int pid = channel[ci].wpid;
+      if (ci > cpointers[pid]) {
+        for (Lang::NML nml : channel[ci].nmls) {
+          if (!common.pending_set[pid][pcs[pid]].count(nml)) return true;
+          value_t possible_pending = common.pending_set[pid][pcs[pid]][nml];
+          if (possible_pending != value_t::STAR) {
+            int nmli = common.index(nml);
+            if (channel[ci].store[nmli] == value_t::STAR)
+              channel[ci].store = channel[ci].store.assign(nmli, possible_pending);
+            else if (channel[ci].store[nmli] != possible_pending)
+              return true;
+          }
+        }
+      }
+    }
+  }
+
   if (SbConstraint::use_channel_suffix_equality) {
     /* For each memory location, check that in the suffix of channel
      * to the right of the rightmost message updating that memory
@@ -465,24 +616,6 @@ bool PwsConstraint::unreachable() {
     }
   }
 
-  if (SbConstraint::use_can_have_pending) {
-    for (unsigned p = 0; p < common.machine.automata.size(); p++) {
-      if (!common.can_have_pending[p][pcs[p]]) {
-        if (!is_fully_serialised(p)) return true;
-      }
-    }
-
-    std::vector<bool> ps(pcs.size(),false);
-    for (int i = channel.size()-1; i >= 0; --i) {
-      int p = channel[i].wpid;
-      if (!ps[p]) { // Rightmost message for process p
-        /* Illegally pending? */
-        if (!common.can_have_pending[p][pcs[p]] && cpointers[p] < i)
-          return true;
-      }
-      ps[channel[i].wpid] = true;
-    }
-  }
   return false;
 }
 
@@ -492,4 +625,12 @@ bool PwsConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli) {
     // This write is the last write and disallows any write propagation.
     if (processwb[nmli].size() > 0) return true;
   return SbConstraint::propagate_value_in_channel(nml, nmli);
+}
+
+int PwsConstraint::get_weight() const {
+    int buffered_values = 0;
+    for (const std::vector<Store> &pwrite_buffer : write_buffers)
+      for (const Store &store : pwrite_buffer)
+        buffered_values += store.size();
+    return channel.size() + buffered_values;
 }

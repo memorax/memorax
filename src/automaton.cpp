@@ -99,7 +99,7 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
   switch(ast.get_type()){
   case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME: 
   case Lang::READASSERT: case Lang::READASSIGN: case Lang::WRITE: 
-  case Lang::LOCKED:
+  case Lang::LOCKED: case Lang::SLOCKED:
     {
       int i = states.size() - 1;
       if(source < 0) source = i;
