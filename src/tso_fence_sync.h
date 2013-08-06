@@ -35,9 +35,7 @@ public:
    * fence instruction that is inserted into a Machine, is determined
    * at the time of insertion.
    */
-  TsoFenceSync(int pid, int q, 
-               std::set<Automaton::Transition> IN, 
-               std::set<Automaton::Transition> OUT);
+  TsoFenceSync(int pid, int q, TSet IN, TSet OUT);
   virtual ~TsoFenceSync();
 
   class InsInfo : public FenceSync::InsInfo{

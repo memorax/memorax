@@ -31,9 +31,7 @@ TsoFenceSync::InsInfo::InsInfo(const FenceSync::InsInfo &fs_info, const Lang::NM
 
 TsoFenceSync::InsInfo::~InsInfo() {};
 
-TsoFenceSync::TsoFenceSync(int pid, int q, 
-                           std::set<Automaton::Transition> IN, 
-                           std::set<Automaton::Transition> OUT)
+TsoFenceSync::TsoFenceSync(int pid, int q, TSet IN, TSet OUT)
   : FenceSync(Lang::Stmt<int>::nop(),pid,q,IN,OUT)
 { 
 };
@@ -99,9 +97,7 @@ std::set<Sync*> TsoFenceSync::get_all_possible(const Machine &m){
   std::set<Lang::Stmt<int> > fs;
   fs.insert(Lang::Stmt<int>::nop()); // Does not matter
   FenceSync::fs_init_t fsinit = 
-    [](Lang::Stmt<int> f, int pid, int q, 
-       std::set<Automaton::Transition> IN, 
-       std::set<Automaton::Transition> OUT){
+    [](Lang::Stmt<int> f, int pid, int q, TSet IN, TSet OUT){
     return new TsoFenceSync(pid,q,IN,OUT);
   };
   return FenceSync::get_all_possible(m,fs,fsinit);
@@ -240,8 +236,7 @@ void TsoFenceSync::test(){
          "text nop\n"
          );
 
-      Lang::Stmt<int> f = Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(1),Lang::Expr<int>::integer(0));
-      InsInfo info(FenceSync::InsInfo(0,f),Lang::NML::global(1));
+      InsInfo info(FenceSync::InsInfo(0),Lang::NML::global(1));
       auto pr = get_dummy_nml(*m,std::vector<const Sync::InsInfo*>(1,(const Sync::InsInfo*)&info));
 
       Test::inner_test("get_dummy_nml #3",
@@ -262,7 +257,7 @@ void TsoFenceSync::test(){
   std::function<TsoFenceSync(const Machine*,int,std::string)> get_tfs =
     [](const Machine *m, int pid, std::string lbl){
     int q = m->automata[pid].state_index_of_label(lbl);
-    std::set<Automaton::Transition> IN, OUT;
+    TSet IN, OUT;
     const Automaton::State &qstate = m->automata[pid].get_states()[q];
     for(auto it = qstate.fwd_transitions.begin(); it != qstate.fwd_transitions.end(); ++it){
       OUT.insert(**it);

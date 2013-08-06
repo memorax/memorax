@@ -30,8 +30,7 @@
 #include <stdexcept>
 
 FenceSync::FenceSync(Lang::Stmt<int> f, int pid, int q, 
-                     std::set<Automaton::Transition> IN, 
-                     std::set<Automaton::Transition> OUT)
+                     TSet IN, TSet OUT)
   : f(f), pid(pid), q(q), IN(IN), OUT(OUT) {
 };
 
@@ -45,150 +44,12 @@ std::string FenceSync::to_string(const Machine &m) const{
 };
 
 Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const{
-  assert(applies_to(m,m_infos));
-
-  InsInfo *myinfo = new InsInfo((FenceSync*)clone(),f);
-  *info = myinfo;
-  myinfo->new_q = m.automata[pid].get_states().size();
-
-  Machine *m2 = new Machine(m);
-
-  const Automaton::State &state = m.automata[pid].get_states()[q];
-
-  if(IN.size() != state.bwd_transitions.size() && OUT.size() != state.fwd_transitions.size()){
-    delete m2;
-    throw new std::logic_error("FenceSync: Both IN and OUT are partial. Not supported.");
-  }
-
-  /* Setup info->tchanges as the identity map */
-  {
-    for(unsigned p = 0; p < m2->automata.size(); ++p){
-      const std::vector<Automaton::State> &states = m2->automata[p].get_states();
-      for(unsigned i = 0; i < states.size(); ++i){
-        for(auto it = states[i].fwd_transitions.begin();
-            it != states[i].fwd_transitions.end(); ++it){
-          myinfo->bind(Machine::PTransition(**it,p),Machine::PTransition(**it,p));
-        }
-      }
-    }
-  }
-
-  /* Get the transition in m2 which is identical modulo statement
-   * position to t. */
-  std::function<Automaton::Transition*(const Machine &,const Automaton::Transition&)> find_transition = 
-    [this](const Machine &machine,const Automaton::Transition &t)->Automaton::Transition*{
-    const Automaton::State &state = machine.automata[this->pid].get_states()[t.source];
-    for(auto it = state.fwd_transitions.begin(); it != state.fwd_transitions.end(); ++it){
-      if((*it)->compare(t,false) == 0){
-        return *it;
-      }
-    }
-    return 0;
-  };
-
-  /* Calculate the transitions of IN and OUT as they appear in m */
-  std::set<Automaton::Transition*> IN_m, OUT_m;
-  for(auto it = IN.begin(); it != IN.end(); ++it){
-    Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
-    Automaton::Transition *t = find_transition(m,it_i);
-    assert(t);
-    IN_m.insert(t);
-  }
-  for(auto it = OUT.begin(); it != OUT.end(); ++it){
-    Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
-    Automaton::Transition *t = find_transition(m,it_i);
-    assert(t);
-    OUT_m.insert(t);
-  }
-
-  /* Check if some previous fence has been inserted at the same
-   * control location */
-  int qp; // The new control location
-  {
-    bool ex_prev_fence = false;
-    for(unsigned i = 0; i < m_infos.size(); ++i){
-      const InsInfo *ii = dynamic_cast<const InsInfo*>(m_infos[i]);
-      if(ii){
-        assert(dynamic_cast<const FenceSync*>(m_infos[i]->sync));
-        const FenceSync *fs = static_cast<const FenceSync*>(m_infos[i]->sync);
-        if(fs->get_pid() == pid && fs->get_q() == q){
-          if(ex_prev_fence){
-            /* If there are more than one previous fence at the same
-             * location, they should all use the same new_q. */
-            assert(qp == ii->new_q);
-          }
-          ex_prev_fence = true;
-          qp = ii->new_q;
-          /* IN := IN union fs->IN */
-          for(auto it = fs->get_IN().begin(); it != fs->get_IN().end(); ++it){
-            Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
-            Automaton::Transition *t = find_transition(m,it_i);
-            assert(t);
-            IN_m.insert(t);
-          }
-          /* OUT := OUT union fs->OUT */
-          for(auto it = fs->get_OUT().begin(); it != fs->get_OUT().end(); ++it){
-            Automaton::Transition it_i = InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid));
-            Automaton::Transition *t = find_transition(m,it_i);
-            assert(t);
-            OUT_m.insert(t);
-          }
-        }
-      }
-    }
-    if(!ex_prev_fence){
-      qp = m.automata[pid].get_states().size();
-      // Add fence
-      m2->automata[pid].add_transition(Automaton::Transition(qp,f,q));
-    }
-    myinfo->new_q = qp;
-  }
-
-  /* Find transitions where change should be considered */
-  std::set<Automaton::Transition*> FWD_m = state.fwd_transitions;
-  std::set<Automaton::Transition*> BWD_m = state.bwd_transitions;
-  if(qp < m.automata[pid].get_states().size()){
-    const Automaton::State &qp_state = m.automata[pid].get_states()[qp];
-    FWD_m.insert(qp_state.fwd_transitions.begin(),qp_state.fwd_transitions.end());
-    BWD_m.insert(qp_state.bwd_transitions.begin(),qp_state.bwd_transitions.end());
-  }
-
-  /* Change sources for outgoing transitions */
-  for(auto it = FWD_m.begin(); it != FWD_m.end(); ++it){
-    int src;
-    if(OUT_m.count(*it)){
-      /* Should go through fence. Set source == q */
-      src = q;
-    }else{
-      /* Should not go through fence. Change source from q to qp. */
-      src = qp;
-    }
-    Automaton::Transition t2(src,(*it)->instruction,(*it)->target);
-    myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
-    Automaton::Transition *t_m2 = find_transition(*m2,**it);
-    assert(t_m2);
-    m2->automata[pid].del_transition(*t_m2);
-    m2->automata[pid].add_transition(t2);
-  }
-  /* Change targets for incoming transitions */
-  for(auto it = BWD_m.begin(); it != BWD_m.end(); ++it){
-    int tgt;
-    if(IN_m.count(*it)){
-      /* Should go through fence. Hence change target from q to qp */
-      tgt = qp;
-    }else{
-      /* Should not go through fence. Set target == q */
-      tgt = q;
-    }
-    Automaton::Transition t2((*it)->source,(*it)->instruction,tgt);
-    myinfo->bind(Machine::PTransition(**it,pid),Machine::PTransition(t2,pid));
-    Automaton::Transition *t_m2 = find_transition(*m2,**it);
-    assert(t_m2);
-    m2->automata[pid].del_transition(*t_m2);
-    m2->automata[pid].add_transition(t2);
-  }
-
-  return m2;
+  // TODO: Fix
+  Log::warning << "WARNING: FenceSync::insert: Not implemented.\n";
+  InsInfo *my_info = new InsInfo(static_cast<const FenceSync*>(clone()));
+  *info = my_info;
+  my_info->setup_id_tchanges(m);
+  return new Machine(m);
 };
 
 bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos) const{
@@ -211,12 +72,9 @@ bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsIn
 
   for(unsigned i = 0; i < m_infos.size(); ++i){
     if(dynamic_cast<const FenceSync::InsInfo*>(m_infos[i])){
-      const FenceSync::InsInfo *info = dynamic_cast<const FenceSync::InsInfo*>(m_infos[i]);
-    
-      if(info->fence.compare(f,false) != 0){
-        throw new std::logic_error("Attempt to insert a different fence instruction at the same control location. "
-                                   "Not supported (yet).");
-      }
+      // const FenceSync::InsInfo *info = dynamic_cast<const FenceSync::InsInfo*>(m_infos[i]);
+      // TODO: Fix
+      Log::warning << "WARNING: FenceSync::applies_to: Not working properly.";
     }else if(dynamic_cast<const TsoLockSync::InsInfo*>(m_infos[i])){
       // Ok
     }else{
@@ -254,6 +112,20 @@ std::string FenceSync::to_string_aux(const std::function<std::string(const int&)
   return ss.str();
 };
 
+void FenceSync::InsInfo::setup_id_tchanges(const Machine &m){
+  tchanges.clear();
+  for(unsigned p = 0; p < m.automata.size(); ++p){
+    auto states = m.automata[p].get_states();
+    for(unsigned i = 0; i < states.size(); ++i){
+      for(auto it = states[i].fwd_transitions.begin();
+          it != states[i].fwd_transitions.end(); ++it){
+        bind(Machine::PTransition(**it,p),
+             Machine::PTransition(**it,p));
+      }
+    }
+  }
+};
+
 std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
                                             const std::set<Lang::Stmt<int> > &fs,
                                             const fs_init_t &fsinit){
@@ -261,15 +133,15 @@ std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
   for(unsigned p = 0; p < m.automata.size(); ++p){
     const std::vector<Automaton::State> &states = m.automata[p].get_states();
     for(unsigned i = 0; i < states.size(); ++i){
-      std::set<Automaton::Transition> IN, OUT;
+      TSet IN, OUT;
       for(auto it = states[i].bwd_transitions.begin(); it != states[i].bwd_transitions.end(); ++it){
         IN.insert(**it);
       }
       for(auto it = states[i].fwd_transitions.begin(); it != states[i].fwd_transitions.end(); ++it){
         OUT.insert(**it);
       }
-      std::set<std::set<Automaton::Transition> > INS = powerset(IN);
-      std::set<std::set<Automaton::Transition> > OUTS = powerset(OUT);
+      std::set<TSet> INS = powerset<Automaton::Transition,TransCmp>(IN);
+      std::set<TSet> OUTS = powerset(OUT);
       for(auto init = INS.begin(); init != INS.end(); ++init){
         if(init->empty()) continue; // Skip empty set
         for(auto outit = OUTS.begin(); outit != OUTS.end(); ++outit){
@@ -284,22 +156,22 @@ std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
   return ss;
 };
 
-template<class T>
-std::set<std::set<T> > FenceSync::powerset(const std::set<T> &s){
-  std::vector<std::set<T> > v;
-  v.push_back(std::set<T>());
+template<class T,class L>
+std::set<std::set<T,L> > FenceSync::powerset(const std::set<T,L> &s){
+  std::vector<std::set<T,L> > v;
+  v.push_back(std::set<T,L>());
   int cur = 1;
 
   for(auto it = s.begin(); it != s.end(); ++it){
     for(int i = 0; i < cur; ++i){
-      std::set<T> subs = v[i];
+      std::set<T,L> subs = v[i];
       subs.insert(*it);
       v.push_back(subs);
     }
     cur *= 2;
   }
 
-  return std::set<std::set<T> >(v.begin(),v.end());
+  return std::set<std::set<T,L> >(v.begin(),v.end());
 };
 
 void FenceSync::InsInfo::bind(const Machine::PTransition &a,const Machine::PTransition &b){
@@ -335,7 +207,7 @@ int FenceSync::InsInfo::original_q(const std::vector<const Sync::InsInfo*> &ivec
       const InsInfo *info = static_cast<const InsInfo*>(ivec[i]);
       assert(dynamic_cast<const FenceSync*>(info->sync));
       const FenceSync *fs = static_cast<const FenceSync*>(info->sync);
-      if(q == info->new_q){
+      if(info->new_qs.count(q)){
         q = fs->get_q();
       }
     }else{
@@ -358,37 +230,17 @@ int FenceSync::compare(const Sync &s) const{
   if(q < fs->q) return -1;
   if(q > fs->q) return 1;
 
-  std::function<int(const std::set<Automaton::Transition> &,
-                    const std::set<Automaton::Transition> &)> cmp_sets = 
-    [](const std::set<Automaton::Transition> &S,
-       const std::set<Automaton::Transition> &T){
-
-    typedef std::function<bool(const Automaton::Transition&,
-                               const Automaton::Transition&)> 
-    cmp_fn_t;
-
-    cmp_fn_t cmp_fn = [](const Automaton::Transition &a,
-                         const Automaton::Transition &b){
-      return a.compare(b,false) < 0;
-    };
-
-    std::set<Automaton::Transition,cmp_fn_t> SS(cmp_fn), TT(cmp_fn);
-    SS.insert(S.begin(),S.end());
-    TT.insert(T.begin(),T.end());
-
-    if(SS < TT){
-      return -1;
-    }
-    if(TT > SS){
-      return 1;
-    }
+  if(IN < fs->IN){
+    return -1;
+  }else if(IN > fs->IN){
+    return 1;
+  }else if(OUT < fs->OUT){
+    return -1;
+  }else if(OUT > fs->OUT){
+    return 1;
+  }else{
     return 0;
-  };
-
-  int c = cmp_sets(IN,fs->IN);
-  if(c != 0) return c;
-
-  return cmp_sets(OUT,fs->OUT);
+  }
 };
 
 void FenceSync::test(){
@@ -464,8 +316,7 @@ void FenceSync::test(){
   class Dummy : public FenceSync{
   public:
     Dummy(Lang::Stmt<int> f, int pid, int q, 
-          std::set<Automaton::Transition> IN, 
-          std::set<Automaton::Transition> OUT)
+          TSet IN, TSet OUT)
       : FenceSync(f,pid,q,IN,OUT) {};
     ~Dummy() {};
     virtual FenceSync *clone() const{
@@ -550,7 +401,7 @@ void FenceSync::test(){
 
       assert(q >= 0);
 
-      std::set<Automaton::Transition> IN, OUT;
+      TSet IN, OUT;
       {
         for(auto it = m->automata[pid].get_states()[q].bwd_transitions.begin();
             it != m->automata[pid].get_states()[q].bwd_transitions.end(); ++it){
@@ -581,8 +432,7 @@ void FenceSync::test(){
 
     fs_init_t fsinit = 
       [](Lang::Stmt<int> f, int pid, int q, 
-         std::set<Automaton::Transition> IN, 
-         std::set<Automaton::Transition> OUT){ return new Dummy(f,pid,q,IN,OUT); };
+         TSet IN, TSet OUT){ return new Dummy(f,pid,q,IN,OUT); };
 
     /* tgt_s specifies one Dummy per line. The format is
      * P{a;b;c;...}to{A;B;C;...}

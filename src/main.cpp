@@ -605,13 +605,13 @@ int main(int argc, char *argv[]){
     case TEST:
       Test::add_test("Automaton",Automaton::test);
       Test::add_test("FenceSync",FenceSync::test);
-      Test::add_test("Fencins",Fencins::test);
+      // Test::add_test("Fencins",Fencins::test);
       Test::add_test("Machine",Machine::test);
       Test::add_test("MinCoverage",MinCoverage::test);
       Test::add_test("Test",Test::test_testing);
       Test::add_test("TsoFenceSync",TsoFenceSync::test);
       Test::add_test("TsoLockSync",TsoLockSync::test);
-      Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
+      // Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
       Test::add_test("ZStar",ZStar<int>::test);
       retval = Test::run_tests();
       break;

@@ -342,9 +342,9 @@ void TsoLockSync::test(){
          "L5: nop\n"
          );
 
-      std::function<std::set<Automaton::Transition>(const Machine *,int,std::string)> get_trans_set = 
+      std::function<FenceSync::TSet(const Machine *,int,std::string)> get_trans_set = 
         [&trans](const Machine *m,int pid,std::string T_s){
-        std::set<Automaton::Transition> tset;
+        FenceSync::TSet tset;
 
         std::size_t i = 0;
         while(i != std::string::npos){

@@ -210,8 +210,8 @@ std::set<Sync*> TsoSimpleFencer::fences_between(int pid,
   /* Return true iff there is some t' in S such that t' changed
    * according to m_infos equals t.
    */
-  std::function<bool(const Automaton::Transition&,const std::set<Automaton::Transition>&)> member = 
-    [&m_infos,pid](const Automaton::Transition &t,const std::set<Automaton::Transition> &S){
+  std::function<bool(const Automaton::Transition&,const FenceSync::TSet&)> member = 
+    [&m_infos,pid](const Automaton::Transition &t,const FenceSync::TSet &S){
     for(auto it = S.begin(); it != S.end(); ++it){
       if(t.compare(FenceSync::InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid)),false) == 0){
         return true;
@@ -463,7 +463,7 @@ void TsoSimpleFencer::test(){
          "  L5: nop\n"
          );
 
-      std::set<Automaton::Transition> tmp_IN, tmp_OUT;
+      FenceSync::TSet tmp_IN, tmp_OUT;
       tmp_IN.insert(trans(m,0,"L0","nop","L1"));
       tmp_OUT.insert(trans(m,0,"L1","write: x := 1","L2"));
       TsoFenceSync f0(0,cs(m,0,"L1"),tmp_IN,tmp_OUT);
@@ -861,7 +861,7 @@ void TsoSimpleFencer::test(){
          "  L5: nop\n"
          );
 
-      std::set<Automaton::Transition> tmp_IN, tmp_OUT;
+      FenceSync::TSet tmp_IN, tmp_OUT;
       tmp_IN.insert(trans(m,0,"L0","nop","L1"));
       tmp_OUT.insert(trans(m,0,"L1","write: x := 1","L2"));
       TsoFenceSync f0(0,cs(m,0,"L1"),tmp_IN,tmp_OUT);

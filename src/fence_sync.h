@@ -40,33 +40,43 @@
  * and the transitions originating in q. The fence should be inserted
  * such that whenever control flow goes through transitions i in IN
  * and then j in OUT, then control flow should go through f between i
- * and j. To achieve this, the control state q is split into two
- * control states q and q', with a fence transition from q' to q. If q
- * was labeled, then it keeps the same labels. If q was part of some
- * forbidden control state combination, then it remains so, but q'
- * will not be forbidden.
+ * and j.
  *
- * If two FenceSyncs (f,pid,q,IN,OUT) and (f,pid,q,IN',OUT') with the
- * same fence f, process pid and control state q are inserted to the
- * same machine, in any order, the result will be the same as
- * inserting the single fence (f,pid,q,IN union IN', OUT union OUT').
+ * TODO: Beskriv tillståndsuppdelning.
  *
- * Invariant: IN and OUT are non-empty.
+ * TODO: Beskriv kombination och begränsningar på kombination.
+ * - För alla två Syncs s0 och s1 gäller att s0.IN och s1.IN
+ *   (resp. s0.OUT och s1.OUT) är antingen disjunkta eller relaterade
+ *   genom delmängdsjämförelse.
+ *
+ * Invariant: TODO: Beskriv invariant. (En av IN och OUT är lika med
+ * kontrolltillståndets IN resp. OUT.)
  */
 class FenceSync : public Sync{
 public:
+  struct StmtCmp {
+    bool operator()(const Lang::Stmt<int> &a, const Lang::Stmt<int> &b) const{
+      return a.compare(b,false) < 0;
+    };
+  };
+  struct TransCmp {
+    bool operator()(const Automaton::Transition &a, const Automaton::Transition &b) const{
+      return a.compare(b,false) < 0;
+    };
+  };
+  typedef std::set<Automaton::Transition,TransCmp> TSet;
+
   /* Construct the FenceSync (f,pid,q,IN,OUT).
    *
    * (See above.)
    */
   FenceSync(Lang::Stmt<int> f, int pid, int q, 
-            std::set<Automaton::Transition> IN, 
-            std::set<Automaton::Transition> OUT);
+            TSet IN, TSet OUT);
   virtual ~FenceSync() {};
 
   class InsInfo : public Sync::InsInfo{
   public:
-    InsInfo(const FenceSync *creator_copy, const Lang::Stmt<int> &fence) : Sync::InsInfo(creator_copy), fence(fence) {};
+    InsInfo(const FenceSync *creator_copy) : Sync::InsInfo(creator_copy) {};
     InsInfo(const InsInfo &) = default;
     virtual InsInfo &operator=(const InsInfo &) = default;
     virtual ~InsInfo(){};
@@ -81,12 +91,12 @@ public:
      * tchanges[t] is defined for all transitions t in m.
      */
     std::map<Machine::PTransition,Machine::PTransition> tchanges;
-    /* The new control state that was created when this fence was
-     * inserted.
+    /* All control states in the new machine that correspond to
+     * control state q in the original machine. I.e. the control
+     * states into which q was split by this FenceSync and previous
+     * FenceSyncs to the same control location.
      */
-    int new_q;
-    /* The inserted fence instruction. */
-    Lang::Stmt<int> fence;
+    std::set<int> new_qs;
     /* Insert a->b into tchanges. */
     void bind(const Machine::PTransition &a,const Machine::PTransition &b);
     /* Shorthand for tchanges[t]. */
@@ -107,6 +117,11 @@ public:
      * insertion is returned. Otherwise q is returned.
      */
     static int original_q(const std::vector<const Sync::InsInfo*> &ivec, int q);
+
+    /* Make tchanges an identity map with keys precisely the
+     * transitions occurring in m.
+     */
+    void setup_id_tchanges(const Machine &m);
   };
 
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
@@ -117,8 +132,8 @@ public:
   Lang::Stmt<int> get_f() const { return f; };
   virtual int get_pid() const { return pid; };
   virtual int get_q() const { return q; };
-  virtual const std::set<Automaton::Transition> &get_IN() const { return IN; };
-  virtual const std::set<Automaton::Transition> &get_OUT() const { return OUT; };
+  virtual const TSet &get_IN() const { return IN; };
+  virtual const TSet &get_OUT() const { return OUT; };
   static void test();
 protected:
   /* This FenceSync is (f,pid,q,IN,OUT) as described at the main
@@ -126,8 +141,8 @@ protected:
   Lang::Stmt<int> f;
   int pid;
   int q;
-  std::set<Automaton::Transition> IN;
-  std::set<Automaton::Transition> OUT;
+  TSet IN;
+  TSet OUT;
 
   /* Returns a set S of Sync objects, such that for each FenceSync
    * object (f,pid,q,IN,OUT) corresponding to some fence f in fs that
@@ -138,8 +153,8 @@ protected:
    * get_all_possible(m,fs,[](f,pid,q,IN,OUT){ return new FS(f,pid,q,IN,OUT); })
    */
   typedef std::function<Sync*(Lang::Stmt<int> f, int pid, int q, 
-                              std::set<Automaton::Transition> IN, 
-                              std::set<Automaton::Transition> OUT)> fs_init_t;
+                              TSet IN, 
+                              TSet OUT)> fs_init_t;
   static std::set<Sync*> get_all_possible(const Machine &m,
                                           const std::set<Lang::Stmt<int> > &fs,
                                           const fs_init_t &fsinit);
@@ -151,8 +166,8 @@ private:
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
 
   /* Returns the power set of s. */
-  template<class T>
-  static std::set<std::set<T> > powerset(const std::set<T> &s);
+  template<class T,class L = std::less<T> >
+  static std::set<std::set<T,L> > powerset(const std::set<T,L> &s);
 
   /* Checks if this FenceSync is correct with respect to m.
    * I.e. that process pid exists in m, and has a control state q.
