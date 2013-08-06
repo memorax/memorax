@@ -23,6 +23,8 @@
 
 #include "machine.h"
 
+#include <stdexcept>
+
 /* Sync is an abstract class representing a piece of synchronization
  * that can be inserted into a machine. Derived classes could
  * implement particular pieces of synchronization, e.g. a fence at a
@@ -65,6 +67,20 @@ public:
   };
 
   virtual ~Sync() {};
+
+  /* When a Sync s is to be inserted into a machine where already a
+   * Sync s' has been inserted such that s and s' cannot coexist in
+   * the machine, then Incompatible(s',...) is thrown by s.insert.
+   */
+  class Incompatible : public std::exception {
+  public:
+    Incompatible(const InsInfo *ii, std::string msg) : ii(ii), msg(msg) {};
+    virtual ~Incompatible() throw() {};
+    virtual const char *what() const throw() { return msg.c_str(); };
+    const InsInfo *ii;
+    std::string msg;
+  };
+
   /* Inserts this synchronization into m. Returns the result. Sets
    * *info to point to a new InsInfo object that describes the changes
    * in the returned Machine, compared to m.
