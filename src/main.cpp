@@ -604,7 +604,6 @@ int main(int argc, char *argv[]){
       break;
     case TEST:
       Test::add_test("Automaton",Automaton::test);
-      Test::add_test("FenceSync",FenceSync::test);
       // Test::add_test("Fencins",Fencins::test);
       Test::add_test("Machine",Machine::test);
       Test::add_test("MinCoverage",MinCoverage::test);
@@ -613,6 +612,7 @@ int main(int argc, char *argv[]){
       Test::add_test("TsoLockSync",TsoLockSync::test);
       // Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
       Test::add_test("ZStar",ZStar<int>::test);
+      Test::add_test("FenceSync",FenceSync::test);
       retval = Test::run_tests();
       break;
     default: 

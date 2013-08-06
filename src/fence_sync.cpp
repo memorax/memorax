@@ -43,13 +43,165 @@ std::string FenceSync::to_string(const Machine &m) const{
   return to_string_aux(m.reg_pretty_vts(pid),m.ml_pretty_vts(pid));
 };
 
-Machine *FenceSync::insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const{
-  // TODO: Fix
-  Log::warning << "WARNING: FenceSync::insert: Not implemented.\n";
+Machine *FenceSync::insert(const Machine &m,
+                           const std::vector<const Sync::InsInfo*> &m_infos,
+                           Sync::InsInfo **info) const{
+  if(!applies_to(m,m_infos)){
+    throw new std::logic_error("FenceSync::insert: "
+                               "This FenceSync does not apply to the target machine.");
+  }
+
+  /* Find all FenceSyncs that apply to the same control location as this one */
+  std::vector<const FenceSync*> q_fss;
+  {
+    q_fss.push_back(this);
+    for(unsigned i = 0; i < m_infos.size(); ++i){
+      const FenceSync *fs = dynamic_cast<const FenceSync*>(m_infos[i]->sync);
+      if(fs && fs->q == q && fs->pid == pid){
+        q_fss.push_back(fs);
+      }
+    }
+  }
+
+  /* Sort FenceSyncs such that
+   * - If fs0.IN is a strict subset of fs1.IN, then fs0 < fs1
+   * - If fs0.OUT is a strict superset of fs1.OUT, then fs0 < fs1
+   * - Arbitrary tie breaking.
+   */
+  struct SSCmp{
+    bool operator()(const FenceSync *a, const FenceSync *b) const{
+      int c = ss_cmp(a,b);
+      if(c == 0){
+        // Break tie
+        return a->compare(*b) < 0;
+      }else{
+        return c < 0;
+      }
+    };
+    static int ss_cmp(const FenceSync *a, const FenceSync *b){
+      if(a->IN != b->IN && subset(a->IN,b->IN)){
+        return -1;
+      }else if(a->IN != b->IN && subset(b->IN,a->IN)){
+        return 1;
+      }else if(a->OUT != b->OUT && subset(a->OUT,b->OUT)){
+        return 1;
+      }else if(a->OUT != b->OUT && subset(b->OUT,a->OUT)){
+        return -1;
+      }
+      return 0;
+    };
+  };
+
+  std::sort(q_fss.begin(),q_fss.end(),SSCmp());
+
+  // TODO: Remove printouts
+  Log::result << " *** q_fss ***\n";
+  for(unsigned i = 0; i < q_fss.size(); ++i){
+    Log::result << q_fss[i]->to_string(m);
+  }
+
+  /* Find all control locations currently corresponding to q */
+  std::set<int> old_qs;
+  old_qs.insert(q);
+  for(int i = (int)m_infos.size()-1; i >= 0; --i){
+    const FenceSync *fs = dynamic_cast<const FenceSync*>(m_infos[i]->sync);
+    if(fs && fs->pid == pid && fs->q == q){
+      assert(dynamic_cast<const InsInfo*>(m_infos[i]));
+      old_qs = static_cast<const InsInfo*>(m_infos[i])->new_qs;
+      break;
+    }
+  }
+
+  Machine *m2 = new Machine(m);
   InsInfo *my_info = new InsInfo(static_cast<const FenceSync*>(clone()));
   *info = my_info;
   my_info->setup_id_tchanges(m);
-  return new Machine(m);
+
+  /* Find all original transitions to and from q as they appear in m2 */
+  TSet q_IN, q_OUT;
+  if(m_infos.size()){
+    /* Search the first tchanges for transitions */
+    std::map<Machine::PTransition,Machine::PTransition> tch;
+    {
+      const InsInfo *ii0 = dynamic_cast<const InsInfo*>(m_infos[0]);
+      const TsoLockSync::InsInfo *ii1 = dynamic_cast<const TsoLockSync::InsInfo*>(m_infos[0]);
+      if(ii0){
+        tch = ii0->tchanges;
+      }else{
+        assert(ii1);
+        tch = ii1->tchanges;
+      }
+    }
+    for(auto it = tch.begin(); it != tch.end(); ++it){
+      if(old_qs.count(it->first.source)){
+        q_OUT.insert(InsInfo::all_tchanges(m_infos,it->first));
+      }
+      if(old_qs.count(it->first.target)){
+        q_IN.insert(InsInfo::all_tchanges(m_infos,it->first));
+      }
+    }
+  }else{
+    /* m is the original machine, take the transitions as they are */
+    for(auto q_it = old_qs.begin(); q_it != old_qs.end(); ++q_it){
+      const Automaton::State &st = m2->automata[pid].get_states()[*q_it];
+      for(auto t_it = st.bwd_transitions.begin(); t_it != st.bwd_transitions.end(); ++t_it){
+        q_IN.insert(**t_it);
+      }
+      for(auto t_it = st.fwd_transitions.begin(); t_it != st.fwd_transitions.end(); ++t_it){
+        q_OUT.insert(**t_it);
+      }
+    }
+  }
+
+  /* Remove all transitions to and from q in m2 */
+  /* TODO: Uncomment
+  {
+    TSet ts;
+    for(auto q_it = old_qs.begin(); q_it != old_qs.end(); ++q_it){
+      const Automaton::State &st = m2->automata[pid].get_states()[*q_it];
+      for(auto t_it = st.bwd_transitions.begin(); t_it != st.bwd_transitions.end(); ++t_it){
+        ts.insert(**t_it);
+      }
+      for(auto t_it = st.fwd_transitions.begin(); t_it != st.fwd_transitions.end(); ++t_it){
+        ts.insert(**t_it);
+      }
+    }
+    for(auto t_it = ts.begin(); t_it != ts.end(); ++t_it){
+      m2->automata[pid].del_transition(*t_it);
+    }
+  }
+  */
+
+  struct fstate_t{
+    fstate_t(const FenceSync *fs, int cstate) : fs(fs), cstate(cstate) {};
+    const FenceSync *fs;
+    int cstate;
+  };
+
+  /* Return an unused control state that is not q.
+   * Uses states from old_qs as long as there are such left.
+   */
+  std::function<int()> new_state = 
+    [this,&old_qs,&m](){
+    static auto o_it = old_qs.begin();
+    static int next_state = m.automata[this->pid].get_states().size();
+    if(o_it != old_qs.end() && *o_it == this->q){
+      ++o_it;
+    }
+    if(o_it == old_qs.end()){
+      return next_state++;
+    }else{
+      int ns = *o_it;
+      ++o_it;
+      return ns;
+    }
+  };
+
+  /* TODO: Gå igenom q_fss och bygg en fence-struktur */
+
+  // TODO: Fix
+  Log::warning << "WARNING: FenceSync::insert: Not implemented.\n";
+  return m2;
 };
 
 bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos) const{
@@ -72,9 +224,12 @@ bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsIn
 
   for(unsigned i = 0; i < m_infos.size(); ++i){
     if(dynamic_cast<const FenceSync::InsInfo*>(m_infos[i])){
-      // const FenceSync::InsInfo *info = dynamic_cast<const FenceSync::InsInfo*>(m_infos[i]);
-      // TODO: Fix
-      Log::warning << "WARNING: FenceSync::applies_to: Not working properly.";
+      assert(dynamic_cast<const FenceSync*>(m_infos[i]->sync));
+      const FenceSync *fs = static_cast<const FenceSync*>(m_infos[i]->sync);
+      if(fs->q == q && fs->pid == pid && !compatible(*fs)){
+        throw new Incompatible(m_infos[i],"FenceSync: Previous FenceSync to same "
+                               "control location not subset related.");
+      }
     }else if(dynamic_cast<const TsoLockSync::InsInfo*>(m_infos[i])){
       // Ok
     }else{
@@ -126,9 +281,48 @@ void FenceSync::InsInfo::setup_id_tchanges(const Machine &m){
   }
 };
 
+bool FenceSync::disjunct(const TSet &S, const TSet &T){
+  auto S_it = S.begin();
+  auto T_it = T.begin();
+  TransCmp cmp;
+  while(S_it != S.end() && T_it != T.end()){
+    if(*S_it == *T_it){
+      return false;
+    }else if(cmp(*S_it,*T_it)){
+      ++S_it;
+    }else{
+      ++T_it;
+    }
+  }
+  return true;
+};
+
+bool FenceSync::subset_related(const TSet &S, const TSet &T){
+  return subset(S,T) || subset(T,S);
+};
+
+bool FenceSync::subset(const TSet &S, const TSet &T){
+  return std::includes<TSet::const_iterator,TSet::const_iterator,TransCmp>
+    (T.begin(),T.end(),S.begin(),S.end(),TransCmp());
+};
+
+bool FenceSync::subset_related(const FenceSync &fs) const{
+  return subset_related(IN,fs.IN) && subset_related(OUT,fs.OUT);
+};
+
+bool FenceSync::compatible(const FenceSync &fs) const{
+  return (subset_related(IN,fs.IN) || disjunct(IN,fs.IN)) &&
+    (subset_related(OUT,fs.OUT) || disjunct(OUT,fs.OUT));
+};
+
 std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
                                             const std::set<Lang::Stmt<int> > &fs,
                                             const fs_init_t &fsinit){
+  Log::warning << "WARNING: FenceSync::get_all_possible: Incorrectly implemented.\n";
+  /* TODO: Fix
+   * The returned FenceSyncs should have maximal set for one of IN and
+   * OUT.
+   */
   std::set<Sync*> ss;
   for(unsigned p = 0; p < m.automata.size(); ++p){
     const std::vector<Automaton::State> &states = m.automata[p].get_states();

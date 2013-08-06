@@ -161,6 +161,23 @@ protected:
 
   virtual int compare(const Sync &s) const;
 private:
+  /* Returns true iff IN (and OUT) is subset related to fs.IN
+   * (resp. fs.OUT) */
+  bool subset_related(const FenceSync &fs) const;
+  /* Returns true iff this FenceSync and fs may coexist in the same
+   * machine. I.e.:
+   *
+   * If both FenceSyncs are for the same control location and process,
+   * then IN (and OUT) and fs.IN (resp. fs.OUT) are either disjunct or
+   * subset related.
+   */
+  bool compatible(const FenceSync &fs) const;
+  /* Returns true iff S is a subset of T. */
+  static bool subset(const TSet &S, const TSet &T);
+  /* Returns true iff S and T are subset related. */
+  static bool subset_related(const TSet &S, const TSet &T);
+  /* Returns true iff S and T are disjunct. */
+  static bool disjunct(const TSet &S, const TSet &T);
 
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
