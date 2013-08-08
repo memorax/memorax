@@ -117,12 +117,16 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
       while((w == writes.size() && proc_pos[p] <= trace->size()) ||
             (w < writes.size() && write_to_update[std::pair<int,int>(p,writes[w].first)] != proc_pos[p])){
         if(trace->transition(proc_pos[p])->pid == int(p) &&
-           !(trace->transition(proc_pos[p])->instruction.get_type() == Lang::UPDATE &&
-             trace->transition(proc_pos[p])->instruction.get_writer() != int(p))){
+           !(trace->transition(proc_pos[p])->instruction.get_type() == Lang::UPDATE ||
+             trace->transition(proc_pos[p])->instruction.get_type() == Lang::LOCKED)){
           tso_trace->push_back(*trace->transition(proc_pos[p]),0);
         }
         ++proc_pos[p];
       }
+    }
+    if (w < writes.size()) { /* Produce the update transition */
+      int p = trace->transition(writes[w].first)->pid;
+      tso_trace->push_back(*trace->transition(write_to_update[std::pair<int,int>(p,writes[w].first)]), 0);
     }
   }
 
