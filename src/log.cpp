@@ -32,6 +32,7 @@ namespace Log{
   bool own_tertiary_stream = false; // True if Log has ownership of *tertiary_stream
   std::ostream *warning_stream = &std::cerr;
   std::ostream *json_stream = 0; // By default, do not print json directives
+  std::ostream *null_stream = 0;
 
   class StreamLiberator{
   public:
@@ -56,6 +57,7 @@ namespace Log{
   redirection_stream extreme(&secondary_stream);
   redirection_stream warning(&warning_stream);
   redirection_stream json(&json_stream);
+  redirection_stream null(&null_stream);
 
   void set_primary_stream(std::ostream *os){
     if(own_primary_stream){

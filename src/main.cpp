@@ -37,6 +37,7 @@
 #include "exact_bwd.h"
 #include "pb_cegar.h"
 #include "tso_fencins.h"
+#include "pso_fencins.h"
 #include <cerrno>
 #include "pb_container2.h"
 #include "sb_constraint.h"
@@ -97,7 +98,8 @@ Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input
   }
 };
 
-void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceSet> &fence_sets){
+template<class FenceSet>
+void print_fence_sets(const Machine &machine, const std::list<FenceSet> &fence_sets) {
   Log::result << "Found " << fence_sets.size() << " fence set";
   if(fence_sets.size() == 0){
     Log::result << "s.\n";
@@ -109,17 +111,13 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
       Log::result << "s:\n";
     }
     int ctr = 0;
-    for(auto it = fence_sets.begin(); it != fence_sets.end(); it++){
+    for(const FenceSet &fs : fence_sets){
       Log::result << "Fence set #" << ctr << ":\n";
-      if(it->get_writes().empty()){
+      if(fs.empty()){
         Log::result << "  (No fences)\n";
         Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
       }else{
-        const std::set<Machine::PTransition> &writes = it->get_writes();
-        for(auto wit = writes.begin(); wit != writes.end(); wit++){
-          Log::result << "  " << wit->to_string(machine) << "\n";
-          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":" << wit->instruction.get_pos().to_json() << "}\n";
-        }
+        fs.print(Log::result,Log::json);
         Log::result << "\n";
       }
       ctr++;
@@ -235,7 +233,17 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     fence_sets = TsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
     print_fence_sets(*machine,fence_sets);
     retval = 0;
-  }else{
+  }else if(flags.find("a")->second.argument == "pws"){
+    std::list<PsoFencins::FenceSet> fence_sets;
+    PwsPsoBwd reach;
+    TsoFencins::reach_arg_init_t arg_init =
+      [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
+      PwsConstraint::Common *common = new PwsConstraint::Common(m);
+      return new ExactBwd::Arg(m,common->get_bad_states(),common,new PwsContainer());
+    };
+    fence_sets = PsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
+    print_fence_sets(*machine,fence_sets);
+    retval = 0;  }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
   }
@@ -420,14 +428,18 @@ void print_help(int argc, char *argv[]){
             << "        Print version and quit.\n"
             << std::endl
             << "  Abstractions:\n"
-            << "    pb (default)\n"
+            << "    pb\n"
             << "      TSO with bounded number of buffer messages per process and variable.\n"
             << "      Uses predicate abstraction.\n"
             << "      Overapproximation of TSO.\n"
             << "      Sound, but incomplete with CEGAR.\n"
-            << "    sb\n"
+            << "    sb (default)\n"
             << "      The Single Buffer model.\n"
             << "      Equivalent to TSO w.r.t. control state reachability.\n"
+            << "      Sound and complete for finite data domains.\n"
+            << "    pws\n"
+            << "      The Partial Write Serialisation model.\n"
+            << "      Equivalent to PSO w.r.t. control state reachability.\n"
             << "      Sound and complete for finite data domains.\n";
 }
 
@@ -578,6 +590,8 @@ int main(int argc, char *argv[]){
   }
   /* Set defaults */
   if(flags.count("a") == 0) flags["a"] = Flag("a","-a",false,"sb");
+  if(flags["a"].argument == "pws" && flags.count("rff") == 0) // -a pws implies --rff
+    flags["rff"] = Flag("rff","--rff",false);
 
   if(flags.count("verbose")){
     Log::set_primary_loglevel(Log::MSG);

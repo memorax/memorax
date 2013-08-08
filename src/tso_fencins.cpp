@@ -48,18 +48,26 @@ namespace TsoFencins{
     const std::set<Automaton::Transition*> &ft = m.automata[w.pid].get_states()[w.source].fwd_transitions;
     Lang::Stmt<int> wi = w.instruction;
     Lang::Stmt<int> wi2 = Lang::Stmt<int>::nop();
+    Lang::Stmt<int> wi3 = Lang::Stmt<int>::nop();
     if(wi.get_type() == Lang::WRITE){
       wi2 = Lang::Stmt<int>::locked_block(std::vector<Lang::Stmt<int> >(1,wi),wi.get_pos());
+      wi3 = Lang::Stmt<int>::slocked_block(std::vector<Lang::Stmt<int> >(1,wi),wi.get_pos());
+    }else if(wi.get_type() == Lang::SLOCKED){
+      assert(wi.get_statement_count() == 1);
+      assert(wi.get_statement(0)->get_type() == Lang::WRITE);
+      wi2 = *wi.get_statement(0);
+      wi3 = Lang::Stmt<int>::locked_block(std::vector<Lang::Stmt<int> >(1,wi2),wi2.get_pos());
     }else{
       assert(wi.get_type() == Lang::LOCKED);
       assert(wi.get_statement_count() == 1);
       assert(wi.get_statement(0)->get_type() == Lang::WRITE);
       wi2 = *wi.get_statement(0);
+      wi3 = Lang::Stmt<int>::slocked_block(std::vector<Lang::Stmt<int> >(1,wi2),wi2.get_pos());
     }
     int encountered = 0; // Number of times we have encountered a write matching w
     Machine::PTransition res = w;
     for(std::set<Automaton::Transition*>::const_iterator it = ft.begin(); it != ft.end(); it++){
-      if((*it)->instruction == wi || (*it)->instruction == wi2){
+      if((*it)->instruction == wi || (*it)->instruction == wi2 || (*it)->instruction == wi3){
         encountered++;
         if(encountered > 1){
           throw new std::logic_error("More than one identical write transition in machine.");
@@ -101,7 +109,9 @@ namespace TsoFencins{
     Reachability::Result *result = 0;
     while(!queue.empty()){
 
-      Log::msg << queue.front().to_string() << "\n" << std::flush;
+      Log::msg << "Currently examining fence set:\n";
+      queue.front().print(Log::msg,Log::null);
+      Log::msg << std::endl;
       
       Reachability::Arg *next_arg = reach_arg_init(queue.front().get_atomized_machine(),result);
       Reachability::Result *tmp_result = r.reachability(next_arg);
@@ -117,6 +127,12 @@ namespace TsoFencins{
           result->trace->print(Log::debug,Log::extreme,Log::json,queue.front().get_atomized_machine());
           Log::debug << "\n";
           std::list<cycle_t> cycs = find_cycles(*result->trace);
+
+          Log::msg << "Cycles found in trace:\n";
+          for(const cycle_t &cycle : cycs){
+            Log::msg << cycle.cycle.to_string(m) << "\n";
+          }
+
           for(auto cycit = cycs.begin(); cycit != cycs.end(); cycit++){
             std::set<Machine::PTransition> cws = get_critical_writes(*cycit,*result->trace,queue.front().get_atomized_machine());
             cws.insert(*cycit->write);
@@ -169,17 +185,22 @@ namespace TsoFencins{
       int pid = trans->pid;
       
       switch(s.get_type()){
+      case Lang::SLOCKED:
       case Lang::WRITE:
         pending_writes[pid].push_back(trans);
         break;
-      case Lang::UPDATE:
-        if(pending_writes[pid].size() == 0 ||
-           pending_writes[pid].front()->instruction.get_memloc() != s.get_memloc()){
-          throw new std::logic_error("TsoFencins: FAILURE: The given trace is not valid under TSO. (Try CEGAR?)");
+      case Lang::UPDATE: {
+        for (auto write_iter = pending_writes[pid].begin(); ; ++write_iter) {
+          if (write_iter == pending_writes[pid].end()) {
+            throw new std::logic_error("TsoFencins: FAILURE: The given trace is not valid under PSO. (Try CEGAR?)");
+          }
+          if((*write_iter)->instruction.get_memloc() == s.get_memloc() && (*write_iter)->pid == trans->pid){
+            pairs[*write_iter] = trans;
+            pending_writes[pid].erase(write_iter);
+            break;
+          }
         }
-        pairs[pending_writes[pid].front()] = trans;
-        pending_writes[pid].pop_front();
-        break;
+      } break;
       default:
         // Do nothing
         break;
@@ -187,7 +208,7 @@ namespace TsoFencins{
     }
     for(unsigned p = 0; p < pending_writes.size(); p++){
       if(!pending_writes[p].empty()){
-        throw new std::logic_error("TsoFencins: FAILURE: The given trace is not valid under TSO. (Try CEGAR?)");
+        throw new std::logic_error("TsoFencins: FAILURE: The given trace is not valid under PSO. (Try CEGAR?)");
       }
     }
     return pairs;
@@ -251,18 +272,21 @@ namespace TsoFencins{
       case Lang::READASSIGN: case Lang::READASSERT:
         non_locked_read(trans);
         break;
+      case Lang::SLOCKED:
       case Lang::WRITE:
         pending_writes[pid].push_back(trans);
         break;
       case Lang::UPDATE:
-        {
-          assert(pending_writes[pid].size() > 0);
-          assert(pending_writes[pid].front()->instruction.get_memloc() == s.get_memloc());
-          const Machine::PTransition *w = pending_writes[pid].front();
-          pending_writes[pid].pop_front();
-          remove_cycles_by_write(&pending_cycles,w);
-          break;
+        for (auto write_iter = pending_writes[pid].begin(); ; ++write_iter) {
+          assert(write_iter != pending_writes[pid].end());
+          if((*write_iter)->instruction.get_memloc() == s.get_memloc()){
+            const Machine::PTransition *w = *write_iter;
+            pending_writes[pid].erase(write_iter);
+            remove_cycles_by_write(&pending_cycles,w);
+            break;
+          }
         }
+        break;
       case Lang::LOCKED:
         assert(!s.is_fence() || pending_writes[pid].empty());
         if(s.get_reads().size() > 0 && !s.is_fence()){
@@ -272,11 +296,6 @@ namespace TsoFencins{
       default:
         throw new std::logic_error("TsoFencins::find_cycles: Illegal statement.");
       }
-    }
-
-    Log::msg << "Cycles found in trace:\n";
-    for(auto cit = cycles.begin(); cit != cycles.end(); cit++){
-      Log::msg << cit->cycle.to_string(Lang::int_reg_to_string(),Lang::int_memloc_to_string()) << "\n";
     }
 
     return cycles;
@@ -433,16 +452,15 @@ namespace TsoFencins{
     return fs;
   };
 
-  inline std::string FenceSet::to_string() const throw(){
-    std::string s = "Currently examining fence set:\n";
+  void FenceSet::print(Log::redirection_stream &text, Log::redirection_stream &json) const throw(){
     if(writes.empty()){
-      s += "  (No fences)\n";
+      text << "  (No fences)\n";
     }else{
       for(auto it = writes.begin(); it != writes.end(); it++){
-        s += "  " + it->to_string(machine) + "\n";
+        text << "  " << it->to_string(machine) << "\n";
+        json << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
       }
     }
-    return s;
   };
 
   bool FenceSet::includes(const FenceSet &fs) const{

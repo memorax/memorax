@@ -97,6 +97,7 @@ public:
   const Machine::PTransition *operator[](const int &i) const { return frag[i]; };
   /* Returns the number of transitions in this fragment */
   int size() const { return frag_len; };
+  std::string to_string(const Machine &m) const;
   std::string to_string(const std::function<std::string(const int&)> &regts, 
                         const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
 

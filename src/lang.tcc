@@ -946,7 +946,7 @@ template<class RegId> Lang::MemLoc<RegId> Lang::Stmt<RegId>::get_memloc() const{
   switch(type){
   case READASSERT: case READASSIGN:
     return reads[0];
-  case WRITE: case UPDATE:
+  case WRITE: case UPDATE: case SLOCKED:
     return writes[0];
   default:
     throw new std::logic_error("Lang::Stmt::get_memloc: Statement has no unique memory location.");
