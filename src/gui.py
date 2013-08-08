@@ -606,10 +606,20 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
             self.set_hint(self.wg_abs_sel_sb,
                           "Abstraction SB:\nExact analysis using the WQO framework over the SB semantic.\n"+
                           "Memory model: TSO (SB)\nIntegers: Bounded")
+            self.wg_abs_sel_pws = Tkinter.Radiobutton(self.wg_abs_sel_frame,text="PWS",variable=self.abs_sel,value="pws",
+                                                      bg=self.bg_colour,command=self.select_abstraction_from_wg)
+            self.wg_abs_sel_pws.pack(side=Tkinter.LEFT)
+            self.set_hint(self.wg_abs_sel_pws,
+                          "Abstraction PWS:\nExact analysis using the WQO framework over the PWS semantic.\n"+
+                          "Memory model: PSO (SB)\nIntegers: Bounded")
             self.wg_rff_check = Tkinter.Checkbutton(self.wg_command_inner_frame,text="Register Free Form",variable=self.rff_check,
                                                     bg=self.bg_colour)
             self.set_hint(self.wg_rff_check,
                           "Transform the machine to Register Free Form before using it.")
+            if self.abs_sel.get() == "pws":
+                self.wg_rff_check.config(state=Tkinter.DISABLED)
+            else:
+                self.wg_rff_check.config(state=Tkinter.NORMAL)
             self.wg_rff_check.pack(side=Tkinter.RIGHT)
             self.wg_cegar_check = Tkinter.Checkbutton(self.wg_command_inner_frame,text="Use CEGAR",variable=self.cegar_check,
                                                       bg=self.bg_colour)
@@ -688,6 +698,10 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         return (abs == "pb")
 
     def select_abstraction_from_wg(self):
+        if self.abs_sel.get() == "pws":
+            self.wg_rff_check.config(state=Tkinter.DISABLED)
+        else:
+            self.wg_rff_check.config(state=Tkinter.NORMAL)
         if self.abstraction_has_cegar(self.abs_sel.get()):
             self.wg_cegar_check.config(state=Tkinter.NORMAL)
         else:
