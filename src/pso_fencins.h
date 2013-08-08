@@ -32,24 +32,27 @@ namespace PsoFencins{
   class cycle_t{
   public:
     cycle_t(const TsoFencins::cycle_t &c)
-      : cycle(c.cycle), write1(c.write), read1(c.read), is_write_write(false) {};
+      : cycle(c.cycle), write1(c.write), read(c.read), is_write_write(false) {};
     cycle_t(const TsoCycle &c, const Machine::PTransition *w, const Machine::PTransition *r)
-      : cycle(c), write1(w), read1(r), is_write_write(false) {};
-    cycle_t(const TsoCycle &c, const Machine::PTransition *w1, const Machine::PTransition *r1,
-            const Machine::PTransition *w2, const Machine::PTransition *r2)
-      : cycle(c), write1(w1), read1(r1), write2(w2), read2(r2), is_write_write(true) {};
+      : cycle(c), write1(w), read(r), is_write_write(false) {};
+    cycle_t(const TsoCycle &c, const Machine::PTransition *w1, const Machine::PTransition *o, bool is_write_write)
+      : cycle(c), write1(w1), is_write_write(is_write_write) {
+      if (is_write_write)
+        write2 = o;
+      else
+        read = o;
+    };
     /* The cycle */
     TsoCycle cycle;
     bool is_write_write;
     /* If is_write_write, the cycle is enabled by reordering write1 after
-     * write2, where read1 reads the memory location of write1 before write1 is
-     * made visible, read2 reads the memory location of write2 after write2 has been
-     * made visible. write2 is after write1 and read1 is after read2 in the trace. */
+     * write2, otherwise, the cycle is enabled by reordering write1 after
+     * read. */
     const Machine::PTransition *write1, *write2;
-    const Machine::PTransition *read1,  *read2;
+    const Machine::PTransition *read;
 
     TsoFencins::cycle_t to_tso() const {
-      return TsoFencins::cycle_t(cycle, write1, read1);
+      return TsoFencins::cycle_t(cycle, write1, is_write_write ? write2 : read);
     }
   };
 

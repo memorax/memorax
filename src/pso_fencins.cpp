@@ -133,10 +133,13 @@ namespace PsoFencins{
      */
     std::list<cycle_t> pending_cycles;
 
-    std::function<void(const Machine::PTransition*)> any_read =
-      [&wrupdates,&pending_writes,&pending_cycles,&last_writes,proc_count,&trace](const Machine::PTransition *read){
-      assert(read->instruction.get_reads().size() == 1);
-      Lang::NML nml(read->instruction.get_reads()[0], read->pid);
+    std::function<void(const Machine::PTransition*)> any_mem =
+      [&wrupdates,&pending_writes,&pending_cycles,&last_writes,proc_count,&trace](const Machine::PTransition *trans){
+      assert((trans->instruction.get_reads().size() == 1 && trans->instruction.get_writes().size() == 0) ||
+             (trans->instruction.get_reads().size() == 0 && trans->instruction.get_writes().size() == 1));
+      auto &mls = trans->instruction.get_reads().size() > 0 ? trans->instruction.get_reads() :
+                                                              trans->instruction.get_writes();
+      Lang::NML nml(mls[0], trans->pid);
       if (last_writes.count(nml)) {
         for (auto inner : pending_writes) for (const Machine::PTransition *w1 : inner) {
           if (w1->pid == last_writes[nml].second->pid &&
@@ -144,8 +147,8 @@ namespace PsoFencins{
             TsoCycle tc(proc_count);
             tc.push_back(wrupdates[w1]);
             tc.push_back(last_writes[nml].second);
-            tc.push_back(read);
-            cycle_t c(tc, w1, 0, last_writes[nml].first, read);
+            tc.push_back(trans);
+            cycle_t c(tc, w1, last_writes[nml].first, true);
             pending_cycles.push_back(c);
           }
         }
@@ -180,13 +183,14 @@ namespace PsoFencins{
         // Do nothing
         break;
       case Lang::READASSIGN: case Lang::READASSERT:
-        any_read(trans);
+        any_mem(trans);
         break;
       case Lang::SLOCKED:
       case Lang::WRITE:
         pending_writes[pid].push_back(trans);
         break;
       case Lang::UPDATE:
+        any_mem(trans);
         for (auto write_iter = pending_writes[pid].begin(); ; ++write_iter) {
           assert(write_iter != pending_writes[pid].end());
           if((*write_iter)->instruction.get_memloc() == s.get_memloc()){
@@ -200,8 +204,8 @@ namespace PsoFencins{
         break;
       case Lang::LOCKED:
         assert(!s.is_fence() || pending_writes[pid].empty());
-        if(s.get_reads().size() > 0){
-          any_read(trans);
+        if(s.get_reads().size() > 0 || s.get_writes().size() > 0){
+          any_mem(trans);
         }
         if (s.get_writes().size() > 0) {
           assert(s.get_writes().size() == 1);
