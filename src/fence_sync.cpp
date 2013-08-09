@@ -45,7 +45,7 @@ std::string FenceSync::to_string(const Machine &m) const{
 };
 
 Machine *FenceSync::insert(const Machine &m,
-                           const std::vector<const Sync::InsInfo*> &m_infos,
+                           m_infos_t m_infos,
                            Sync::InsInfo **info) const{
   if(!applies_to(m,m_infos)){
     throw new std::logic_error("FenceSync::insert: "
@@ -53,7 +53,7 @@ Machine *FenceSync::insert(const Machine &m,
   }
 
   struct FS{
-    FS(const std::vector<const Sync::InsInfo*> &m_infos,
+    FS(m_infos_t m_infos,
        const FenceSync *fs, int cstate, const InsInfo *info)
       : fs(fs), cstate(cstate), info(info) {
       for(auto it = fs->IN.begin(); it != fs->IN.end(); ++it){
@@ -295,7 +295,7 @@ Machine *FenceSync::insert(const Machine &m,
   return m2;
 };
 
-bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos) const{
+bool FenceSync::applies_to(const Machine &m, m_infos_t m_infos) const{
   if(pid < 0){
     std::stringstream ss;
     ss << "FenceSync::insert: Invalid process: " << pid;
@@ -531,7 +531,7 @@ const Machine::PTransition &FenceSync::InsInfo::operator[](const Machine::PTrans
   return tchanges.at(t);
 };
 
-Machine::PTransition FenceSync::InsInfo::all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
+Machine::PTransition FenceSync::InsInfo::all_tchanges(m_infos_t ivec,
                                                       const Machine::PTransition &t,
                                                       int first){
   assert(0 <= first);
@@ -549,7 +549,7 @@ Machine::PTransition FenceSync::InsInfo::all_tchanges(const std::vector<const Sy
   return t2;
 };
 
-int FenceSync::InsInfo::original_q(const std::vector<const Sync::InsInfo*> &ivec, int q){
+int FenceSync::InsInfo::original_q(m_infos_t ivec, int q){
   for(int i = (int)ivec.size() - 1; i >= 0; --i){
     if(dynamic_cast<const InsInfo*>(ivec[i])){
       const InsInfo *info = static_cast<const InsInfo*>(ivec[i]);
@@ -1960,7 +1960,7 @@ void FenceSync::test(){
       delete m;
     }
 
-    /* Test 17: Deeper tree structure */
+    /* Test 17,18,19: Deeper tree structure */
     {
       Machine *m = get_machine
         ("forbidden L0 L0 L0 L0\n"
@@ -2182,6 +2182,71 @@ void FenceSync::test(){
       delete m8;
       delete m9;
       
+    }
+
+    /* Test 20: Two fences at the same location */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  fnc = *\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    $r0 := 1\n"
+         "  or\n"
+         "    $r0 := 2;\n"
+         "    $r0 := 3\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0 := 4;\n"
+         "    $r0 := 5\n"
+         "  or\n"
+         "    $r0 := 6;\n"
+         "    $r0 := 7\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  either{\n"
+         "    $r0 := 0;\n"
+         "    $r0 := 1\n"
+         "  or\n"
+         "    $r0 := 2;\n"
+         "    $r0 := 3\n"
+         "  };\n"
+         "  locked write: fnc := 0;\n"
+         "  locked write: fnc := 0;\n"
+         "  either{\n"
+         "    $r0 := 4;\n"
+         "    $r0 := 5\n"
+         "  or\n"
+         "    $r0 := 6;\n"
+         "    $r0 := 7\n"
+         "  }\n"
+         );
+
+      Dummy d0 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=4;$r0:=6}");
+      Dummy d1 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=4;$r0:=6}");
+
+      Sync::InsInfo *info;
+      std::vector<const Sync::InsInfo*> m_infos;
+      Machine *m1 = d0.insert(*m,m_infos,&info); m_infos.push_back(info);
+      Machine *m2 = d1.insert(*m1,m_infos,&info); m_infos.push_back(info);
+
+      Test::inner_test("insert #20",
+                       m->automata[1].same_automaton(m2->automata[0],false));
+
+      for(unsigned i = 0; i < m_infos.size(); ++i){
+        delete m_infos[i];
+      }
+      delete m;
+      delete m1;
+      delete m2;
     }
 
   }
