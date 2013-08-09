@@ -469,11 +469,6 @@ bool FenceSync::compatible(const FenceSync &fs) const{
 std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
                                             const std::set<Lang::Stmt<int> > &fs,
                                             const fs_init_t &fsinit){
-  Log::warning << "WARNING: FenceSync::get_all_possible: Incorrectly implemented.\n";
-  /* TODO: Fix
-   * The returned FenceSyncs should have maximal set for one of IN and
-   * OUT.
-   */
   std::set<Sync*> ss;
   for(unsigned p = 0; p < m.automata.size(); ++p){
     const std::vector<Automaton::State> &states = m.automata[p].get_states();
@@ -485,14 +480,20 @@ std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
       for(auto it = states[i].fwd_transitions.begin(); it != states[i].fwd_transitions.end(); ++it){
         OUT.insert(**it);
       }
-      std::set<TSet> INS = powerset<Automaton::Transition,TransCmp>(IN);
-      std::set<TSet> OUTS = powerset(OUT);
-      for(auto init = INS.begin(); init != INS.end(); ++init){
-        if(init->empty()) continue; // Skip empty set
+      if(IN.size() && OUT.size()){
+        std::set<TSet> INS = powerset(IN);
+        std::set<TSet> OUTS = powerset(OUT);
+        for(auto init = INS.begin(); init != INS.end(); ++init){
+          /* Skip empty set and the complete set */
+          if(init->empty() || init->size() == IN.size()) continue;
+          for(auto fit = fs.begin(); fit != fs.end(); ++fit){
+            ss.insert(fsinit(*fit,p,i,*init,OUT));
+          }
+        }
         for(auto outit = OUTS.begin(); outit != OUTS.end(); ++outit){
           if(outit->empty()) continue; // Skip empty set
           for(auto fit = fs.begin(); fit != fs.end(); ++fit){
-            ss.insert(fsinit(*fit,p,i,*init,*outit));
+            ss.insert(fsinit(*fit,p,i,IN,*outit));
           }
         }
       }
@@ -941,12 +942,14 @@ void FenceSync::test(){
                                         "0{$r0:=0}to{$r0:=1}\n"
                                         "0{$r0:=0}to{$r0:=2}\n"
                                         "0{$r0:=0}to{$r0:=1;$r0:=2}\n"
-
-                                        "0{$r0:=1}to{$r0:=3}\n"
-                                        "0{$r0:=1}to{$r0:=4}\n"
+                                        
+                                        /* Disallowed since neither IN nor OUT is complete:
+                                         * "0{$r0:=1}to{$r0:=3}\n"
+                                         * "0{$r0:=1}to{$r0:=4}\n"
+                                         * "0{$r0:=2}to{$r0:=4}\n"
+                                         * "0{$r0:=2}to{$r0:=3}\n"
+                                         */
                                         "0{$r0:=1}to{$r0:=3;$r0:=4}\n"
-                                        "0{$r0:=2}to{$r0:=4}\n"
-                                        "0{$r0:=2}to{$r0:=3}\n"
                                         "0{$r0:=2}to{$r0:=3;$r0:=4}\n"
                                         "0{$r0:=1;$r0:=2}to{$r0:=3}\n"
                                         "0{$r0:=1;$r0:=2}to{$r0:=4}\n"
