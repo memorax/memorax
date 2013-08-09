@@ -178,6 +178,8 @@ private:
   static bool subset_related(const TSet &S, const TSet &T);
   /* Returns true iff S and T are disjunct. */
   static bool disjunct(const TSet &S, const TSet &T);
+  /* Returns S\T */
+  static TSet set_minus(const TSet &S, const TSet &T);
 
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
