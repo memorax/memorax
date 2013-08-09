@@ -76,7 +76,8 @@ public:
 
   class InsInfo : public Sync::InsInfo{
   public:
-    InsInfo(const FenceSync *creator_copy) : Sync::InsInfo(creator_copy) {};
+    InsInfo(const FenceSync *creator_copy)
+    : Sync::InsInfo(creator_copy), fence(-1,Lang::Stmt<int>::nop(),-1,-1) {};
     InsInfo(const InsInfo &) = default;
     virtual InsInfo &operator=(const InsInfo &) = default;
     virtual ~InsInfo(){};
@@ -97,20 +98,28 @@ public:
      * FenceSyncs to the same control location.
      */
     std::set<int> new_qs;
+    /* The fence transition inserted by this FenceSync. (Note that
+     * this is the transition as it occurred immediately after this
+     * insertion, and that the transition may later be changed
+     * according to tchanges of InsInfos corresponding to later
+     * insertions.)
+     */
+    Machine::PTransition fence;
     /* Insert a->b into tchanges. */
     void bind(const Machine::PTransition &a,const Machine::PTransition &b);
     /* Shorthand for tchanges[t]. */
     const Machine::PTransition &operator[](const Machine::PTransition &t) const;
 
-    /* If ivec = [&a,&b,...,&z] then the returned transition is
+    /* If ivec = [&i0,&i1,...,&in] then the returned transition is
      *
-     * z[...b[a[t]]...]
+     * in[...ij[ik[t]]...] where k == first and j == first+1
      *
-     * Pre: All elements in ivec are pointers to FenceSync::InsInfo
-     * objects (or derivatives).
+     * Pre: All elements in ik,ij,...,in are pointers to
+     * FenceSync::InsInfo objects (or derivatives) or TsoLockSync.
      */
     static Machine::PTransition all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
-                                             const Machine::PTransition &t);
+                                             const Machine::PTransition &t,
+                                             int first = 0);
     /* If q is a new control state that was created during the
      * insertion corresponding to any element of ivec, then the
      * control state qorg that was split into qorg and q in that
