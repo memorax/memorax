@@ -1973,5 +1973,228 @@ void FenceSync::test(){
       delete m;
     }
 
+    /* Test 17: Deeper tree structure */
+    {
+      Machine *m = get_machine
+        ("forbidden L0 L0 L0 L0\n"
+         "data\n"
+         "  fnc = *\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  L0:\n"
+         "  either{\n"
+         "    $r0:=0;\n"
+         "    $r0:=1\n"
+         "  or\n"
+         "    $r0:=2;\n"
+         "    $r0:=3\n"
+         "  or\n"
+         "    $r0:=4;\n"
+         "    $r0:=5\n"
+         "  or\n"
+         "    $r0:=6;\n"
+         "    $r0:=7\n"
+         "  };\n"
+         "  either{\n"
+         "    $r0:=8;\n"
+         "    $r0:=9\n"
+         "  or\n"
+         "    $r0:=10;\n"
+         "    $r0:=11\n"
+         "  or\n"
+         "    $r0:=12;\n"
+         "    $r0:=13\n"
+         "  or\n"
+         "    $r0:=14;\n"
+         "    $r0:=15\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  L0:\n"
+         "  either{\n"
+         "    either{\n"
+         "      either{\n"
+         "        $r0:=0;\n"
+         "        $r0:=1;\n"
+         "        locked write: fnc := 0\n"
+         "      or\n"
+         "        $r0:=2;\n"
+         "        $r0:=3;\n"
+         "        locked write: fnc := 0\n"
+         "      };\n"
+         "      locked write: fnc := 0\n"
+         "    or\n"
+         "      $r0:=4;\n"
+         "      $r0:=5\n"
+         "    };\n"
+         "    locked write: fnc := 0\n"
+         "  or\n"
+         "    $r0:=6;\n"
+         "    $r0:=7\n"
+         "  };"
+         "  either{\n"
+         "    $r0:=8;\n"
+         "    $r0:=9\n"
+         "  or\n"
+         "    $r0:=10;\n"
+         "    $r0:=11\n"
+         "  or\n"
+         "    $r0:=12;\n"
+         "    $r0:=13\n"
+         "  or\n"
+         "    $r0:=14;\n"
+         "    $r0:=15\n"
+         "  }\n"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  L0:\n"
+         "  either{\n"
+         "    $r0:=0;\n"
+         "    $r0:=1\n"
+         "  or\n"
+         "    $r0:=2;\n"
+         "    $r0:=3\n"
+         "  or\n"
+         "    $r0:=4;\n"
+         "    $r0:=5\n"
+         "  or\n"
+         "    $r0:=6;\n"
+         "    $r0:=7\n"
+         "  };\n"
+         "  either{\n"
+         "    locked write: fnc := 0;\n"
+         "    either{\n"
+         "      locked write: fnc := 0;\n"
+         "      either{\n"
+         "        locked write: fnc := 0;\n"
+         "        $r0:=8;\n"
+         "        $r0:=9\n"
+         "      or\n"
+         "        locked write: fnc := 0;\n"
+         "        $r0:=10;\n"
+         "        $r0:=11\n"
+         "      }\n"
+         "    or\n"
+         "      $r0:=12;\n"
+         "      $r0:=13\n"
+         "    }\n"
+         "  or\n"
+         "    $r0:=14;\n"
+         "    $r0:=15\n"
+         "  }"
+         "process\n"
+         "registers\n"
+         "  $r0 = *\n"
+         "text\n"
+         "  L0:\n"
+         "  either{\n"
+         "    either{\n"
+         "      either{\n"
+         "        $r0:=0;\n"
+         "        $r0:=1;\n"
+         "        locked write: fnc := 0\n"
+         "      or\n"
+         "        $r0:=2;\n"
+         "        $r0:=3;\n"
+         "        locked write: fnc := 0\n"
+         "      };\n"
+         "      locked write: fnc := 0\n"
+         "    or\n"
+         "      $r0:=4;\n"
+         "      $r0:=5\n"
+         "    };\n"
+         "    locked write: fnc := 0\n"
+         "  or\n"
+         "    $r0:=6;\n"
+         "    $r0:=7\n"
+         "  };"
+         "  either{\n"
+         "    locked write: fnc := 0;\n"
+         "    either{\n"
+         "      locked write: fnc := 0;\n"
+         "      either{\n"
+         "        locked write: fnc := 0;\n"
+         "        $r0:=8;\n"
+         "        $r0:=9\n"
+         "      or\n"
+         "        locked write: fnc := 0;\n"
+         "        $r0:=10;\n"
+         "        $r0:=11\n"
+         "      }\n"
+         "    or\n"
+         "      $r0:=12;\n"
+         "      $r0:=13\n"
+         "    }\n"
+         "  or\n"
+         "    $r0:=14;\n"
+         "    $r0:=15\n"
+         "  }"
+         );
+      Dummy d0 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3;$r0:=5}to{$r0:=8;$r0:=10;$r0:=12;$r0:=14}");
+      Dummy d1 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=8;$r0:=10;$r0:=12;$r0:=14}");
+      Dummy d2 = Dummy::parse_dummy(m,"0{$r0:=1}to{$r0:=8;$r0:=10;$r0:=12;$r0:=14}");
+      Dummy d3 = Dummy::parse_dummy(m,"0{$r0:=3}to{$r0:=8;$r0:=10;$r0:=12;$r0:=14}");
+
+      std::vector<const Sync::InsInfo*> m_infos;
+      Sync::InsInfo *info;
+      Machine *m2 = d0.insert(*m,m_infos,&info); m_infos.push_back(info);
+      Machine *m3 = d1.insert(*m2,m_infos,&info); m_infos.push_back(info);
+      Machine *m4 = d2.insert(*m3,m_infos,&info); m_infos.push_back(info);
+      Machine *m5 = d3.insert(*m4,m_infos,&info); m_infos.push_back(info);
+
+      Test::inner_test("insert #17 (deep tree structure in)",
+                       m->automata[1].same_automaton(m5->automata[0],false));
+
+      for(unsigned i = 0; i < m_infos.size(); ++i){
+        delete m_infos[i];
+      }
+      m_infos.clear();
+      delete m2;
+      delete m3;
+      delete m4;
+      delete m5;
+
+      Dummy d4 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3;$r0:=5;$r0:=7}to{$r0:=8;$r0:=10;$r0:=12}");
+      Dummy d5 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3;$r0:=5;$r0:=7}to{$r0:=8;$r0:=10}");
+      Dummy d6 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3;$r0:=5;$r0:=7}to{$r0:=8}");
+      Dummy d7 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3;$r0:=5;$r0:=7}to{$r0:=10}");
+
+      m2 = d4.insert(*m,m_infos,&info); m_infos.push_back(info);
+      m3 = d5.insert(*m2,m_infos,&info); m_infos.push_back(info);
+      m4 = d6.insert(*m3,m_infos,&info); m_infos.push_back(info);
+      m5 = d7.insert(*m4,m_infos,&info); m_infos.push_back(info);
+
+      Test::inner_test("insert #18 (deep tree structure out)",
+                       m->automata[2].same_automaton(m5->automata[0],false));
+
+      Machine *m6 = d0.insert(*m5,m_infos,&info); m_infos.push_back(info);
+      Machine *m7 = d1.insert(*m6,m_infos,&info); m_infos.push_back(info);
+      Machine *m8 = d2.insert(*m7,m_infos,&info); m_infos.push_back(info);
+      Machine *m9 = d3.insert(*m8,m_infos,&info); m_infos.push_back(info);
+
+      Test::inner_test("insert #19 (deep tree structure in & out)",
+                       m->automata[3].same_automaton(m9->automata[0],false));
+
+      for(unsigned i = 0; i < m_infos.size(); ++i){
+        delete m_infos[i];
+      }
+      m_infos.clear();
+      delete m;
+      delete m2;
+      delete m3;
+      delete m4;
+      delete m5;
+      delete m6;
+      delete m7;
+      delete m8;
+      delete m9;
+      
+    }
   }
 };
