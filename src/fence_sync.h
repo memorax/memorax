@@ -42,15 +42,29 @@
  * and then j in OUT, then control flow should go through f between i
  * and j.
  *
- * TODO: Beskriv tillståndsuppdelning.
+ * When a fence (f,pid,q,IN,OUT) is inserted into a Machine, the
+ * control state q is split into several control states. The original
+ * control state q will remain such that all transitions in IN can
+ * reach q (immediately or through some fences) and all transitions in
+ * OUT can be reached from q. The control state q will remain as
+ * forbidden as it was before, and will retain its state
+ * labelling. The new control states will be unlabelled and not
+ * forbidden.
  *
- * TODO: Beskriv kombination och begränsningar på kombination.
- * - För alla två Syncs s0 och s1 gäller att s0.IN och s1.IN
- *   (resp. s0.OUT och s1.OUT) är antingen disjunkta eller relaterade
- *   genom delmängdsjämförelse.
+ * Multiple different FenceSyncs for the same control location q may
+ * be inserted into the same Machine provided that they satisfy the
+ * requirements below. Each inserted FenceSync will cause exactly one
+ * fence instruction to be inserted into the Machine. The requirement
+ * for two FenceSyncs (f,pid,q,IN,OUT) and (f',pid,q,IN',OUT') to be
+ * inserted into the same Machine is that IN (and OUT) is either
+ * disjunct or subset related to IN' (resp. OUT'). If the requirement
+ * is not met, FenceSync::insert will throw a Sync::Incompatible
+ * exception.
  *
- * Invariant: TODO: Beskriv invariant. (En av IN och OUT är lika med
- * kontrolltillståndets IN resp. OUT.)
+ * Invariant: A FenceSync (f,pid,q,IN,OUT) must be such that either IN
+ * == q_IN or OUT == q_OUT, where q_IN and q_OUT are the sets of all
+ * incoming respectively outgoing transitions for control state q of
+ * process pid in the Machine for which the FenceSync is meant.
  */
 class FenceSync : public Sync{
 public:
