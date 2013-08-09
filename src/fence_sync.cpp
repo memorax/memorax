@@ -47,12 +47,10 @@ std::string FenceSync::to_string(const Machine &m) const{
 Machine *FenceSync::insert(const Machine &m,
                            const std::vector<const Sync::InsInfo*> &m_infos,
                            Sync::InsInfo **info) const{
-  /* TODO Uncomment
   if(!applies_to(m,m_infos)){
     throw new std::logic_error("FenceSync::insert: "
                                "This FenceSync does not apply to the target machine.");
   }
-  */
 
   struct FS{
     FS(const std::vector<const Sync::InsInfo*> &m_infos,
@@ -132,38 +130,10 @@ Machine *FenceSync::insert(const Machine &m,
 
   /* Find all original transitions to and from q as they appear in m2 */
   TSet q_IN, q_OUT;
-  if(m_infos.size()){
-    /* Search the first tchanges for transitions */
-    std::map<Machine::PTransition,Machine::PTransition> tch;
-    {
-      const InsInfo *ii0 = dynamic_cast<const InsInfo*>(m_infos[0]);
-      const TsoLockSync::InsInfo *ii1 = dynamic_cast<const TsoLockSync::InsInfo*>(m_infos[0]);
-      if(ii0){
-        tch = ii0->tchanges;
-      }else{
-        assert(ii1);
-        tch = ii1->tchanges;
-      }
-    }
-    for(auto it = tch.begin(); it != tch.end(); ++it){
-      if(it->first.source == q && it->first.pid == pid){
-        q_OUT.insert(InsInfo::all_tchanges(m_infos,it->first));
-      }
-      if(it->first.target == q && it->first.pid == pid){
-        q_IN.insert(InsInfo::all_tchanges(m_infos,it->first));
-      }
-    }
-  }else{
-    /* m is the original machine, take the transitions as they are */
-    for(auto q_it = old_qs.begin(); q_it != old_qs.end(); ++q_it){
-      const Automaton::State &st = m2->automata[pid].get_states()[*q_it];
-      for(auto t_it = st.bwd_transitions.begin(); t_it != st.bwd_transitions.end(); ++t_it){
-        q_IN.insert(**t_it);
-      }
-      for(auto t_it = st.fwd_transitions.begin(); t_it != st.fwd_transitions.end(); ++t_it){
-        q_OUT.insert(**t_it);
-      }
-    }
+  {
+    auto pr = get_m_q_IN_OUT(m,m_infos);
+    q_IN = pr.first;
+    q_OUT = pr.second;
   }
 
   /* Remove all transitions to and from q in m2 */
@@ -358,21 +328,63 @@ bool FenceSync::applies_to(const Machine &m, const std::vector<const Sync::InsIn
     }
   }
 
-  /* Returns true iff t exists in m (after being subjected to the
-   * changes described by m_infos).
-   */
-  std::function<bool(const Automaton::Transition &)> trans_exists = 
-    [&m,this,&m_infos](const Automaton::Transition &t){
-    Automaton::Transition s = InsInfo::all_tchanges(m_infos,Machine::PTransition(t,this->pid));
-    const Automaton::State &state = m.automata[this->pid].get_states()[s.source];
-    return std::any_of(state.fwd_transitions.begin(),state.fwd_transitions.end(),
-                       [&s](const Automaton::Transition *t2){
-                         return s.compare(*t2,false) == 0;
-                       });
-  };
+  auto pr = get_orig_q_IN_OUT(m,m_infos);
 
-  return std::all_of(IN.begin(),IN.end(),trans_exists) &&
-    std::all_of(OUT.begin(),OUT.end(),trans_exists);
+  return
+    (subset(IN,pr.first) && subset(OUT,pr.second) &&
+     (IN.size() == pr.first.size() || OUT.size() == pr.second.size()));
+};
+
+std::pair<FenceSync::TSet,FenceSync::TSet>
+FenceSync::get_orig_q_IN_OUT(const Machine &m,
+                             m_infos_t m_infos) const{
+  TSet I,O;
+  if(m_infos.size()){
+    /* Search the first tchanges for transitions */
+    std::map<Machine::PTransition,Machine::PTransition> tch;
+    {
+      const InsInfo *ii0 = dynamic_cast<const InsInfo*>(m_infos[0]);
+      const TsoLockSync::InsInfo *ii1 = dynamic_cast<const TsoLockSync::InsInfo*>(m_infos[0]);
+      if(ii0){
+        tch = ii0->tchanges;
+      }else{
+        assert(ii1);
+        tch = ii1->tchanges;
+      }
+    }
+    for(auto it = tch.begin(); it != tch.end(); ++it){
+      if(it->first.source == q && it->first.pid == pid){
+        O.insert(it->first);
+      }
+      if(it->first.target == q && it->first.pid == pid){
+        I.insert(it->first);
+      }
+    }
+  }else{
+    /* m is the original machine, take the transitions as they are */
+    const Automaton::State &st = m.automata[pid].get_states()[q];
+    for(auto t_it = st.bwd_transitions.begin(); t_it != st.bwd_transitions.end(); ++t_it){
+      I.insert(**t_it);
+    }
+    for(auto t_it = st.fwd_transitions.begin(); t_it != st.fwd_transitions.end(); ++t_it){
+      O.insert(**t_it);
+    }
+  }
+  return std::pair<TSet,TSet>(I,O);
+};
+
+std::pair<FenceSync::TSet,FenceSync::TSet>
+FenceSync::get_m_q_IN_OUT(const Machine &m,
+                          m_infos_t m_infos) const{
+  auto pr = get_orig_q_IN_OUT(m,m_infos);
+  TSet I, O;
+  for(auto it = pr.first.begin(); it != pr.first.end(); ++it){
+    I.insert(InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid)));
+  }
+  for(auto it = pr.second.begin(); it != pr.second.end(); ++it){
+    O.insert(InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid)));
+  }
+  return std::pair<TSet,TSet>(I,O);
 };
 
 std::string FenceSync::to_string_aux(const std::function<std::string(const int&)> &regts, 
@@ -2168,5 +2180,6 @@ void FenceSync::test(){
       delete m9;
       
     }
+
   }
 };

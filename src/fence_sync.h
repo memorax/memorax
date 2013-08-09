@@ -65,6 +65,7 @@ public:
     };
   };
   typedef std::set<Automaton::Transition,TransCmp> TSet;
+  typedef const std::vector<const Sync::InsInfo*> & m_infos_t;
 
   /* Construct the FenceSync (f,pid,q,IN,OUT).
    *
@@ -125,7 +126,7 @@ public:
      * control state qorg that was split into qorg and q in that
      * insertion is returned. Otherwise q is returned.
      */
-    static int original_q(const std::vector<const Sync::InsInfo*> &ivec, int q);
+    static int original_q(m_infos_t ivec, int q);
 
     /* Make tchanges an identity map with keys precisely the
      * transitions occurring in m.
@@ -133,7 +134,7 @@ public:
     void setup_id_tchanges(const Machine &m);
   };
 
-  virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
+  virtual Machine *insert(const Machine &m, m_infos_t m_infos, Sync::InsInfo **info) const;
   virtual Sync *clone() const = 0;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
@@ -205,7 +206,20 @@ private:
    * m is assumed to be the result of applying the changes described
    * in m_infos to to the Machine that this FenceSync was created for.
    */
-  bool applies_to(const Machine &m,const std::vector<const Sync::InsInfo*> &m_infos) const;
+  bool applies_to(const Machine &m,m_infos_t m_infos) const;
+
+  /* Get a pair (I,O) where I (and O) is the set of all incoming
+   * (resp. outgoing) transitions for q in m, as they occur in the
+   * original machine.
+   */
+  std::pair<TSet,TSet> get_orig_q_IN_OUT(const Machine &m,
+                                         m_infos_t m_infos) const;
+
+  /* Get a pair (I,O) where I (and O) is the set of all incoming
+   * (resp. outgoing) transitions for q in m, as they occur in m.
+   */
+  std::pair<TSet,TSet> get_m_q_IN_OUT(const Machine &m,
+                                      m_infos_t m_infos) const;
 };
 
 #endif
