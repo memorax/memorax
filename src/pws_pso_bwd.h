@@ -21,25 +21,25 @@
 #ifndef __PWS_PSO_BWD_H__
 #define __PWS_PSO_BWD_H__
 
-#include "sb_tso_bwd.h"
-#include "pws_constraint.h"
+#include "channel_bwd.h"
 
 /* This class is a wrapper for Bwd when used for PwsConstraints. It executes
  * exactly as Bwd, but converts the PWS trace into a PSO trace before returning
  * the result.
- * 
- * It is implemented on top of SbTsoBwd because the brunt of the work
- * (associating transitions that produce messages with their corresponding
- * updates and then reordering the process interleaving of the trace so it
- * becomes a TSO/PSO trace) is the same for SB and PWS traces, and the only
- * additional work needed for PWS is to filter out serialise transitions.
  */
 
-class PwsPsoBwd : public SbTsoBwd {
+class PwsPsoBwd : public ChannelBwd {
 protected:
-  virtual Trace *convert_trace(Trace *trace, SbConstraint::Common *common) const;
+  virtual Trace *convert_trace(Trace *trace, ChannelConstraint::Common *common) const;
 private:
+  /* Returns true iff executing the statement would insert a message in the SB
+   * channel.
+   */
   virtual bool produces_message(const Lang::Stmt<int>&) const;
+  /* Returns true iff executing the statement would advance the cpointer of the
+   *  executing process.
+   */
+  virtual bool consumes_message(const Lang::Stmt<int>&) const;
 };
 
 #endif

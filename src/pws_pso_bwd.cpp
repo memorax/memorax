@@ -20,14 +20,22 @@
 
 #include "pws_pso_bwd.h"
 
-Trace *PwsPsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const {
-  std::unique_ptr<Trace> temp(SbTsoBwd::convert_trace(trace, common));
+Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *common) const {
+  std::unique_ptr<Trace> temp(ChannelBwd::convert_trace(trace, common));
   // Filter out serialise transitions
   Trace *result = new Trace(0);
   for (int i = 1; i <= temp->size(); ++i) {
     if (temp->transition(i)->instruction.get_type() != Lang::SERIALISE)
       result->push_back(*temp->transition(i), 0);
   }
+
+  Log::debug << " *** PWS trace ***\n";
+  trace->print(Log::debug,Log::extreme,Log::json,common->machine);
+  Log::extreme << "\n\n";
+  Log::extreme << " *** PSO trace ***\n";
+  result->print(Log::extreme,Log::extreme,Log::json,common->machine);
+  Log::extreme << "\n";
+
   return result;
 }
 
@@ -41,4 +49,9 @@ bool PwsPsoBwd::produces_message(const Lang::Stmt<int> &s) const{
   return (s.get_writes().size() > 0 &&
           s.get_type() != Lang::UPDATE &&
           s.get_type() != Lang::WRITE);
+}
+
+bool PwsPsoBwd::consumes_message(const Lang::Stmt<int> &s) const{
+  return (s.get_type() == Lang::UPDATE ||
+          (s.get_type() == Lang::LOCKED && s.get_writes().size() > 0));
 }

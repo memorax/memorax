@@ -41,7 +41,7 @@
 #include <cerrno>
 #include "pb_container2.h"
 #include "sb_constraint.h"
-#include "sb_container.h"
+#include "channel_container.h"
 #include "sb_tso_bwd.h"
 #include "pws_constraint.h"
 #include "pws_container.h"
@@ -228,7 +228,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     TsoFencins::reach_arg_init_t arg_init =
       [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
       SbConstraint::Common *common = new SbConstraint::Common(m);
-      return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
+      return new ExactBwd::Arg(m,common->get_bad_states(),common,new ChannelContainer());
     };
     fence_sets = TsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
     print_fence_sets(*machine,fence_sets);
@@ -319,7 +319,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
   }else if(flags.find("a")->second.argument == "sb"){
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
     reach = new SbTsoBwd();
-    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new ChannelContainer());
   }else if(flags.find("a")->second.argument == "pws"){
     PwsConstraint::Common *common = new PwsConstraint::Common(*machine);
     reach = new PwsPsoBwd();

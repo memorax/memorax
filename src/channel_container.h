@@ -18,21 +18,21 @@
  *
  */
 
-#ifndef __SB_CONTAINER__
-#define __SB_CONTAINER__
+#ifndef __CHANNEL_CONTAINER__
+#define __CHANNEL_CONTAINER__
 
 #include "constraint_container.h"
 #include "sb_constraint.h"
 #include "ticket_queue.h"
 
-/* A constraint container meant for SbConstraints. Uses
- * SbConstraint::entailment_compare for comparison and entailment upon
+/* A constraint container meant for ChannelConstraints. Uses
+ * ChannelConstraint::entailment_compare for comparison and entailment upon
  * insertion.
  */
-class SbContainer : public ConstraintContainer{
+class ChannelContainer : public ConstraintContainer{
 public:
-  SbContainer();
-  virtual ~SbContainer();
+  ChannelContainer();
+  virtual ~ChannelContainer();
 
   virtual void insert_root(Constraint *r);
   virtual void insert(Constraint *p, const Machine::PTransition *t, Constraint *c);
@@ -42,9 +42,9 @@ public:
   virtual Trace *clear_and_get_trace(Constraint *c);
   virtual void clear();
 protected:
-  /* Keeps a SbConstraint and some extra information about it. */
+  /* Keeps a ChannelConstraint and some extra information about it. */
   struct CWrapper{
-    CWrapper(SbConstraint *sbc, CWrapper *parent = 0, const Machine::PTransition *pt = 0)
+    CWrapper(ChannelConstraint *sbc, CWrapper *parent = 0, const Machine::PTransition *pt = 0)
       : sbc(sbc), parent(parent), p_transition(pt), valid(true) {};
     ~CWrapper(){
       if(sbc){
@@ -52,7 +52,7 @@ protected:
       }
     };
     /* The constraint itself */
-    SbConstraint *sbc;
+    ChannelConstraint *sbc;
     /* The wrapper around the parent of sbc.
      * Null if sbc is a root constraint. */
     CWrapper *parent;
@@ -61,7 +61,7 @@ protected:
      *
      * The transition is not owned by the CWrapper. The pointer points
      * to some transition which ownership lies outside of the
-     * SbContainer. (Most likely in
+     * ChannelContainer. (Most likely in
      * SbConstraint::Common::all_transitions.)
      */
     const Machine::PTransition *p_transition;
@@ -93,7 +93,7 @@ private:
    *
    * The sets are represented as distinct, unordered vectors.
    */
-  std::map<std::vector<int>,std::map<std::vector<SbConstraint::MsgCharacterization> , std::vector<CWrapper*> > > F;
+  std::map<std::vector<int>,std::map<std::vector<ChannelConstraint::MsgCharacterization> , std::vector<CWrapper*> > > F;
   /* Stores pointers to the wrappers that have been invalidated. They
    * should not be considered in the analysis, but should be
    * deallocated upon destruction of the container. */
@@ -102,16 +102,16 @@ private:
   /* For each constraint c in F, ptr_to_F[c] is a pointer to its
    * CWrapper in F.
    */
-  std::map<SbConstraint*,CWrapper*> ptr_to_F;
+  std::map<ChannelConstraint*,CWrapper*> ptr_to_F;
 
   /* Caches (sbc,cw) for the last constraint sbc that was popped, and
    * cw == ptr_to_F[sbc].
    */
-  std::pair<SbConstraint*,CWrapper*> last_popped;
+  std::pair<ChannelConstraint*,CWrapper*> last_popped;
 
   /* Returns ptr_to_F[sbc]. Uses the cache last_popped if possible.
    */
-  CWrapper *get_cwrapper(SbConstraint *sbc) const{
+  CWrapper *get_cwrapper(ChannelConstraint *sbc) const{
     if(last_popped.first == sbc){
       return last_popped.second;
     }else{
@@ -183,12 +183,12 @@ private:
     int longest_comparable_array;
     int invalidate_count;
     void print(){
-      std::cout << " ==========================\n"
-                << " = SbContainer statistics =\n"
-                << " ==========================\n"
-                << " longest channel: " << longest_channel << "\n"
-                << " longest comparable array: " << longest_comparable_array << "\n"
-                << " invalidated: " << invalidate_count << "\n";
+      Log::debug << " ===============================\n"
+                 << " = ChannelContainer statistics =\n"
+                 << " ===============================\n"
+                 << " heaviest constraint: " << longest_channel << "\n"
+                 << " longest comparable array: " << longest_comparable_array << "\n"
+                 << " invalidated: " << invalidate_count << "\n";
     };
   };
 
@@ -201,8 +201,9 @@ private:
   };
   void update_longest_comparable_array(const std::vector<CWrapper*> &v){
 #ifndef NDEBUG
-    stats.longest_comparable_array = std::max<int>(stats.longest_comparable_array,
-                                                   v.size());
+    if (stats.longest_comparable_array < v.size()) { 
+      stats.longest_comparable_array = v.size();
+   }
 #endif
   };
   void inc_invalidate_count(){

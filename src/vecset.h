@@ -37,7 +37,9 @@ public:
     assert(check_invariant());
   };
   VecSet(const VecSet &) = default;
+  VecSet(VecSet &&) = default;
   VecSet &operator=(const VecSet&) = default;
+  VecSet &operator=(VecSet&&) = default;
   virtual ~VecSet() {};
   /* Returns a set which is the singleton {t}. */
   static VecSet singleton(const T &t){

@@ -6,6 +6,9 @@ bin_PROGRAMS = memorax @GUI@
 memorax_SOURCES = ap_list.tcc ap_list.h \
 automaton.cpp automaton.h \
 cegar_reachability.cpp cegar_reachability.h \
+channel_bwd.h channel_bwd.cpp \
+channel_constraint.h channel_constraint.cpp \
+channel_container.cpp channel_container.h \
 cmsat.h \
 constraint_container1.cpp constraint_container1.h \
 constraint_container.h \
@@ -30,7 +33,6 @@ pws_container.h pws_container.cpp \
 pws_pso_bwd.cpp pws_pso_bwd.h \
 reachability.cpp reachability.h \
 sb_constraint.cpp sb_constraint.h \
-sb_container.cpp sb_container.h \
 sb_tso_bwd.cpp sb_tso_bwd.h \
 shared.h \
 sharinglist.tcc sharinglist.h \
