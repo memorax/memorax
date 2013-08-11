@@ -128,6 +128,13 @@ namespace Fencins{
      */
     std::map<Sync*,Sync*,sync_ptr_less_t> sync_ptr(sync_ptr_less);
 
+    /* fence_sets is the set of hitherto found sufficient fence sets.
+     *
+     * All Syncs in fence_sets are unique objects, that have been
+     * cloned from the ones in syncs. fence_sets_uncloned contains the
+     * same sets as fence_sets, but in fence_sets_uncloned all Sync
+     * pointers are pointers into syncs.
+     */
     std::set<std::set<Sync*> > fence_sets;
     std::set<std::set<Sync*> > fence_sets_uncloned;
 
@@ -135,12 +142,11 @@ namespace Fencins{
     bool done = false;
     do{
       assert(fence_sets.size() == fence_sets_uncloned.size());
-      std::set<Sync*> mc;
-      if(fence_sets.empty()){
-        // We are still looking for the first fence set
-        mc = MinCoverage::min_coverage<Sync*>(syncs,cost);
-      }else{
-        // We have found at least one fence set, and are now looking for all the others
+      std::set<Sync*> mc; // The next Sync set to check
+      std::vector<const Sync::InsInfo*> m_infos; // Log from inserting mc
+      const Machine *m_synced = 0; // The machine with mc inserted
+      // Find the next Sync set to check (mc)
+      {
         std::set<std::set<Sync*> > mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
         assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
         if(mcs.size() == fence_sets.size()){
@@ -150,14 +156,22 @@ namespace Fencins{
         // Otherwise find one which is not in fence_sets
         for(auto it = mcs.begin(); it != mcs.end(); ++it){
           if(fence_sets_uncloned.count(*it) == 0){
-            mc = *it;
-            break;
+            // Try this one
+            try{
+              mc = *it;
+              m_synced = insert_syncs(m,mc,&m_infos);
+              break;
+            }catch(Sync::Incompatible *exc){
+              // mc contains some incompatible Syncs
+              // Skip this mc and try the next one
+              // (Note that break is not executed in this case.)
+              delete exc;
+            }
           }
         }
-        assert(mc.size() > 0);
       }
-      std::vector<const Sync::InsInfo*> m_infos;
-      const Machine *m_synced = insert_syncs(m,mc,&m_infos);
+      assert(m_synced != 0);
+
       Reachability::Arg *rarg = reach_arg_init(*m_synced,prev_result);
       Reachability::Result *res = r.reachability(rarg);
       if(prev_result) delete prev_result;
