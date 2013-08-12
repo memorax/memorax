@@ -23,8 +23,8 @@
 Trace *SbTsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *common) const{
   Trace *tso_trace = ChannelBwd::convert_trace(trace, common);
 
-  Log::debug << " *** SB trace ***\n";
-  trace->print(Log::debug,Log::extreme,Log::json,common->machine);
+  Log::extreme << " *** SB trace ***\n";
+  trace->print(Log::extreme,Log::extreme,Log::json,common->machine);
   Log::extreme << "\n\n";
   Log::extreme << " *** TSO trace ***\n";
   tso_trace->print(Log::extreme,Log::extreme,Log::json,common->machine);

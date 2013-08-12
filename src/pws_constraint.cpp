@@ -30,12 +30,11 @@
 const bool PwsConstraint::use_channel_suffix_equality = true;
 const bool PwsConstraint::use_limit_other_updates = true;
 const bool PwsConstraint::use_pending_sets = true;
-const bool PwsConstraint::use_shortcut_update_serialise = false;
 const bool PwsConstraint::use_serialisations_only_after_writes = true;
 
 /*****************/
 
-void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int>&)> pred,
+void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> pred,
                                          const std::vector<Automaton::State> &states,
                                          std::vector<std::vector<std::map<Lang::NML, value_t> > > &sets) {
   sets.push_back(std::vector<std::map<Lang::NML, ZStar<int> > >(states.size()));
@@ -43,10 +42,10 @@ void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int
   for (unsigned i = 0; i < states.size(); ++i) {
     std::map<Lang::NML, value_t> &set = sets[pid][i];
     for (const Automaton::Transition *trans : states[i].bwd_transitions) {
-      if (!pred(trans->instruction)) {
-        for (const VecSet<Lang::MemLoc<int>> &ws : trans->instruction.get_write_sets()) {
-          Store store = store_of_write(Machine::PTransition(*trans, pid));
-          for (Lang::MemLoc<int> ml : ws) {
+      for (const VecSet<Lang::MemLoc<int>> &ws : trans->instruction.get_write_sets()) {
+        Store store = store_of_write(Machine::PTransition(*trans, pid));
+        for (Lang::MemLoc<int> ml : ws) {
+          if (!pred(trans->instruction, ml)) {
             Lang::NML nml(ml, pid);
             value_t write = store[index(nml)];
             if (set.count(nml)) {
@@ -61,14 +60,14 @@ void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int
   }
 }
 
-void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<int>&)> pred,
+void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> pred,
                                             const std::vector<Automaton::State> &states,
-                                            int state,
+                                            int state, int pid,
                                             std::vector<std::map<Lang::NML, ZStar<int> > > &set,
                                             bool &changed) {
   for (std::pair<Lang::NML, ZStar<int>> elem : set[state]) {
     for (const Automaton::Transition *trans : states[state].fwd_transitions) {
-      if (!pred(trans->instruction)) {
+      if (!pred(trans->instruction, elem.first.localize(pid))) {
         std::map<Lang::NML, ZStar<int>> &target_set = set[trans->target];
         if (target_set.count(elem.first)) {
           if (target_set[elem.first] != elem.second && target_set[elem.first] != ZStar<int>::STAR) {
@@ -120,25 +119,14 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
       for (const Automaton::Transition *t : states[i].bwd_transitions) {
         all_transitions.push_back(Machine::PTransition(*t, p));
         if (t->instruction.get_writes().size() > 0 && !t->instruction.is_fence()) has_writes[p][i] = true;
-        if (use_shortcut_update_serialise && t->instruction.get_writes().size() > 0) {
-          switch (t->instruction.get_type()) {
-          case Lang::WRITE: {
-            Lang::Stmt<int> slw = Lang::Stmt<int>::slocked_block(std::vector<Lang::Stmt<int> >{t->instruction},
-                                                                 t->instruction.get_pos());
-            Lang::Stmt<int> lw = Lang::Stmt<int>::locked_block(std::vector<Lang::Stmt<int> >{t->instruction},
-                                                               t->instruction.get_pos());
-            all_transitions.push_back(Machine::PTransition(t->source, slw, t->target, p));
-            all_transitions.push_back(Machine::PTransition(t->source, lw, t->target, p));
-          } break;
-          case Lang::SLOCKED: {
-            assert(t->instruction.get_statement_count() == 1);
-            assert(t->instruction.get_statement(0)->get_type() == Lang::WRITE);
-            Lang::Stmt<int> lw = Lang::Stmt<int>::locked_block(std::vector<Lang::Stmt<int> >{*t->instruction.get_statement(0)},
-                                                               t->instruction.get_pos());
-            all_transitions.push_back(Machine::PTransition(t->source, lw, t->target, p));
-          } break;
-          }
-        }
+
+        /* Check that the machine has been properly been converted from lock to fence semantics. */
+        if (t->instruction.get_type() == Lang::SLOCKED ||
+            (t->instruction.get_type() == Lang::LOCKED &&
+             t->instruction.get_statement(0)->get_type() == Lang::WRITE))
+          throw new std::logic_error("PwsConstraint::Common: PwsConstraint requires the machine "
+                                     "uses fence semantics rather than lock semantics. Have you "
+                                     "forgotten to use Machine::convert_locks_to_fences?");
       }
       for (const MsgHdr &m : messages)
         if (m.nmls.size() > 0) {
@@ -174,16 +162,28 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
     transitions_by_pc[all_transitions[i].pid][all_transitions[i].target].push_back(&all_transitions[i]);
   }
 
-  auto is_sfence = [](const Lang::Stmt<int> &stmt) {
-    return (stmt.get_write_sets().size() > 0 && (stmt.get_type() == Lang::SLOCKED ||
-                                                 stmt.get_type() == Lang::LOCKED));
+  auto is_sfence = [](const Lang::Stmt<int> &stmt, Lang::MemLoc<int> ml) {
+    return (stmt.get_type() == Lang::SFENCE ||
+            stmt.get_type() == Lang::MFENCE ||
+            (stmt.get_type() == Lang::LOCKED &&
+             std::find(stmt.get_writes().begin(), stmt.get_writes().end(), ml)
+             != stmt.get_writes().end()));
+
+  };
+
+  auto is_mfence = [](const Lang::Stmt<int> &stmt, Lang::MemLoc<int> ml) {
+    return (stmt.get_type() == Lang::MFENCE ||
+            stmt.get_type() == Lang::LOCKED ||
+            (stmt.get_type() == Lang::LOCKED &&
+             std::find(stmt.get_writes().begin(), stmt.get_writes().end(), ml)
+             != stmt.get_writes().end()));
   };
 
   /* Setup pending_set and pending_buffers */
   for (unsigned p = 0; p < machine.automata.size(); ++p) {
     const std::vector<Automaton::State> &states = machine.automata[p].get_states();
-    init_pending(&Lang::Stmt<int>::is_fence, states, pending_set);
-    init_pending(is_sfence,                  states, pending_buffers);
+    init_pending(is_mfence, states, pending_set);
+    init_pending(is_sfence, states, pending_buffers);
 
     /* Use a fix-point iteration to find the complete sets. */
     bool changed = true;
@@ -192,8 +192,8 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
       const std::vector<Automaton::State> &states = machine.automata[p].get_states();
       for (unsigned i = 0; i < states.size(); ++i) {
         /* Complete pending_set and pending_buffers. */
-        iterate_pending(&Lang::Stmt<int>::is_fence, states, i, pending_set[p],     changed);
-        iterate_pending(is_sfence,                  states, i, pending_buffers[p], changed);
+        iterate_pending(is_mfence, states, i, p, pending_set[p],     changed);
+        iterate_pending(is_sfence, states, i, p, pending_buffers[p], changed);
       }
     }
   }
@@ -256,7 +256,7 @@ std::list<const Machine::PTransition*> PwsConstraint::partred() const{
 
 std::list<Constraint*> PwsConstraint::pre(const Machine::PTransition &t) const {
   std::list<Constraint*> res;
-  std::list<pre_constr_t> r = pre(t, false, false);
+  std::list<pre_constr_t> r = pre(t, false);
   for (const pre_constr_t &c : r) {
     bool move_p_to_last = false;
     std::vector<PwsConstraint*> pwscs;
@@ -298,21 +298,17 @@ std::list<Constraint*> PwsConstraint::pre(const Machine::PTransition &t) const {
   return res;
 }
 
-std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransition &t, bool mlocked, bool slocked) const {
-  assert(slocked || !mlocked); // Precondition
-  std::list<pre_constr_t> res;
+std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransition &t, bool locked) const {
   const Lang::Stmt<int> &s = t.instruction;
+  /* We only allow locked blocks representing a cas. */
+  assert(!locked || s.get_type() == Lang::READASSERT ||
+                    s.get_type() == Lang::WRITE);
+  std::list<pre_constr_t> res;
   if (pcs[t.pid] != t.target)
     return res;
 
   switch (s.get_type()) {
-  case Lang::NOP/* 0 */: {
-    PwsConstraint *pwsc = new PwsConstraint(*this);
-    pwsc->pcs[t.pid] = t.source;
-    res.push_back(pwsc);
-  } break;
-
-  case Lang::READASSERT/* 3 */: {
+  case Lang::READASSERT: {
     Lang::NML nml(s.get_memloc(), t.pid);
     int nmli = common.index(nml);
     int msgi = index_of_read(nml, t.pid);
@@ -330,7 +326,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
        * the same value. */
       VecSet<Store> stores = possible_reg_stores(reg_stores[t.pid], t.pid, s.get_expr(), val_nml[i]);
       for (int j = 0; j < stores.size(); ++j) {
-        PwsConstraint *pwsc = new PwsConstraint(*this);
+        PwsConstraint *pwsc = this->clone();
         pwsc->pcs[t.pid] = t.source;
         if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
                              pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val_nml[i]);
@@ -341,102 +337,76 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
     }
   } break;
 
-  case Lang::WRITE /* 5 */: {
+  case Lang::WRITE: {
     int pid = t.pid;
     Lang::NML nml = Lang::NML(s.get_memloc(), pid);
     int nmli = common.index(nml);
-    /* These requrements are an extension of the requirements on the sb
-     *  model. In particular, slocked && !mlocked corresponds to the !locked
-     *  state in the sb model, and mlocked corresponds to the locked state in
-     *  the sb model. When !slocked, the sb channel and cpointers are
-     *  automatically ok since they are not touched by the write operation. */
-    bool ok_buffers = slocked ? (write_buffers[pid][nmli].size() == 0):
-                                (write_buffers[pid][nmli].size()  > 0);
+
+    /* When performing an atomic read-write (locked = true), the buffers must be
+     * empty and when we're finished, pid must be the only process with a
+     * cpointer in the newly created message. */
+    bool ok_buffers = locked ? (write_buffers[pid][nmli].size() == 0):
+                               (write_buffers[pid][nmli].size()  > 0);
     bool ok_cpointers = true;
-    if (mlocked) {
+    bool ok_channel   = true;
+    if (locked) {
       ok_cpointers = cpointers[t.pid] == int(channel.size()) - 1;
       for (int p = 0; p < int(cpointers.size()); ++p) {
         if (p != pid && cpointers[p] == int(channel.size()) - 1)
           ok_cpointers = false;
       }
-    } else if (slocked) {
-      for (int p = 0; p < int(cpointers.size()); ++p) {
-        if (cpointers[p] == int(channel.size()) - 1)
-          ok_cpointers = false;
-      }
-    }
-    bool ok_channel = true;
-    if (slocked) {
       ok_channel &= channel.back().wpid == pid;
       ok_channel &= channel.back().nmls.count(nml);
-      if (!mlocked) ok_channel &= channel.back().nmls.size() == 1;
     }
 
     if (ok_buffers && ok_cpointers && ok_channel) {
-      VecSet<int> vals = slocked ? ChannelConstraint::possible_values(channel.back().store, nml):
-                                   possible_values(write_buffers[pid][nmli].back(),    nml);
+      VecSet<int> vals = locked ? ChannelConstraint::possible_values(channel.back().store, nml):
+                                  possible_values(write_buffers[pid][nmli].back(),         nml);
       for (int val : vals) {
         VecSet<Store> rstores = possible_reg_stores(reg_stores[pid], pid, s.get_expr(), val);
         for (const Store &rstore : rstores) {
-          PwsConstraint *pwsc = new PwsConstraint(*this);
+          PwsConstraint *pwsc = this->clone();
           pwsc->pcs[pid] = t.source;
-          if (slocked) pwsc->channel.back().store = pwsc->channel.back().store.assign(nmli, val);
+          if (locked) pwsc->channel.back().store = pwsc->channel.back().store.assign(nmli, val);
           else         pwsc->write_buffers[pid][nmli].assign(pwsc->write_buffers[pid][nmli].size() - 1, val);
           pwsc->reg_stores[pid] = rstore;
-          res.push_back(pre_constr_t(pwsc, slocked, !slocked, VecSet<Lang::NML>::singleton(nml)));
+          res.push_back(pre_constr_t(pwsc, locked, !locked, VecSet<Lang::NML>::singleton(nml)));
         }
       }
-    }
-  } break;
-
-  case Lang::SEQUENCE: {
-    assert(mlocked);
-    std::vector<pre_constr_t> V { new PwsConstraint(*this) };
-    for (int i = s.get_statement_count() - 1; i >= 0; --i) {
-      std::vector<pre_constr_t> W;
-      Machine::PTransition t2(t.target, *s.get_statement(i), t.target, t.pid);
-      for (pre_constr_t v : V) {
-        for (pre_constr_t w : v.pwsc->pre(t2, mlocked, slocked)) {
-          w.channel_pop_back = w.channel_pop_back || v.channel_pop_back;
-          w.buffer_pop_back  = w.buffer_pop_back  || v.buffer_pop_back;
-          w.written_nmls.insert(v.written_nmls);
-          W.push_back(w);
-        }
-        delete v.pwsc;
-      }
-      V = W;
-    }
-    for (pre_constr_t v : V) {
-      v.pwsc->pcs[t.pid] = t.source;
-      res.push_back(v);
     }
   } break;
 
   case Lang::LOCKED: {
-    if (s.get_writes().size() == 0 || (cpointers[t.pid] == int(channel.size()) - 1
-                                       && is_fully_serialised(t.pid))) {
-      for (int i = 0; i < s.get_statement_count(); ++i) {
-        Machine::PTransition ti(t.source, *s.get_statement(i), t.target, t.pid);
-        std::list<pre_constr_t> v = pre(ti, true, true);
-        res.insert(res.end(), v.begin(), v.end());
-      }
-    }
-  } break;
+    if (cpointers[t.pid] == int(channel.size()) - 1 &&
+        is_fully_serialised(t.pid, s.get_writes())) {
+      assert(s.get_statement_count() == 1);
+      Lang::Stmt<int> si = *s.get_statement(0);
+      assert(si.get_type() == Lang::SEQUENCE);
 
-  case Lang::SLOCKED: {
-    if (s.get_writes().size() == 0 || is_fully_serialised(t.pid))  {
-      for (int i = 0; i < s.get_statement_count(); ++i) {
-        Machine::PTransition ti(t.source, *s.get_statement(i), t.target, t.pid);
-        std::list<pre_constr_t> v = pre(ti, mlocked, true);
-        res.insert(res.end(), v.begin(), v.end());
+      /* From here we do SEQUENCE */
+      std::vector<pre_constr_t> V { this->clone() };
+      for (int i = si.get_statement_count() - 1; i >= 0; --i) {
+        std::vector<pre_constr_t> W;
+        Machine::PTransition t2(t.target, *si.get_statement(i), t.target, t.pid);
+        for (pre_constr_t v : V) {
+          for (pre_constr_t w : v.pwsc->pre(t2, true)) {
+            w.channel_pop_back = w.channel_pop_back || v.channel_pop_back;
+            w.buffer_pop_back  = w.buffer_pop_back  || v.buffer_pop_back;
+            w.written_nmls.insert(v.written_nmls);
+            W.push_back(w);
+          }
+          delete v.pwsc;
+        }
+        V = W;
+      }
+      for (pre_constr_t v : V) {
+        v.pwsc->pcs[t.pid] = t.source;
+        res.push_back(v);
       }
     }
   } break;
 
   case Lang::UPDATE: {
-    assert(!mlocked);
-    // Hmm, this is just copy-and-paste code reuse; could we use the code in
-    // SbConstraint::pre instead?
     VecSet<Lang::NML> snmls;
     for (Lang::MemLoc<int> ml : s.get_writes())
       snmls.insert(Lang::NML(ml, t.pid));
@@ -446,7 +416,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       if (cpointers[t.pid] == 0) {
         /* Need to insert a fresh message. */
         for (const Common::MsgHdr &hdr : common.messages) {
-          PwsConstraint *pwsc = new PwsConstraint(*this);
+          PwsConstraint *pwsc = this->clone();
           Msg msg(Store(common.mem_size), hdr.wpid, hdr.nmls);
           pwsc->channel.insert(pwsc->channel.begin(), msg);
           for (int p = 0; p < int(pwsc->cpointers.size()); p++) {
@@ -456,15 +426,15 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
         }
       } else {
         /* Update with a message in the channel */
-        PwsConstraint *pwsc = new PwsConstraint(*this);
+        PwsConstraint *pwsc = this->clone();
         pwsc->cpointers[t.pid]--;
         res.push_back(pwsc);
       }
     }
   } break;
 
-  case Lang::SERIALISE /* 9 */: {
-    assert(!slocked);
+  case Lang::SERIALISE: {
+    assert(!locked);
     int pid = t.pid;
     uint maxcptr = *std::max_element(cpointers.begin(), cpointers.end());
     /* We can only do serialise if the last message has the right process and
@@ -486,11 +456,22 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       Intersection<VecSet<Lang::NML>, Lang::NML, VecSet<Lang::NML>::const_iterator> inter(channel.back().nmls, nmls);
       for (const Lang::NML &nml : inter) {
         int nmli = common.index(nml);
-        PwsConstraint *pwsc = new PwsConstraint(*this);
+        PwsConstraint *pwsc = this->clone();
         pwsc->write_buffers[pid][nmli] = pwsc->write_buffers[pid][nmli].push_front(channel.back().store[nmli]);
         res.push_back(pre_constr_t(pwsc, true, false, VecSet<Lang::NML>::singleton(nml)));
       }
     }
+  } break;
+
+  case Lang::MFENCE:
+    if (cpointers[t.pid] != int(channel.size()) - 1)  break;
+  case Lang::SFENCE:
+    if (!is_fully_serialised(t.pid)) break;
+    /* All conditions are fullfilled, fall through to NOP */
+  case Lang::NOP: {
+    PwsConstraint *pwsc = this->clone();
+    pwsc->pcs[t.pid] = t.source;
+    res.push_back(pwsc);
   } break;
 
   default:
@@ -498,8 +479,8 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
     std::stringstream ss;
     ss << "PwsConstraint::pre: Statement \""
        << s.to_string(common.machine.reg_pretty_vts(t.pid), common.machine.ml_pretty_vts(t.pid))
-       << "\" of not implemented type\n Pid:"
-       << t.pid << " " << t.source << "->" << t.target << "\n";
+       << "\" of not implemented type\n P"
+       << t.pid << " Q" << t.source << "->Q" << t.target;
     throw new std::logic_error(ss.str());
   }
   return res;
@@ -512,17 +493,25 @@ bool PwsConstraint::is_fully_serialised(int pid) const {
   return true;
 }
 
+bool PwsConstraint::is_fully_serialised(int pid, const std::vector<Lang::MemLoc<int>> nmls) const {
+  for (Lang::MemLoc<int> ml : nmls) {
+    Lang::NML nml(ml, pid);
+    if (write_buffers[pid][common.index(nml)].size() != 0) return false;
+  }
+  return true;
+}
+
 std::vector<PwsConstraint*> PwsConstraint::buffer_pop_back(int pid, Lang::NML nml) const {
   // TODO: ponder the completeness of this
   int nmli = common.index(nml);
   assert(write_buffers[pid][nmli].size() > 0); // Precondition
   std::vector<PwsConstraint*> res;
   // Case one: no write was hidden by the popped one
-  res.push_back(new PwsConstraint(*this));
+  res.push_back(this->clone());
   res.back()->write_buffers[pid][nmli] =
     res.back()->write_buffers[pid][nmli].pop_back();
   // Case two: some write was hidden by the popped one
-  res.push_back(new PwsConstraint(*this));
+  res.push_back(this->clone());
   res.back()->write_buffers[pid][nmli] =
     res.back()->write_buffers[pid][nmli].assign(write_buffers[pid][nmli].size() - 1, value_t::STAR);
   return res;

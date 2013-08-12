@@ -155,8 +155,6 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
       }
       break;
     }
-  case Lang::UPDATE:
-    throw new std::logic_error("Automaton: \"Update\" instruction in AST.");
   case Lang::IF:
     {
       int i = states.size() - 1;
@@ -308,6 +306,11 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
       }
       break;
     }
+  default:
+    throw new std::logic_error("Automaton: \"" +
+                               ast.to_string(Lang::int_reg_to_string(),
+                                             Lang::int_memloc_to_string()) +
+                               "\" instruction in AST.");
   }
 }
 

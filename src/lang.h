@@ -518,7 +518,11 @@ namespace Lang {
     /* Sequence of statements:
      * { stmts[0], ..., stmts[stmt_count-1] }
      */
-    SEQUENCE
+    SEQUENCE,
+    /* mfence: A transition that prevents Store-Load reorderings */
+    MFENCE,
+    /* sfence: A transition that prevents Store-Load reorderings */
+    SFENCE,
   };
 
   /* Class of statements.
@@ -609,11 +613,17 @@ namespace Lang {
      */
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
-    /* Serialise: A serialisation of a write to memory location writes[0] 
+    /* Serialise: A serialisation of a write to memory location writes[0]
      * This operation concern only the PSO memory model abstraction PWS.
      */
     static Stmt<RegId> serialise(VecSet<MemLoc<RegId>> mls,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    /* Store-Load fence: Prevents any pair of instructions i1, i2 ordered i1 >
+       mfence > i2 to be reordered. */
+    static Stmt<RegId> mfence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    /* Store-Sore fence: Prevents any pair of store instructions s1, s2 ordered
+       s1 > sfence > s2 to be reordered. */
+    static Stmt<RegId> sfence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
     /* Type of a labeled statement. */
     struct labeled_stmt_t{
       labeled_stmt_t() : lbl(""), stmt() {};

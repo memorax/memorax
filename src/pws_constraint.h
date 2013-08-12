@@ -61,13 +61,14 @@ public:
                                                              pending_buffers;
 
     /* Helpers to compute pending_set and pending_buffers */
-    void init_pending(std::function<bool(const Lang::Stmt<int>&)> ,
+    void init_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> ,
                       const std::vector<Automaton::State> &,
                       std::vector<std::vector<std::map<Lang::NML, value_t> > > &);
-    void iterate_pending(std::function<bool(const Lang::Stmt<int>&)>,
-                         const std::vector<Automaton::State>&, int,
+    void iterate_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)>,
+                         const std::vector<Automaton::State>&, int, int,
                          std::vector<std::map<Lang::NML, ZStar<int> > > &, bool &);
     friend class PwsConstraint;
+    friend class PwsPsoBwd;
   };
   /* Constructs a constraint where process pid is at control state
    * pcs[pid], all registers and memory locations are unrestricted,
@@ -129,9 +130,13 @@ private:
   std::vector<PwsConstraint*> buffer_pop_back(int pid, Lang::NML nml) const;
 
   /* Checks if all writes of a process are serialised, which is a requirement in
-   * order to take a s- or mfence transition in the PWS model, and equivalently
-   * be able to do a write in a LOCKED or SLOCKED block. */
+   * order to take a s- or mfence transition in the PWS model. */
   bool is_fully_serialised(int pid) const;
+
+  /* Checks if all writes to any memory location in nmls of a process are
+   * serialised, which is a requirement in order to take a cas transition in the
+   * PWS model. */
+  bool is_fully_serialised(int pid, const std::vector<Lang::MemLoc<int>> nmls) const;
 
   /* Helper for the public pre */
   struct pre_constr_t{
@@ -146,10 +151,12 @@ private:
     bool buffer_pop_back; // true iff the last value in the buffer of written_nmls[0] in pwsc should be popped
     VecSet<Lang::NML> written_nmls; // NMLs that were written. only one if buffer_pop_back
   };
-  // PRE: mlocked => slocked
-  std::list<pre_constr_t> pre(const Machine::PTransition &, bool mlocked, bool slocked) const;
+
+  /* locked = true means that we are inside a cas. */
+  std::list<pre_constr_t> pre(const Machine::PTransition &, bool locked) const;
 
   friend class Common;
+  friend class PwsPsoBwd;
 
   /*****************/
   /* Configuration */
@@ -157,7 +164,6 @@ private:
   static const bool use_channel_suffix_equality;
   static const bool use_limit_other_updates;
   static const bool use_pending_sets;
-  static const bool use_shortcut_update_serialise;
   static const bool use_serialisations_only_after_writes;
 };
 

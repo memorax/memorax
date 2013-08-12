@@ -483,6 +483,22 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::serialise(VecSet<MemLoc<RegId>> mls,
 };
 
 template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::mfence(const Lexer::TokenPos &p)
+{
+  Stmt<RegId> s(p);
+  s.type = MFENCE;
+  return s;
+};
+
+template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::sfence(const Lexer::TokenPos &p)
+{
+  Stmt<RegId> s(p);
+  s.type = SFENCE;
+  return s;
+};
+
+template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b, 
                                              const labeled_stmt_t &s0,
                                              const Lexer::TokenPos &p){
@@ -601,11 +617,13 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
   }
   switch(type){
   case NOP: return indlbl+"nop";
+  case MFENCE: return indlbl+"mfence";
+  case SFENCE: return indlbl+"sfence";
   case ASSIGNMENT: return indlbl+regts(reg)+" := "+e0->to_string(regts);
   case ASSUME: return indlbl+"assume: "+b->to_string(regts);
   case READASSERT: return indlbl+"read: "+mlts(reads[0])+" = "+e0->to_string(regts);
   case READASSIGN: return indlbl+"read: "+regts(reg)+" := "+mlts(reads[0]);
-  case WRITE: 
+  case WRITE:
     return indlbl+"write: "+mlts(writes[0])+" := "+e0->to_string(regts);
   case GOTO: return indlbl+"goto "+lbl;
   case SERIALISE: return indlbl+"serialise: "+mlts(writes[0]);
@@ -721,7 +739,8 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt) co
     return 1;
   }else{
     switch(type){
-    case NOP: return 0;
+    case NOP: case MFENCE: case SFENCE:
+      return 0;
     case ASSIGNMENT: 
       if(reg < stmt.reg){
         return -1;
@@ -1005,7 +1024,7 @@ template<class RegId>
 VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const throw(){
   VecSet<VecSet<MemLoc<RegId> > > no_writes = VecSet<VecSet<MemLoc<RegId> > >::singleton(VecSet<MemLoc<RegId> >());
   switch(type){
-  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case GOTO: 
+  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case GOTO: case SFENCE: case MFENCE:
     return no_writes;
   case WRITE: case UPDATE:
     return VecSet<VecSet<MemLoc<RegId> > >::singleton(writes);

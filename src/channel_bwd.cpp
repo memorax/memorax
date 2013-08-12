@@ -156,7 +156,7 @@ void ChannelBwd::messages_lost(const std::vector<ChannelConstraint::Msg> &ch0,
     }
 
     /* The lost message is the rightmost occurrence of *it in ch0 */
-    to_remove.insert(ch0_rmi);
+    if (ch0_rmi != -1) to_remove.insert(ch0_rmi);
   }
 
   /* Remove messages in to_remove */
@@ -173,5 +173,5 @@ void ChannelBwd::messages_lost(const std::vector<ChannelConstraint::Msg> &ch0,
   ch->resize(j);
 
   ch->push_back(w);
-  throw new std::logic_error("ChannelBwd::messages_lost: Insufficiently tested.");
+  //throw new std::logic_error("ChannelBwd::messages_lost: Insufficiently tested.");
 };

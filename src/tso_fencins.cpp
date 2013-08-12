@@ -267,6 +267,7 @@ namespace TsoFencins{
 
       switch(s.get_type()){
       case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME:
+      case Lang::SFENCE: case Lang::MFENCE:
         // Do nothing
         break;
       case Lang::READASSIGN: case Lang::READASSERT:

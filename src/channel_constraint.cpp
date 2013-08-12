@@ -133,6 +133,17 @@ ChannelConstraint::Store ChannelConstraint::Common::store_of_write(const Machine
            t.instruction.get_statement(0)->get_expr().is_integer()){
     store = store.assign(index(Lang::NML(t.instruction.get_statement(0)->get_memloc(),t.pid)),
                          t.instruction.get_statement(0)->get_expr().get_integer());
+  }else if(t.instruction.get_type() == Lang::LOCKED &&
+           t.instruction.get_statement_count() == 1 &&
+           t.instruction.get_statement(0)->get_type() == Lang::SEQUENCE) {
+    const Lang::Stmt<int> &seq = *t.instruction.get_statement(0);
+    if (seq.get_statement_count() == 2 &&
+        seq.get_statement(0)->get_type() == Lang::READASSERT &&
+        seq.get_statement(1)->get_type() == Lang::WRITE &&
+        seq.get_statement(1)->get_expr().is_integer()){
+      store = store.assign(index(Lang::NML(seq.get_statement(1)->get_memloc(), t.pid)),
+                           seq.get_statement(1)->get_expr().get_integer());
+    }
   }
   /* Generalize */
   return store;

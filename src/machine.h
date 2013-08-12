@@ -236,6 +236,14 @@ public:
    */
   Machine *add_domain_assumes() const;
 
+  /* Returns a new machine where every transition "locked write..." has been
+   * converted into two transitions "write..." followed by "mfence" and
+   * similarly for transitions "slocked write...".
+   *
+   * Locked blocks containing a sequence of a read and a write are left as-is.
+   * Other contents of locked blocks are not allowed */
+  Machine *convert_locks_to_fences() const;
+
   const Lang::VarDecl &get_var_decl(const Lang::NML &nml) const{
     if(nml.is_global()){
       return gvars[nml.get_id()];
@@ -341,6 +349,10 @@ private:
    * still has a value within dom.
    */
   bool expr_always_in_domain(const Lang::Expr<int> &e, int pid, const Lang::VarDecl::Domain &dom) const;
+
+  /* Helper to convert_locks_to_fences()
+   * This performs the conversion on a single automaton. */
+  void convert_locks_to_fences(Automaton &) const;
 
 };
 

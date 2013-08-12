@@ -76,7 +76,8 @@ namespace PsoFencins{
 
           Log::msg << "Cycles found in trace:\n";
           for(const cycle_t &cycle : cycs){
-            Log::msg << cycle.cycle.to_string(m) << "\n";
+            Log::msg << (cycle.is_write_write ? "Store-Store " : "Store-Load ")
+                     << cycle.cycle.to_string(m) << "\n";
           }
 
           for (const cycle_t &cycle : cycs) {
@@ -133,24 +134,19 @@ namespace PsoFencins{
      */
     std::list<cycle_t> pending_cycles;
 
-    std::function<void(const Machine::PTransition*)> any_mem =
-      [&wrupdates,&pending_writes,&pending_cycles,&last_writes,proc_count,&trace](const Machine::PTransition *trans){
-      assert((trans->instruction.get_reads().size() == 1 && trans->instruction.get_writes().size() == 0) ||
-             (trans->instruction.get_reads().size() == 0 && trans->instruction.get_writes().size() == 1));
-      auto &mls = trans->instruction.get_reads().size() > 0 ? trans->instruction.get_reads() :
-                                                              trans->instruction.get_writes();
-      Lang::NML nml(mls[0], trans->pid);
-      if (last_writes.count(nml)) {
-        for (auto inner : pending_writes) for (const Machine::PTransition *w1 : inner) {
-          if (w1->pid == last_writes[nml].second->pid &&
-              TsoFencins::index(trace, w1) < TsoFencins::index(trace, last_writes[nml].second)) {
-            TsoCycle tc(proc_count);
-            tc.push_back(wrupdates[w1]);
-            tc.push_back(last_writes[nml].second);
-            tc.push_back(trans);
-            cycle_t c(tc, w1, last_writes[nml].first, true);
-            pending_cycles.push_back(c);
-          }
+    std::function<void(const Machine::PTransition*, const Machine::PTransition*)> update =
+      [&wrupdates,&pending_writes,&pending_cycles,proc_count,&trace]
+      (const Machine::PTransition *write, const Machine::PTransition *update){
+      assert(update->instruction.get_writes().size() == 1);
+      Lang::NML nml(update->instruction.get_writes()[0], update->pid);
+      for (auto inner : pending_writes) for (const Machine::PTransition *w1 : inner) {
+        if (w1->pid == write->pid &&
+            TsoFencins::index(trace, w1) < TsoFencins::index(trace, write)) {
+          TsoCycle tc(proc_count);
+          tc.push_back(wrupdates[w1]);
+          tc.push_back(update);
+          cycle_t c(tc, w1, write, true);
+          pending_cycles.push_back(c);
         }
       }
     };
@@ -160,37 +156,40 @@ namespace PsoFencins{
       const Lang::Stmt<int> &s = trans->instruction;
       int pid = trans->pid;
 
-      auto cit = pending_cycles.begin();
-      while(cit != pending_cycles.end()){
-        if(cit->cycle.can_push_back(trans)){
-          cycle_t c = *cit;
-          c.cycle.push_back(trans);
-          if(c.cycle.is_complete()){
-            cycles.push_back(c);
-            cit++;
+      const Machine::PTransition *pt = trans;
+      if (s.get_type() == Lang::WRITE) pt = wrupdates[trans];
+      if (s.get_type() != Lang::UPDATE) {
+        auto cit = pending_cycles.begin();
+        while(cit != pending_cycles.end()){
+          if(cit->cycle.can_push_back(pt)){
+            cycle_t c = *cit;
+            c.cycle.push_back(pt);
+            if(c.cycle.is_complete()){
+              cycles.push_back(c);
+              cit++;
+            }else{
+              cit = pending_cycles.insert(cit,c);
+              cit++;
+              cit++;
+            }
           }else{
-            cit = pending_cycles.insert(cit,c);
-            cit++;
             cit++;
           }
-        }else{
-          cit++;
         }
       }
 
       switch(s.get_type()){
       case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME:
+      case Lang::MFENCE: case Lang::SFENCE:
         // Do nothing
         break;
       case Lang::READASSIGN: case Lang::READASSERT:
-        any_mem(trans);
         break;
       case Lang::SLOCKED:
       case Lang::WRITE:
         pending_writes[pid].push_back(trans);
         break;
       case Lang::UPDATE:
-        any_mem(trans);
         for (auto write_iter = pending_writes[pid].begin(); ; ++write_iter) {
           assert(write_iter != pending_writes[pid].end());
           if((*write_iter)->instruction.get_memloc() == s.get_memloc()){
@@ -198,15 +197,13 @@ namespace PsoFencins{
             pending_writes[pid].erase(write_iter);
             remove_cycles_by_write(&pending_cycles,w);
             last_writes[Lang::NML(s.get_memloc(), pid)] = {w, trans};
+            update(w, trans);
             break;
           }
         }
         break;
       case Lang::LOCKED:
         assert(!s.is_fence() || pending_writes[pid].empty());
-        if(s.get_reads().size() > 0 || s.get_writes().size() > 0){
-          any_mem(trans);
-        }
         if (s.get_writes().size() > 0) {
           assert(s.get_writes().size() == 1);
           for (const Lang::MemLoc<int> ml : s.get_writes()) {
@@ -273,17 +270,20 @@ namespace PsoFencins{
     Machine::PTransition baset = TsoFencins::get_transition_from_machine(machine, t);
     if (slocks.count(baset) == 0 && mlocks.count(baset) == 0) {
       /* Find the transition in atomized_machine */
-      const std::vector<Automaton::State> &states = atomized_machine.automata[t.pid].get_states();
-      const std::set<Automaton::Transition*> &ts = states[t.source].fwd_transitions;
+      std::vector<Automaton::State> &states = atomized_machine.automata[t.pid].get_states();
 #ifndef NDEBUG
       int changed = 0;
 #endif
-      for (Automaton::Transition *mt : ts) {
+      for (Automaton::Transition *mt : states[t.source].fwd_transitions) {
         if (mt->target == t.target && mt->instruction == t.instruction) {
-          const Lang::Stmt<int> *write = &t.instruction;
-          mt->instruction = Lang::Stmt<int>::slocked_write(write->get_memloc(),write->get_expr(),
-                                                           write->get_pos());
+          int fence = int(states.size());
+          int target = mt->target;
+          atomized_machine.automata[t.pid].add_transition({fence, Lang::Stmt<int>::sfence(), target});
+          mt->target = fence;
+          states[target].bwd_transitions.erase(mt);
+          states[fence].bwd_transitions.insert(mt);
           assert(++changed == 1);
+          break;
         }
       }
       assert(changed == 1);
@@ -298,21 +298,29 @@ namespace PsoFencins{
     Machine::PTransition baset = TsoFencins::get_transition_from_machine(machine, t);
     if (mlocks.count(baset) == 0) {
       /* Find the transition in atomized_machine */
-      const std::vector<Automaton::State> &states = atomized_machine.automata[t.pid].get_states();
-      const std::set<Automaton::Transition*> &ts = states[t.source].fwd_transitions;
+      std::vector<Automaton::State> &states = atomized_machine.automata[t.pid].get_states();
 #ifndef NDEBUG
       int changed = 0;
 #endif
-      for (Automaton::Transition *mt : ts) {
+      for (Automaton::Transition *mt : states[t.source].fwd_transitions) {
         if (mt->target == t.target && mt->instruction == t.instruction) {
-          const Lang::Stmt<int> *write = &t.instruction;
-          if (t.instruction.get_type() == Lang::SLOCKED) {
-            assert(t.instruction.get_statement_count() == 1);
-            write = t.instruction.get_statement(0);
+          if (slocks.count(baset)) {
+            /* We can reuse the state that was inserted with an sfence. */
+            assert(states[mt->target].fwd_transitions.size() == 1);
+            assert(states[mt->target].bwd_transitions.size() == 1);
+            assert((*states[mt->target].fwd_transitions.cbegin())->instruction.get_type() == Lang::SFENCE);
+            (*states[mt->target].fwd_transitions.begin())->instruction = Lang::Stmt<int>::mfence();
+          } else {
+            /* We create a new state as above. */
+            int fence = int(states.size());
+            int target = mt->target;
+            atomized_machine.automata[t.pid].add_transition({fence, Lang::Stmt<int>::mfence(), target});
+            mt->target = fence;
+            states[target].bwd_transitions.erase(mt);
+            states[fence].bwd_transitions.insert(mt);
           }
-          mt->instruction = Lang::Stmt<int>::locked_write(write->get_memloc(),write->get_expr(),
-                                                          write->get_pos());
           assert(++changed == 1);
+          break;
         }
       }
       assert(changed == 1);

@@ -20,6 +20,8 @@
 
 #include <iostream>
 #include <iterator>
+#include "pws_pso_bwd.h"
+#include "pws_container.h"
 #include "pws_constraint.h"
 #include "intersection_iterator.h"
 #include "preprocessor.h"
@@ -32,7 +34,8 @@ static unique_ptr<Machine> get_machine(istream &is) {
   Machine m0(Parser::p_test(lex));
   unique_ptr<Machine> m1(m0.remove_registers());
   unique_ptr<Machine> m2(m1->remove_superfluous_nops());
-  return m2;
+  unique_ptr<Machine> m3(m2->convert_locks_to_fences());
+  return m3;
 }
 
 static Machine::PTransition get_transition(const Machine &m, int pid, int from, int to) {
@@ -40,13 +43,16 @@ static Machine::PTransition get_transition(const Machine &m, int pid, int from, 
     if (t->target == to)
       return Machine::PTransition(*t, pid);
   }
-  throw new std::logic_error("PwsConstraint.test.cpp::get_transition: Couldn't find transition");
+  stringstream ss;
+  ss << "PwsConstraint.test.cpp::get_transition: Couldn't find transition P"
+     << pid << " Q" << from << "->Q" << to;
+  throw new std::logic_error(ss.str());
 }
 
 static void test_pre_sequence(string name, const Machine& m, vector<Machine::PTransition> trans) {
   PwsConstraint::Common common(m);
   std::reverse(trans.begin(), trans.end());
-  function<string(Machine::PTransition)> pttostr = [m](Machine::PTransition pt) 
+  function<string(Machine::PTransition)> pttostr = [m](Machine::PTransition pt)
     { return pt.to_string(m.reg_pretty_vts(pt.pid), m.ml_pretty_vts(pt.pid)); };
   list<unique_ptr<PwsConstraint>> constraints;
   {
@@ -84,11 +90,14 @@ static void test_pre_sequence(string name, const Machine& m, vector<Machine::PTr
     for (const unique_ptr<PwsConstraint> &c : news) Log::extreme << c->to_string() << "\n";
     swap(constraints, news);
   }
-  Test::inner_test(name, any_of(constraints.begin(), constraints.end(), 
+  Test::inner_test(name, any_of(constraints.begin(), constraints.end(),
                                 [](const unique_ptr<PwsConstraint> &c) { return c->is_init_state(); }));
 }
 
 void PwsConstraint::test_pre() {
+  auto vs = VecSet<MemLoc<int>>::singleton;
+  typedef Stmt<int> stmt;
+  typedef MemLoc<int> ml;
   {
     stringstream ss;
     ss << R"(
@@ -97,7 +106,7 @@ forbidden
 data
   a = 0 : [0:1]
   b = 0 : [0:1]
-  
+
 process
 text
     write: a := 1;
@@ -112,16 +121,16 @@ CS: nop
 )";
     Machine m = *get_machine(ss);
     vector<Machine::PTransition> test{
-      {**m.automata[0].get_states()[0].fwd_transitions.begin(),                            0}, // P0: write: a := 1
-      {**m.automata[0].get_states()[1].fwd_transitions.begin(),                            0}, // P0: write: b := 1
-      {2, Stmt<int>::serialise(VecSet<MemLoc<int>>::singleton(MemLoc<int>::global(1))), 2, 0}, // P0: serialise: b
-      {0, Stmt<int>::update(0, VecSet<MemLoc<int>>::singleton(MemLoc<int>::global(1))), 0, 1}, //   P1: update(b, P0)
-      {2, Stmt<int>::update(0, VecSet<MemLoc<int>>::singleton(MemLoc<int>::global(1))), 2, 0}, // P0: update(b, P0)
-      {**m.automata[1].get_states()[0].fwd_transitions.begin(),                            1}, //   P1: read: b = 1
-      {**m.automata[1].get_states()[1].fwd_transitions.begin(),                            1}, //   P1: read: a = 0
-      {2, Stmt<int>::serialise(VecSet<MemLoc<int>>::singleton(MemLoc<int>::global(0))), 2, 0}, // P0: serialise: a
-      {2, Stmt<int>::update(0, VecSet<MemLoc<int>>::singleton(MemLoc<int>::global(0))), 2, 1}, //   P1: update(a, P0)
-      {2, Stmt<int>::update(0, VecSet<MemLoc<int>>::singleton(MemLoc<int>::global(0))), 2, 0}  // P0: update(a, P0)
+      get_transition(m, 0, 0, 1),                    // P0: write: a := 1
+      get_transition(m, 0, 1, 2),                    // P0: write: b := 1
+      {2, stmt::serialise(vs(ml::global(1))), 2, 0}, // P0: serialise: b
+      {0, stmt::update(0, vs(ml::global(1))), 0, 1}, //   P1: update(b, P0)
+      {2, stmt::update(0, vs(ml::global(1))), 2, 0}, // P0: update(b, P0)
+      get_transition(m, 1, 0, 1),                    //   P1: read: b = 1
+      get_transition(m, 1, 1, 2),                    //   P1: read: a = 0
+      {2, stmt::serialise(vs(ml::global(0))), 2, 0}, // P0: serialise: a
+      {2, stmt::update(0, vs(ml::global(0))), 2, 1}, //   P1: update(a, P0)
+      {2, stmt::update(0, vs(ml::global(0))), 2, 0}  // P0: update(a, P0)
     };
     test_pre_sequence("simple reorder", m, test);
   }
@@ -181,19 +190,76 @@ text
 )";
     Machine m = *get_machine(ss);
     vector<Machine::PTransition> test{
-      get_transition(m, 1, 0, 1),                                                                //   P1: slocked write: flag[P1] := 1
-      {1, Stmt<int>::update(1, VecSet<MemLoc<int>>::singleton(MemLoc<int>::local(0))),    1, 1}, //   P1: update(flag[P1], P1)
-      get_transition(m, 1, 1, 6),                                                                //   P1: read: flag[P0] = 0
-      get_transition(m, 0, 0, 1),                                                                // P0: slocked write: flag[P0] := 1
-      get_transition(m, 0, 1, 6),                                                                // P0: read: flag[P1] = 0
-      {6, Stmt<int>::update(1, VecSet<MemLoc<int>>::singleton(MemLoc<int>::local(0, 0))), 6, 0}, // P0: update(flag[P1], P1)
-      {6, Stmt<int>::update(0, VecSet<MemLoc<int>>::singleton(MemLoc<int>::local(0, 0))), 6, 1}, //   P1: update(flag[P0], P0)
-      {6, Stmt<int>::update(0, VecSet<MemLoc<int>>::singleton(MemLoc<int>::local(0))),    6, 0}  // P0: update(flag[P0], P0)
+      get_transition(m, 1, 0, 8),                      //   P1: write: flag[P1] := 1
+      {8, stmt::serialise(vs(ml::local(0))),    8, 1}, //   P1: serialise flag[P1]
+      get_transition(m, 1, 8, 1),                      //   P1: sfence
+      {1, stmt::update(1, vs(ml::local(0))),    1, 1}, //   P1: update(flag[P1], P1)
+      get_transition(m, 1, 1, 6),                      //   P1: read: flag[P0] = 0
+      get_transition(m, 0, 0, 8),                      // P0: write: flag[P0] := 1
+      {8, stmt::serialise(vs(ml::local(0))),    8, 0}, // P0: serialise flag[P0]
+      get_transition(m, 0, 8, 1),                      // P0: sfence
+      get_transition(m, 0, 1, 6),                      // P0: read: flag[P1] = 0
+      {6, stmt::update(1, vs(ml::local(0, 0))), 6, 0}, // P0: update(flag[P1], P1)
+      {6, stmt::update(0, vs(ml::local(0, 0))), 6, 1}, //   P1: update(flag[P0], P0)
+      {6, stmt::update(0, vs(ml::local(0))),    6, 0}  // P0: update(flag[P0], P0)
     };
     test_pre_sequence("slocked dekker", m, test);
+  }
+  {
+    stringstream ss;
+    ss << R"(
+forbidden
+  CS CS
+data
+  turn = * : [0:1]
+
+process
+data
+  flag = 0 : [0:1]
+registers
+  $r0 = * : [0:1]
+  $r1 = * : [0:1]
+text
+  L0: write: flag[my] := 1;
+  locked write: turn := 1;
+  L1: read: $r0 := flag[0];
+  read: $r1 := turn;
+  if $r0 = 1 && $r1 = 1 then
+    goto L1;
+  CS: write: flag[my] := 0;
+  goto L0
+
+process
+data
+  flag = 0 : [0:1]
+registers
+  $r0 = * : [0:1]
+  $r1 = * : [0:1]
+text
+  L0: write: flag[my] := 1;
+  locked write: turn := 0;
+  L1: read: $r0 := flag[0];
+  read: $r1 := turn;
+  if $r0 = 1 && $r1 = 0 then
+    goto L1;
+  CS: write: flag[my] := 0;
+  goto L0
+)";
+    Machine m = *get_machine(ss);
+    PwsPsoBwd reach;
+    PwsConstraint::Common *c = new PwsConstraint::Common(m);
+    ExactBwd::Arg arg(m, c->get_bad_states(), c, new PwsContainer());
+    std::unique_ptr<Reachability::Result> res(reach.reachability(&arg));
+    Test::inner_test("TSO fence set unsafe for Peterson's algorithm under PSO",
+                     res->result == Reachability::REACHABLE);
   }
 }
 
 void PwsConstraint::test() {
-  PwsConstraint::test_pre();
+  try {
+    PwsConstraint::test_pre();
+  } catch (std::exception *ex) {
+    Log::warning << "Exception " << ex->what() << " was thrown while testing" << std::endl;
+    throw;
+  }
 }

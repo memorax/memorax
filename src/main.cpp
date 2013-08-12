@@ -83,23 +83,26 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
  *
  * If flags["rff"], then convert the machine to register free form
  * before returning it.
+ *
+ * If flags["a"].argument is "pws", additionaly convert locks to
+ * fences before returning.
  */
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
   PPLexer lex(input_stream);
-  Machine *m0 = new Machine(Parser::p_test(lex));
+  std::unique_ptr<Machine> machine(new Machine(Parser::p_test(lex)));
   if(flags.count("rff")){
-    Machine *m1 = m0->remove_registers();
-    Machine *m2 = m1->remove_superfluous_nops();
-    delete m0;
-    delete m1;
-    return m2;
-  }else{
-    return m0;
+    machine = std::unique_ptr<Machine>(machine->remove_registers());
+    machine = std::unique_ptr<Machine>(machine->remove_superfluous_nops());
   }
+  std::set<std::string> abstractions_requiring_fences{"pws"};
+  if(flags.count("a") && abstractions_requiring_fences.count(flags.at("a").argument)){
+    machine = std::unique_ptr<Machine>(machine->convert_locks_to_fences());
+  }
+  return machine.release();
 };
 
 template<class FenceSet>
-void print_fence_sets(const Machine &machine, const std::list<FenceSet> &fence_sets) {
+void print_fence_sets(const Machine &, const std::list<FenceSet> &fence_sets) {
   Log::result << "Found " << fence_sets.size() << " fence set";
   if(fence_sets.size() == 0){
     Log::result << "s.\n";
@@ -144,9 +147,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
   fencins_timer.start();
 
   if(flags.find("a")->second.argument == "pb"){
-    Machine *tmp_machine = machine.release();
-    machine = std::unique_ptr<Machine>(tmp_machine->add_domain_assumes());
-    delete tmp_machine;
+    machine = std::unique_ptr<Machine>(machine->add_domain_assumes());
     PbConstraint::pred_set preds;
     int k = 1;
     if(flags.count("k")){
@@ -347,8 +348,8 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
 
 /* Produce a pdf showing the automata generated from the code inputted on cin. */
 int dotify(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  std::string used_flags[] = {"o","rff"};
-  inform_ignore(used_flags,used_flags+2,flags);
+  std::string used_flags[] = {"o","rff","a"};
+  inform_ignore(used_flags,used_flags+3,flags);
   if(flags.count("o") == 0){
     Log::warning << "For command dotify. Specify an output file.pdf using the flag -o.\n";
     return 1;
