@@ -208,6 +208,7 @@ namespace PsoFencins{
           assert(s.get_writes().size() == 1);
           for (const Lang::MemLoc<int> ml : s.get_writes()) {
             last_writes[Lang::NML(ml, pid)] = {trans, trans};
+            update(trans, trans);
           }
         }
         break;

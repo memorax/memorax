@@ -25,7 +25,7 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
   PwsConstraint::Common &common = dynamic_cast<PwsConstraint::Common&>(*cmn);
 
  Log::extreme << " *** PWS trace ***\n";
- trace->print(Log::debug,Log::extreme,Log::json,common.machine);
+ trace->print(Log::extreme,Log::extreme,Log::json,common.machine);
  Log::extreme << "\n\n";
 
  typedef std::pair<int, int> p;

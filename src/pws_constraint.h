@@ -67,6 +67,44 @@ public:
     void iterate_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)>,
                          const std::vector<Automaton::State>&, int, int,
                          std::vector<std::map<Lang::NML, ZStar<int> > > &, bool &);
+
+    typedef std::pair<std::list<std::map<Lang::NML, value_t> >,
+                      std::list<std::map<Lang::NML, value_t> > > map_sequence;
+
+    /* A last write sequence of a process p is a sequence of writes, for
+     * example, z=1, |, y=3, x=2, that are the last writes that p has done to
+     * each memory location. Additionally, the sequence contains one instance of
+     * the symbol "|", that marks which of these writes are ahead of p's
+     * cpointer. We will use this more compact syntax for a last write sequence:
+     *   z=1|y=3:x=2
+     *
+     * last_write_sets[pid][pc] describes all last write sequences that are
+     * possible for a process pid in state pc. It is a tuple, where the the
+     * first element is the part of the sequence that is definitely behind the
+     * "|" symbol, and the second element is the part of the sequence that may
+     * lie on either side of the "|" symbol.
+     *
+     * The sequences are represented as a list of maps, for example,
+     * {z=1, y=3}, {x=2}. If more than one write are present in a map, the map
+     * describes any sequence that is some ordering of it's elements. Thus, the
+     * above example describes both z=1:y=3:x=2 and y=3:z=1:x=2, but not
+     * z=1:x=2:y=3. Also, the maps may contain the value "*" (represented by
+     * value_t::STAR), which describes any write to that memory location.
+     *
+     * Invariants: In each sequence pair, each memory location may only appear
+     *             in one map.
+     *             Only the last map in each sequence in a pair may be empty. */
+    std::vector<std::vector<std::set<map_sequence> > > last_write_sets;
+
+    /* Returns all maps that have some subset of the key-value pairs of map and their complements. */
+    std::list<std::pair<std::map<Lang::NML, value_t>,
+                        std::map<Lang::NML, value_t> > >
+    powermaps(std::map<Lang::NML, value_t> map) const;
+
+    /* Returns a value that subsumes any value written by trans.
+     * Pre: trans only writes a single memory location. */
+    inline value_t value_of_write(const Machine::PTransition &trans) const;
+
     friend class PwsConstraint;
     friend class PwsPsoBwd;
   };
@@ -111,7 +149,8 @@ private:
   Comparison entailment_compare_buffer(const Store &a, const Store& b) const;
   void pretty_print_buffer(std::stringstream &ss, const std::vector<Store> &buffer, Lang::NML nml) const;
 
-  inline VecSet<int> possible_values(const ZStar<int> &buffer_value, const Lang::NML &nml) const;
+  inline VecSet<int> possible_values(const value_t &buffer_value, const Lang::NML &nml) const;
+
   /* Checks using various heuristics if this constraint can be reached from an
    * initial state and returns true only if this state is unreachable.
    *
@@ -165,19 +204,26 @@ private:
   static const bool use_limit_other_updates;
   static const bool use_pending_sets;
   static const bool use_serialisations_only_after_writes;
+  static const bool use_last_write_sets;
 };
 
 // Implementations
 // -----------------------------------------------------------------------------
 
 inline VecSet<int> PwsConstraint::possible_values(const ZStar<int> &buffer_value, const Lang::NML &nml) const {
-    Lang::VarDecl var_decl = common.machine.get_var_decl(nml);
-    if (buffer_value.is_wild()) {
-      std::vector<int> vec;
-      for (int possible_value : var_decl.domain)
-        vec.push_back(possible_value);
-      return VecSet<int>(vec);
-    } else return VecSet<int>::singleton(buffer_value.get_int());
-  };
+  Lang::VarDecl var_decl = common.machine.get_var_decl(nml);
+  if (buffer_value.is_wild()) {
+    std::vector<int> vec;
+    for (int possible_value : var_decl.domain)
+      vec.push_back(possible_value);
+    return VecSet<int>(vec);
+  } else return VecSet<int>::singleton(buffer_value.get_int());
+};
+
+inline ZStar<int> PwsConstraint::Common::value_of_write(const Machine::PTransition &trans) const {
+  assert(trans.instruction.get_writes().size() == 1);
+  Store s = store_of_write(trans);
+  return s[index(Lang::NML(trans.instruction.get_writes()[0], trans.pid))];
+};
 
 #endif // __PWS_CONSTRAINT_H__

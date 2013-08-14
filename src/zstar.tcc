@@ -70,6 +70,18 @@ template<class Z> ZStar<Z> inline ZStar<Z>::operator/(const ZStar<Z> &zs) const 
   return z/zs.z;
 };
 
+template<class Z> inline ZStar<Z>
+ZStar<Z>::unify(const ZStar<Z> &zs, bool *unifiable) const{
+  if (wild) return zs;
+  if (zs.wild) return *this;
+  if (*this == zs) {
+    return zs;
+  } else {
+    *unifiable = false;
+    return STAR;
+  }
+}
+
 template<class Z> std::string inline ZStar<Z>::to_string() const throw(){
   std::stringstream ss;
   if(wild){
@@ -148,8 +160,9 @@ template<class Z> inline const ZStar<Z> &ZStar<Z>::Vector::operator[](int i) con
   return vec[i+2];
 };
 
-template<class Z> inline typename ZStar<Z>::Vector 
+template<class Z> inline typename ZStar<Z>::Vector
 ZStar<Z>::Vector::assign(int i, const ZStar<Z> &val) const{
+  if (vec[i+2] == val) return *this;
   Vector v(size());
   for(int j = 0; j < size(); ++j){
     v.vec[j+2] = vec[j+2];

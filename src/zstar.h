@@ -64,6 +64,19 @@ public:
   ZStar operator*(const ZStar &zs) const throw();
   ZStar operator/(const ZStar &zs) const throw();
 
+  /* Return true iff the cut of the sets of values represented by this ZStar and
+   * zs is nonempty. */
+  inline bool unifiable(const ZStar &zs) const noexcept {
+    return wild || zs.wild || z == zs.z;
+  };
+
+  /* If the cut of the sets of values represented by this ZStar and zs is
+   * nonempty, return a ZStar representing that cut. Otherwise, set unifiable to
+   * false and return an arbitrary ZStar.
+   */
+  ZStar unify(const ZStar &zs, bool *unifiable) const;
+
+
   std::string to_string() const throw();
 
   /* An unmutable vector of ZStar values.

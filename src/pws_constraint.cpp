@@ -21,7 +21,9 @@
 #include "pws_constraint.h"
 #include "intersection_iterator.h"
 #include <iostream>
+#include <iomanip>
 #include <iterator>
+#include "pputils.h"
 
 /*****************/
 /* Configuration */
@@ -31,6 +33,7 @@ const bool PwsConstraint::use_channel_suffix_equality = true;
 const bool PwsConstraint::use_limit_other_updates = true;
 const bool PwsConstraint::use_pending_sets = true;
 const bool PwsConstraint::use_serialisations_only_after_writes = true;
+const bool PwsConstraint::use_last_write_sets = true;
 
 /*****************/
 
@@ -118,7 +121,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
     for (unsigned i = 0; i < states.size(); ++i) {
       for (const Automaton::Transition *t : states[i].bwd_transitions) {
         all_transitions.push_back(Machine::PTransition(*t, p));
-        if (t->instruction.get_writes().size() > 0 && !t->instruction.is_fence()) has_writes[p][i] = true;
+        if (t->instruction.get_writes().size() > 0) has_writes[p][i] = true;
 
         /* Check that the machine has been properly been converted from lock to fence semantics. */
         if (t->instruction.get_type() == Lang::SLOCKED ||
@@ -156,10 +159,12 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
 
   /* Setup transitions_by_pc. */
   for(unsigned p = 0; p < machine.automata.size(); ++p){
-    transitions_by_pc.push_back(std::vector<std::vector<const Machine::PTransition*> >(machine.automata[p].get_states().size()));
+    transitions_by_pc.push_back(std::vector<std::vector<const Machine::PTransition*> >
+                                (machine.automata[p].get_states().size()));
   }
   for(unsigned i = 0; i < all_transitions.size(); ++i){
-    transitions_by_pc[all_transitions[i].pid][all_transitions[i].target].push_back(&all_transitions[i]);
+    transitions_by_pc[all_transitions[i].pid][all_transitions[i].target]
+      .push_back(&all_transitions[i]);
   }
 
   auto is_sfence = [](const Lang::Stmt<int> &stmt, Lang::MemLoc<int> ml) {
@@ -173,44 +178,188 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
 
   auto is_mfence = [](const Lang::Stmt<int> &stmt, Lang::MemLoc<int> ml) {
     return (stmt.get_type() == Lang::MFENCE ||
-            stmt.get_type() == Lang::LOCKED ||
             (stmt.get_type() == Lang::LOCKED &&
              std::find(stmt.get_writes().begin(), stmt.get_writes().end(), ml)
              != stmt.get_writes().end()));
   };
 
-  /* Setup pending_set and pending_buffers */
-  for (unsigned p = 0; p < machine.automata.size(); ++p) {
-    const std::vector<Automaton::State> &states = machine.automata[p].get_states();
-    init_pending(is_mfence, states, pending_set);
-    init_pending(is_sfence, states, pending_buffers);
-
-    /* Use a fix-point iteration to find the complete sets. */
-    bool changed = true;
-    while (changed) {
-      changed = false;
+  if (use_pending_sets) {
+    /* Setup pending_set and pending_buffers */
+    for (unsigned p = 0; p < machine.automata.size(); ++p) {
       const std::vector<Automaton::State> &states = machine.automata[p].get_states();
-      for (unsigned i = 0; i < states.size(); ++i) {
-        /* Complete pending_set and pending_buffers. */
-        iterate_pending(is_mfence, states, i, p, pending_set[p],     changed);
-        iterate_pending(is_sfence, states, i, p, pending_buffers[p], changed);
+      init_pending(is_mfence, states, pending_set);
+      init_pending(is_sfence, states, pending_buffers);
+
+      /* Use a fix-point iteration to find the complete sets. */
+      bool changed = true;
+      while (changed) {
+        changed = false;
+        const std::vector<Automaton::State> &states = machine.automata[p].get_states();
+        for (unsigned i = 0; i < states.size(); ++i) {
+          /* Complete pending_set and pending_buffers. */
+          iterate_pending(is_mfence, states, i, p, pending_set[p],     changed);
+          iterate_pending(is_sfence, states, i, p, pending_buffers[p], changed);
+        }
+      }
+    }
+    auto prpair = [this](Log::redirection_stream &rs, std::pair<Lang::NML, value_t> elem) {
+      rs << machine.pretty_string_nml.at(elem.first) << ":" << elem.second;
+    };
+    Log::extreme << "Pending sets\n";
+    for (unsigned p = 0; p < pending_set.size(); ++p) {
+      Log::extreme << "For process P" << p << "\n";
+      for (unsigned i = 0; i < pending_set[p].size(); ++i) {
+        Log::extreme << "  Q" << i << " {";
+        PPUtils::print_sequence_with_separator(Log::extreme, pending_set[p][i],     ", ", prpair);
+        Log::extreme << "} buffer: {";
+        PPUtils::print_sequence_with_separator(Log::extreme, pending_buffers[p][i], ", ", prpair);
+        Log::extreme << "}\n";
       }
     }
   }
-  Log::extreme << "Pending sets\n";
-  for (unsigned p = 0; p < pending_set.size(); ++p) {
-    Log::extreme << "For process P" << p << "\n";
-    for (unsigned i = 0; i < pending_set[p].size(); ++i) {
-      Log::extreme << "  Q" << i << " {";
-      for (std::pair<Lang::NML, value_t> elem : pending_set[p][i])
-        Log::extreme << machine.pretty_string_nml.find(elem.first)->second << ":" << elem.second << ", ";
-      Log::extreme << "} buffer: {";
-      for (std::pair<Lang::NML, value_t> elem : pending_buffers[p][i])
-        Log::extreme << machine.pretty_string_nml.find(elem.first)->second << ":" << elem.second << ", ";
-      Log::extreme << "}\n";
+
+  if (use_last_write_sets) {
+    /* A sequence is normalised by removing all empty maps except for the last one. */
+    auto normalise_last_write_sequence = [](std::list<std::map<Lang::NML, value_t> > &seq) {
+      auto iter = seq.begin();
+      auto end = --seq.end(); // We skip the last element
+      while (iter != end) {
+        if (iter->empty()) iter = seq.erase(iter);
+        else iter++;
+      }
+    };
+
+    auto print_last_write_sequence = [this](Log::redirection_stream &rs,
+                                        const std::list<std::map<Lang::NML, value_t> > &seq,
+                                        int pid) {
+      auto mlts = this->machine.ml_pretty_vts(pid);
+      auto nmlts = [mlts, pid](Lang::NML nml) { return mlts(nml.localize(pid)); };
+      PPUtils::print_sequence_with_separator(rs, seq, ":",
+        [nmlts](Log::redirection_stream &rs, const std::map<Lang::NML, value_t> &map) {
+          rs << "{";
+          PPUtils::print_sequence_with_separator(rs, map, ", ",
+            [nmlts](Log::redirection_stream &rs, const std::pair<Lang::NML, value_t> &pair) {
+              rs << nmlts(pair.first) << "=" << pair.second.to_string();
+            });
+          rs << "}";
+        });
+    };
+
+    Log::extreme << "Last write sets:\n";
+    /* Setup last_write_sets. */
+    for (unsigned pid = 0; pid < machine.automata.size(); ++pid) {
+      last_write_sets.push_back(std::vector<std::set<map_sequence> >(machine.automata[pid].get_states().size()));
+      map_sequence empty({{}}, {{}});
+      last_write_sets[pid][0].insert(empty); // In the initial state there are no writes
+
+      /* Use a fix-point iteration to find the complete sets. */
+      bool changed = true;
+      while (changed) {
+        changed = false;
+        const std::vector<Automaton::State> &states = machine.automata[pid].get_states();
+        for (unsigned i = 0; i < states.size(); ++i) {
+          for (const Automaton::Transition *trans : states[i].fwd_transitions) {
+            /* We purposefully make a copy of the source sequence. We modify it
+             * according to trans and insert it in target. */
+            for (map_sequence source_sequence : last_write_sets[pid][i]) {
+              switch (trans->instruction.get_type()) {
+              case Lang::WRITE: {
+                assert(trans->instruction.get_writes().size() == 1);
+                value_t value = value_of_write(Machine::PTransition(*trans, pid));
+                Lang::NML loc(trans->instruction.get_writes()[0], pid);
+                /* We add the value to the last map. We make sure loc is in no
+                 * other map so the invariant holds */
+                for (std::map<Lang::NML, value_t> &map : source_sequence.first)  map.erase(loc);
+                for (std::map<Lang::NML, value_t> &map : source_sequence.second) map.erase(loc);
+                source_sequence.second.back()[loc] = value;
+              } break;
+              case Lang::LOCKED: {
+                assert(trans->instruction.get_writes().size() == 1);
+                value_t value = value_of_write(Machine::PTransition(*trans, pid));
+                Lang::NML loc(trans->instruction.get_writes()[0], pid);
+                for (std::map<Lang::NML, value_t> &map : source_sequence.first)  map.erase(loc);
+                for (std::map<Lang::NML, value_t> &map : source_sequence.second) map.erase(loc);
+                /* Since cas requires the buffer to loc to be empty, and the
+                 * cpointer to be to the right like an MFENCE, we move all but
+                 * the last set in second to first. */
+                source_sequence.first.splice(source_sequence.first.end(), source_sequence.second,
+                                             source_sequence.second.begin(),
+                                             --source_sequence.second.end());
+
+                for (std::pair<std::map<Lang::NML, value_t>, std::map<Lang::NML, value_t> >
+                       &powermap : powermaps(std::move(source_sequence.second.back()))) {
+                  map_sequence copy(source_sequence.first, {});
+                  copy.first.push_back(std::move(powermap.first));
+                  /* The write is added as it's own set because we know it is
+                   * strictly later than any of the already serialised writes
+                   * (those that we spliced above). */
+                  copy.first.push_back({{loc, value}});
+                  copy.second = {std::move(powermap.second)};
+                  normalise_last_write_sequence(copy.first);
+                  changed |= last_write_sets[pid][trans->target]
+                    .insert(std::move(copy)).second;
+
+                }
+                /* We have normalised and inserted the modified sequence
+                 * ourselves, no need to do the rest of the loop */
+                continue;
+              }
+              case Lang::MFENCE:
+                // Move all elements to the right of the cpointer
+                source_sequence.first.splice(source_sequence.first.end(), source_sequence.second);
+                source_sequence.second.push_back({}); // The sequence must not be empty
+                break;
+              case Lang::SFENCE:
+                source_sequence.second.push_back({});
+                break;
+              default:; //No effect
+              }
+              /* We normalise the sequence before adding it to the target set. */
+              normalise_last_write_sequence(source_sequence.first);
+              normalise_last_write_sequence(source_sequence.second);
+              changed |= last_write_sets[pid][trans->target]
+                .insert(std::move(source_sequence)).second;
+            }
+          }
+        }
+      }
+
+      Log::extreme << "  For process P" << pid << std::endl;
+      for (unsigned i = 0; i < last_write_sets[pid].size(); ++i) {
+        Log::extreme << "    Q" << std::setiosflags(std::ios::left) << std::setw(3) << i
+                     << std::setw(0) << "{";
+        PPUtils::print_sequence_with_separator(Log::extreme, last_write_sets[pid][i], ",\n         ",
+          [print_last_write_sequence, pid](Log::redirection_stream &rs, const map_sequence &seq) {
+            print_last_write_sequence(rs, seq.first, pid);
+            rs << "|";
+            print_last_write_sequence(rs, seq.second, pid);
+          });
+        Log::extreme << "}\n";
+      }
     }
   }
 }
+std::list<std::pair<std::map<Lang::NML, ZStar<int> >,
+                    std::map<Lang::NML, ZStar<int> > > >
+PwsConstraint::Common::powermaps(std::map<Lang::NML, value_t> map) const {
+  if (map.empty()) return {{map, map}};
+  std::pair<Lang::NML, value_t> kvp = *map.begin();
+  map.erase(map.begin());
+  std::list<std::pair<std::map<Lang::NML, ZStar<int> >, std::map<Lang::NML, ZStar<int> > > >
+    list = powermaps(std::move(map));
+
+  auto iter = list.begin();
+  while (iter != list.end()) {
+    /* Duplicate the element, and then insert our kvp into the first or second
+     * element of the first and second copy respectively. */
+    iter = list.insert(iter, *iter);
+    (iter++)->first.insert(kvp);
+    (iter++)->second.insert(kvp);
+  }
+
+  return list;
+}
+
 
 std::list<Constraint*> PwsConstraint::Common::get_bad_states() {
   std::list<Constraint*> l;
@@ -312,6 +461,17 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
     Lang::NML nml(s.get_memloc(), t.pid);
     int nmli = common.index(nml);
     int msgi = index_of_read(nml, t.pid);
+    if (locked) {
+      /* We are in a locked block and the value of the message we just wrote
+       * isn't supposed to be visible to us; channel_pop_back have yet to be
+       * run. We find the next message that contains nml or is under the
+       * cpointer. */
+      assert(msgi == int(channel.size()) - 1);
+      while(--msgi > cpointers[t.pid]) {
+        if (channel[msgi].wpid == t.pid && channel[msgi].nmls.count(nml))
+          break;
+      }
+    }
     VecSet<int> val_nml;
     int buffer_size = write_buffers[t.pid][nmli].size();
     if (buffer_size > 0) {
@@ -464,7 +624,7 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   } break;
 
   case Lang::MFENCE:
-    if (cpointers[t.pid] != int(channel.size()) - 1)  break;
+    if (cpointers[t.pid] != int(channel.size()) - 1) break;
   case Lang::SFENCE:
     if (!is_fully_serialised(t.pid)) break;
     /* All conditions are fullfilled, fall through to NOP */
@@ -634,6 +794,151 @@ bool PwsConstraint::unreachable() {
               channel[ci].store = channel[ci].store.assign(nmli, possible_pending);
             else if (channel[ci].store[nmli] != possible_pending)
               return true;
+          }
+        }
+      }
+    }
+  }
+
+  struct map_sequence_ref {
+    map_sequence_ref(const Common::map_sequence &ms)
+    : first(ms.first), second(ms.second), ptr(&ms) {};
+    std::list<std::map<Lang::NML, value_t> > first, second;
+    const Common::map_sequence *ptr;
+    /* Get the value of nml from ptr.
+     * Pre: nml is in this sequence. */
+    value_t get_value(Lang::NML nml) const {
+      auto pred = [nml](const std::map<Lang::NML, value_t> &map) { return map.count(nml); };
+      auto secondresult = std::find_if(ptr->second.rbegin(), ptr->second.rend(), pred);
+      if (secondresult != ptr->second.rend()) return secondresult->at(nml);
+      return std::find_if(ptr->first.rbegin(), ptr->first.rend(), pred)->at(nml);
+    }
+  };
+
+  if (use_last_write_sets) {
+    for (int pid = 0; pid < int(common.machine.automata.size()); ++pid) {
+      /* We will be removing elements that do not apply, and also modifying
+       * elements as we go, so we make a copy. */
+      std::list<map_sequence_ref> cases;
+      std::copy(common.last_write_sets[pid][pcs[pid]].begin(),
+                common.last_write_sets[pid][pcs[pid]].end(),
+                std::back_inserter(cases));
+      /* These memory locations have already been considered. We map them to the
+       * channel index where they were found, -1 if they were found in the write
+       * buffers or -2 if they were found in the channel but belonged to another
+       * process. */
+      std::map<Lang::NML, int> considered;
+
+      /* We begin with the buffers. */
+      for (Lang::NML nml : common.nmls) {
+        int nmli = common.index(nml);
+        const Store &buffer = write_buffers[pid][nmli];
+        if (buffer.size() > 0) {
+          value_t buffer_value = buffer.back();
+          /* Remove cases that do not unify with message_value. */
+          for (auto case_iter = cases.begin(); case_iter != cases.end();)
+            if (case_iter->second.back().count(nml) &&
+                case_iter->second.back().at(nml).unifiable(buffer_value)) {
+              case_iter->second.back().erase(nml);
+              ++case_iter;
+            } else {
+              /* This case does not apply. */
+              case_iter = cases.erase(case_iter);
+            }
+          considered.insert({nml, -1});
+          if (cases.empty()) return true;
+        }
+      }
+
+      /* If the last set was emptied above, we remove it if there is more sets
+       * in the sequence. */
+      for (map_sequence_ref &seq : cases)
+        if (seq.second.back().empty() && seq.second.size() > 1)
+          seq.second.pop_back();
+
+      /* Now we consider the channel. */
+      for (int i = int(channel.size())-1; i >= 0; --i) {
+        if (i == cpointers[pid]) {
+          /* We heave all elements from first into second of the tuple, except
+           * the empty set that might exist at the end of first. */
+          for (map_sequence_ref &seq : cases) {
+            if (seq.first.back().empty())
+              seq.first.pop_back();
+            seq.second.splice(seq.second.begin(), seq.first);
+            /* Incase second only contained a single empty map, we remove it,
+             * unless it is the only map in the new sequence */
+            if (seq.second.back().empty() && seq.second.size() > 1)
+              seq.second.pop_back();
+          }
+        }
+        assert(channel[i].nmls.size() <= 1);
+        if (channel[i].nmls.empty()) {
+          /* This is the dummy message. It is only allowed as the very first
+           * message. */
+          if (i > 0) return true;
+          /* A case must be empty for the dummy message to be allowed since no
+           * messages older than it can exist and thus be lost. */
+          cases.remove_if([](const map_sequence_ref &seq) {
+              return !(seq.first.size() == 0 ||
+                       (seq.first.size() == 1 && seq.first.begin()->empty())) ||
+                     !(seq.second.size() == 1 && seq.second.begin()->empty());
+            });
+        } else {
+          Lang::NML nml = channel[i].nmls.get_vector()[0];
+          if (!considered.count(nml)) {
+            if (channel[i].wpid == pid) {
+              value_t message_value = channel[i].store[common.index(nml)];
+              /* Remove cases that do not unify with message_value. */
+              for (auto case_iter = cases.begin(); case_iter != cases.end();)
+                if (case_iter->second.back().count(nml) &&
+                    case_iter->second.back().at(nml).unifiable(message_value)) {
+                  case_iter->second.back().erase(nml);
+                  /* In case we have emptied the set, we move on to the next set
+                   * in the sequence. */
+                  if (case_iter->second.back().empty() && case_iter->second.size() > 1)
+                    case_iter->second.pop_back();
+                  ++case_iter;
+                } else {
+                  /* This case does not apply. */
+                  case_iter = cases.erase(case_iter);
+                }
+              considered.insert({nml, i});
+              if (cases.empty()) return true;
+            } else {
+              /* We have found the most recent write to nml that process pid can
+               * see. Beyond this point writes to nml might have been lost (as
+               * per the entailment relation). We can no longer do anything
+               * about writes to nml, so we mark it considered and remove it
+               * from all sequences. */
+              if (i <= cpointers[pid]) {
+                considered.insert({nml, -2});
+                for (map_sequence_ref &seq : cases) {
+                  for (auto &map : seq.second) map.erase(nml);
+                  if (seq.second.back().empty() && seq.second.size() > 1)
+                    seq.second.pop_back();
+                }
+              }
+            }
+          }
+        }
+      }
+
+      /* No case applied to this constraint - it is unreachable. */
+      if (cases.empty()) return true;
+      /* If all cases agree on a value, use that value for the constraint */
+      for (const std::pair<Lang::NML, int> &pair : considered) {
+        if (pair.second == -2) continue; // We cannot do anything about other processes' writes
+        ZStar<int> value;
+        bool agrees = true;
+        for (const map_sequence_ref &seq : cases)
+          value = seq.get_value(pair.first).unify(value, &agrees);
+        if (agrees) {
+          int nmli = common.index(pair.first);
+          if (pair.second == -1) {
+            write_buffers[pid][nmli] =
+              write_buffers[pid][nmli].assign(write_buffers[pid][nmli].size() - 1, value);
+          } else {
+            channel[pair.second].store = channel[pair.second].store.assign(nmli, value);
           }
         }
       }

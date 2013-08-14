@@ -211,6 +211,38 @@ text
 forbidden
   CS CS
 data
+  a = 0 : [0:1]
+  b = 0 : [0:1]
+process
+text
+    write: a := 1;
+    cas(b, 0, 1);
+CS: nop
+process
+text
+    read:  b  = 1;
+    read:  a  = 0;
+CS: nop
+)";
+    Machine m = *get_machine(ss);
+    vector<Machine::PTransition> test{
+      get_transition(m, 0, 0, 1),                      // P0: write: a := 1
+      get_transition(m, 0, 1, 2),                      // P0: cas(b, 0, 1);
+      {0, stmt::update(0, vs(ml::global(1))), 0, 1},   //   P1: update(b, P0)
+      get_transition(m, 1, 0, 1),                      //   P1: read: b = 1;
+      get_transition(m, 1, 1, 2),                      //   P0: read: a = 0;
+      {2, stmt::serialise(vs(ml::global(0))), 2, 0},   // P0: serialise a
+      {2, stmt::update(0, vs(ml::global(0))), 2, 0},   // P0: update(a, P0)
+      {2, stmt::update(0, vs(ml::global(0))), 2, 1},   //   P0: update(a, P0)
+    };
+    test_pre_sequence("cas overtake", m, test);
+  }
+  {
+    stringstream ss;
+    ss << R"(
+forbidden
+  CS CS
+data
   turn = * : [0:1]
 
 process
