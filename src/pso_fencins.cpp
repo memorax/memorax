@@ -203,7 +203,6 @@ namespace PsoFencins{
         }
         break;
       case Lang::LOCKED:
-        assert(!s.is_fence() || pending_writes[pid].empty());
         if (s.get_writes().size() > 0) {
           assert(s.get_writes().size() == 1);
           for (const Lang::MemLoc<int> ml : s.get_writes()) {

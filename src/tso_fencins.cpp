@@ -289,7 +289,6 @@ namespace TsoFencins{
         }
         break;
       case Lang::LOCKED:
-        assert(!s.is_fence() || pending_writes[pid].empty());
         if(s.get_reads().size() > 0 && !s.is_fence()){
           non_locked_read(trans);
         }

@@ -667,6 +667,7 @@ std::list<SbConstraint::pre_constr_t> SbConstraint::pre(const Machine::PTransiti
         for(int j = 0; j < rss.size(); ++j){
           SbConstraint *sbc = new SbConstraint(*this);
           sbc->reg_stores[t.pid] = rss[j];
+          sbc->pcs[t.pid] = t.source;
           res.push_back(sbc);
         }
       }

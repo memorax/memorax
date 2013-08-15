@@ -468,25 +468,25 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
           break;
       }
     }
-    VecSet<int> val_nml;
+    VecSet<int> all_vals;
     int buffer_size = write_buffers[t.pid][nmli].size();
     if (buffer_size > 0) {
       value_t bufferValue = write_buffers[t.pid][nmli][buffer_size - 1];
-      val_nml = possible_values(bufferValue, nml);
+      all_vals = possible_values(bufferValue, nml);
     } else {
-      val_nml = ChannelConstraint::possible_values(channel[msgi].store, nml);
+      all_vals = ChannelConstraint::possible_values(channel[msgi].store, nml);
     }
-    for (int i = 0; i < val_nml.size(); i++) {
+    for (int val : all_vals) {
       /* For each possible value for nml, try to pair it with an
        * assignment to the reg_store such that s.expr() evaluates to
        * the same value. */
-      VecSet<Store> stores = possible_reg_stores(reg_stores[t.pid], t.pid, s.get_expr(), val_nml[i]);
+      VecSet<Store> stores = possible_reg_stores(reg_stores[t.pid], t.pid, s.get_expr(), val);
       for (int j = 0; j < stores.size(); ++j) {
         PwsConstraint *pwsc = this->clone();
         pwsc->pcs[t.pid] = t.source;
         if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
-                             pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val_nml[i]);
-        else pwsc->channel[msgi].store = pwsc->channel[msgi].store.assign(nmli, val_nml[i]);
+                             pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val);
+        else pwsc->channel[msgi].store = pwsc->channel[msgi].store.assign(nmli, val);
         pwsc->reg_stores[t.pid] = stores[j];
         res.push_back(pwsc);
       }
@@ -630,14 +630,65 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
     res.push_back(pwsc);
   } break;
 
+  case Lang::ASSIGNMENT: {
+    VecSet<int> vals_r = ChannelConstraint::possible_values(reg_stores[t.pid], t.pid,
+                                                           Lang::Expr<int>::reg(s.get_reg()));
+    for (int val_r : vals_r) {
+      VecSet<Store> rss = possible_reg_stores(reg_stores[t.pid].assign(s.get_reg(), value_t::STAR),
+                                              t.pid, s.get_expr(), val_r);
+      for (const Store &new_reg_store : rss) {
+        PwsConstraint *pwsc = this->clone();
+        pwsc->reg_stores[t.pid] = new_reg_store;
+        pwsc->pcs[t.pid] = t.source;
+        res.push_back(pwsc);
+      }
+    }
+  } break;
+
+  case Lang::READASSIGN: {
+    if (reg_stores[t.pid][s.get_reg()] == value_t::STAR) {
+      PwsConstraint *pwsc = this->clone();
+      pwsc->pcs[t.pid] = t.source;
+      res.push_back(pwsc);
+    } else {
+      Lang::NML nml(s.get_memloc(), t.pid);
+      int nmli = common.index(nml);
+      int msgi = index_of_read(nml, t.pid);
+      VecSet<int> all_vals;
+      int buffer_size = write_buffers[t.pid][nmli].size();
+      if (buffer_size > 0) {
+        value_t bufferValue = write_buffers[t.pid][nmli][buffer_size - 1];
+        all_vals = possible_values(bufferValue, nml);
+      } else {
+        all_vals = ChannelConstraint::possible_values(channel[msgi].store, nml);
+      }
+
+      int reg_val = reg_stores[t.pid][s.get_reg()].get_int();
+
+      if (all_vals.count(reg_val) > 0) {
+        PwsConstraint *pwsc = this->clone();
+        pwsc->pcs[t.pid] = t.source;
+        if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
+                               pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, reg_val);
+        else pwsc->channel[msgi].store = pwsc->channel[msgi].store.assign(nmli, reg_val);
+        res.push_back(pwsc);
+      }
+    }
+  } break;
+
+  case Lang::ASSUME: {
+    VecSet<Store> rstores = possible_reg_stores(reg_stores[t.pid], t.pid, s.get_condition());
+    for (const Store &store : rstores) {
+      PwsConstraint *pwsc = this->clone();
+      pwsc->pcs[t.pid] = t.source;
+      pwsc->reg_stores[t.pid] = store;
+      res.push_back(pwsc);
+    }
+  } break;
+
   default:
-    Log::debug << "PwsConstraint::pre: Received unknown type of statement: " << s.get_type() << "\n";
-    std::stringstream ss;
-    ss << "PwsConstraint::pre: Statement \""
-       << s.to_string(common.machine.reg_pretty_vts(t.pid), common.machine.ml_pretty_vts(t.pid))
-       << "\" of not implemented type\n P"
-       << t.pid << " Q" << t.source << "->Q" << t.target;
-    throw new std::logic_error(ss.str());
+    throw new std::logic_error("PwsConstraint::pre: Unsupported transition: "
+                               + t.to_string(common.machine));
   }
   return res;
 }
@@ -910,7 +961,7 @@ bool PwsConstraint::unreachable() {
         bool agrees = true;
         for (const map_sequence_ref &seq : cases)
           value = seq.get_value(pair.first).unify(value, &agrees);
-        if (agrees) {
+        if (agrees && !value.is_star()) {
           int nmli = common.index(pair.first);
           if (pair.second == -1) {
             write_buffers[pid][nmli] =

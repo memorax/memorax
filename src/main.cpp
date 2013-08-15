@@ -90,11 +90,20 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
   PPLexer lex(input_stream);
   std::unique_ptr<Machine> machine(new Machine(Parser::p_test(lex)));
+
+  std::set<std::string> abstractions_requiring_fences{"pws"};
+  std::set<std::string> finite_bounds{"sb", "pws"};
+  int reg_count = 0;
+  for (const auto &pregs : machine->regs) reg_count += pregs.size();
+
   if(flags.count("rff")){
     machine = std::unique_ptr<Machine>(machine->remove_registers());
     machine = std::unique_ptr<Machine>(machine->remove_superfluous_nops());
+  } else if (flags.count("a") && finite_bounds.count(flags.at("a").argument) && reg_count > 0) {
+    Log::msg << "Warning: You are using an abstraction for finite data bounds without register "
+             << "free form (--rff). Performance is commonly much better with register free "
+             << "form." << std::endl;
   }
-  std::set<std::string> abstractions_requiring_fences{"pws"};
   if(flags.count("a") && abstractions_requiring_fences.count(flags.at("a").argument)){
     machine = std::unique_ptr<Machine>(machine->convert_locks_to_fences());
   }
@@ -591,8 +600,6 @@ int main(int argc, char *argv[]){
   }
   /* Set defaults */
   if(flags.count("a") == 0) flags["a"] = Flag("a","-a",false,"sb");
-  if(flags["a"].argument == "pws" && flags.count("rff") == 0) // -a pws implies --rff
-    flags["rff"] = Flag("rff","--rff",false);
 
   if(flags.count("verbose")){
     Log::set_primary_loglevel(Log::MSG);
