@@ -56,9 +56,7 @@ public:
      * and a value v pending (that is, in it's buffer or in the channel ahead of
      * it's cpointer), if (m, v) is a member of pending_set[p][q] or (m, *) is a
      * memver of pending_set[p][q]. */
-    std::vector<std::vector<std::map<Lang::NML, value_t> > > pending_set,
-    /* Likewise, but only for writes in the buffer. */
-                                                             pending_buffers;
+    std::vector<std::vector<std::map<Lang::NML, value_t> > > pending_set;
 
     /* Helpers to compute pending_set and pending_buffers */
     void init_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> ,
@@ -210,7 +208,8 @@ private:
 // Implementations
 // -----------------------------------------------------------------------------
 
-inline VecSet<int> PwsConstraint::possible_values(const ZStar<int> &buffer_value, const Lang::NML &nml) const {
+inline VecSet<int> PwsConstraint::possible_values(const ZStar<int> &buffer_value,
+                                                  const Lang::NML &nml) const {
   Lang::VarDecl var_decl = common.machine.get_var_decl(nml);
   if (buffer_value.is_wild()) {
     std::vector<int> vec;

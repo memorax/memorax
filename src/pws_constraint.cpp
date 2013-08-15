@@ -188,7 +188,6 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
     for (unsigned p = 0; p < machine.automata.size(); ++p) {
       const std::vector<Automaton::State> &states = machine.automata[p].get_states();
       init_pending(is_mfence, states, pending_set);
-      init_pending(is_sfence, states, pending_buffers);
 
       /* Use a fix-point iteration to find the complete sets. */
       bool changed = true;
@@ -198,7 +197,6 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
         for (unsigned i = 0; i < states.size(); ++i) {
           /* Complete pending_set and pending_buffers. */
           iterate_pending(is_mfence, states, i, p, pending_set[p],     changed);
-          iterate_pending(is_sfence, states, i, p, pending_buffers[p], changed);
         }
       }
     }
@@ -210,9 +208,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
       Log::extreme << "For process P" << p << "\n";
       for (unsigned i = 0; i < pending_set[p].size(); ++i) {
         Log::extreme << "  Q" << i << " {";
-        PPUtils::print_sequence_with_separator(Log::extreme, pending_set[p][i],     ", ", prpair);
-        Log::extreme << "} buffer: {";
-        PPUtils::print_sequence_with_separator(Log::extreme, pending_buffers[p][i], ", ", prpair);
+        PPUtils::print_sequence_with_separator(Log::extreme, pending_set[p][i], ", ", prpair);
         Log::extreme << "}\n";
       }
     }
@@ -230,19 +226,19 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
     };
 
     auto print_last_write_sequence = [this](Log::redirection_stream &rs,
-                                        const std::list<std::map<Lang::NML, value_t> > &seq,
-                                        int pid) {
+                                            const std::list<std::map<Lang::NML, value_t> > &seq,
+                                            int pid) {
       auto mlts = this->machine.ml_pretty_vts(pid);
       auto nmlts = [mlts, pid](Lang::NML nml) { return mlts(nml.localize(pid)); };
-      PPUtils::print_sequence_with_separator(rs, seq, ":",
-        [nmlts](Log::redirection_stream &rs, const std::map<Lang::NML, value_t> &map) {
+      auto prpair = [nmlts](Log::redirection_stream &rs, const std::pair<Lang::NML, value_t> &pair) {
+        rs << nmlts(pair.first) << "=" << pair.second.to_string();
+      };
+      auto prmap = [prpair](Log::redirection_stream &rs, const std::map<Lang::NML, value_t> &map) {
           rs << "{";
-          PPUtils::print_sequence_with_separator(rs, map, ", ",
-            [nmlts](Log::redirection_stream &rs, const std::pair<Lang::NML, value_t> &pair) {
-              rs << nmlts(pair.first) << "=" << pair.second.to_string();
-            });
+          PPUtils::print_sequence_with_separator(rs, map, ", ", prpair);
           rs << "}";
-        });
+        };
+      PPUtils::print_sequence_with_separator(rs, seq, ":", prmap);
     };
 
     Log::extreme << "Last write sets:\n";
@@ -715,9 +711,9 @@ Constraint::Comparison PwsConstraint::entailment_compare(const Constraint &c) co
 }
 
 Constraint::Comparison PwsConstraint::entailment_compare_impl(const PwsConstraint &pwsc) const {
-  Constraint::Comparison cmp = ChannelConstraint::entailment_compare(pwsc);
+  Constraint::Comparison cmp = entailment_compare_buffers(pwsc);
   if (cmp == Constraint::INCOMPARABLE) return cmp;
-  return comb_comp(entailment_compare_buffers(pwsc), cmp);
+  return comb_comp(ChannelConstraint::entailment_compare(pwsc), cmp);
 }
 
 Constraint::Comparison PwsConstraint::entailment_compare_buffers(const PwsConstraint &pwsc) const {
@@ -763,25 +759,7 @@ std::vector<std::pair<int, Lang::NML> > PwsConstraint::get_filled_buffers() cons
 
 bool PwsConstraint::unreachable() {
   if (PwsConstraint::use_pending_sets) {
-    for (uint pid = 0; pid < common.machine.automata.size(); ++pid) {
-      for (Lang::NML nml : common.nmls) {
-        int nmli = common.index(nml);
-        if (write_buffers[pid][nmli].size() > 0) {
-          if (!common.pending_buffers[pid][pcs[pid]].count(nml)) return true;
-          value_t possible_pending = common.pending_buffers[pid][pcs[pid]][nml];
-          if (possible_pending != value_t::STAR) {
-            for (int i = 0; i < write_buffers[pid][nmli].size(); ++i) {
-              if (write_buffers[pid][nmli][i] == value_t::STAR)
-                write_buffers[pid][nmli] = write_buffers[pid][nmli].assign(i, possible_pending);
-              else if (write_buffers[pid][nmli][i] != possible_pending)
-                return true;
-            }
-          }
-        }
-      }
-    }
-
-    // Check each message that is ahead of the writing process's cpointer
+    // Check each message that is ahead of the writing process' cpointer
     for (int ci = channel.size()-1; ci >= 0; --ci) {
       int pid = channel[ci].wpid;
       if (ci > cpointers[pid]) {
