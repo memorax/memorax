@@ -167,15 +167,6 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
       .push_back(&all_transitions[i]);
   }
 
-  auto is_sfence = [](const Lang::Stmt<int> &stmt, Lang::MemLoc<int> ml) {
-    return (stmt.get_type() == Lang::SFENCE ||
-            stmt.get_type() == Lang::MFENCE ||
-            (stmt.get_type() == Lang::LOCKED &&
-             std::find(stmt.get_writes().begin(), stmt.get_writes().end(), ml)
-             != stmt.get_writes().end()));
-
-  };
-
   auto is_mfence = [](const Lang::Stmt<int> &stmt, Lang::MemLoc<int> ml) {
     return (stmt.get_type() == Lang::MFENCE ||
             (stmt.get_type() == Lang::LOCKED &&
@@ -209,7 +200,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
       for (unsigned i = 0; i < pending_set[p].size(); ++i) {
         Log::extreme << "  Q" << i << " {";
         PPUtils::print_sequence_with_separator(Log::extreme, pending_set[p][i], ", ", prpair);
-        Log::extreme << "}\n";
+        Log::extreme << "}" << std::endl;
       }
     }
   }
@@ -330,7 +321,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
             rs << "|";
             print_last_write_sequence(rs, seq.second, pid);
           });
-        Log::extreme << "}\n";
+        Log::extreme << "}" << std::endl;
       }
     }
   }

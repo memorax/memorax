@@ -127,25 +127,27 @@ void ChannelBwd::messages_lost(const std::vector<ChannelConstraint::Msg> &ch0,
                                const ChannelConstraint::Common *common) const{
   assert(ch1.size() <= ch0.size());
   VecSet<int> to_remove; // Indices into ch
-  for(auto it = common->messages.begin(); it != common->messages.end(); ++it){
-    /* Count the number of occurrences of *it in ch0 and ch1 */
+  /* For each possible message msg, check if an instance if that message has
+   * been lost. */
+  for(const ChannelConstraint::Common::MsgHdr msg : common->messages){
+    /* Count the number of occurrences of msg in ch0 and ch1 */
     int ch0_count = 0;
     int ch1_count = 0;
-    int ch0_rmi = -1; // Rightmost index of *it in ch0
+    int ch0_rmi = -1; // Rightmost index of msg in ch0
     for(unsigned i = 0; i < ch0.size(); ++i){
-      if(ch0[i].wpid == it->wpid && ch0[i].nmls == it->nmls){
+      if(ch0[i].wpid == msg.wpid && ch0[i].nmls == msg.nmls){
         ++ch0_count;
         ch0_rmi = i;
       }
     }
     for(unsigned i = 0; i < ch1.size(); ++i){
-      if(ch1[i].wpid == it->wpid && ch1[i].nmls == it->nmls){
+      if(ch1[i].wpid == msg.wpid && ch1[i].nmls == msg.nmls){
         ++ch1_count;
       }
     }
     bool is_w_msg =
-      (ch1.back().wpid == it->wpid && ch1.back().nmls == it->nmls);
-    /* Has a message corresponding to *it been lost? */
+      (ch1.back().wpid == msg.wpid && ch1.back().nmls == msg.nmls);
+    /* Has a message corresponding to msg been lost? */
     bool is_lost;
     if(is_w_msg){
       is_lost = (ch1_count <= ch0_count);
@@ -155,8 +157,11 @@ void ChannelBwd::messages_lost(const std::vector<ChannelConstraint::Msg> &ch0,
       if(is_lost) assert(ch1_count == ch0_count - 1);
     }
 
-    /* The lost message is the rightmost occurrence of *it in ch0 */
-    if (ch0_rmi != -1) to_remove.insert(ch0_rmi);
+    /* The lost message is the rightmost occurrence of msg in ch0. */
+    if (is_lost) {
+      assert(ch0_rmi != -1);
+      to_remove.insert(ch0_rmi);
+    }
   }
 
   /* Remove messages in to_remove */
@@ -173,5 +178,4 @@ void ChannelBwd::messages_lost(const std::vector<ChannelConstraint::Msg> &ch0,
   ch->resize(j);
 
   ch->push_back(w);
-  //throw new std::logic_error("ChannelBwd::messages_lost: Insufficiently tested.");
 };

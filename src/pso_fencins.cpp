@@ -54,12 +54,12 @@ namespace PsoFencins{
 
     Reachability::Result *result = 0;
     while(!queue.empty()){
+      Reachability::Arg *next_arg = reach_arg_init(queue.front().get_atomized_machine(), result);
 
       Log::msg << "Currently examining fence set:\n";
       queue.front().print(Log::msg,Log::null);
       Log::msg << std::endl;
 
-      Reachability::Arg *next_arg = reach_arg_init(queue.front().get_atomized_machine(),result);
       Reachability::Result *tmp_result = r.reachability(next_arg);
       delete next_arg;
       if (result) delete result;
@@ -70,7 +70,8 @@ namespace PsoFencins{
       case Reachability::REACHABLE:
         {
           Log::debug << " *** Error Trace (PSO) ***\n";
-          result->trace->print(Log::debug,Log::extreme,Log::json,queue.front().get_atomized_machine());
+          result->trace->print(Log::debug, Log::extreme, Log::json,
+                               queue.front().get_atomized_machine());
           Log::debug << "\n";
           std::list<cycle_t> cycs = find_cycles(*result->trace);
 
@@ -82,7 +83,14 @@ namespace PsoFencins{
 
           for (const cycle_t &cycle : cycs) {
             FenceSet fs = queue.front().atomize(cycle, *result->trace);
-            if (!subsumed(fs, ++queue.begin(), queue.end()) && !subsumed(fs, complete.begin(), complete.end())) {
+            if (!subsumed(fs, ++queue.begin(),  queue.end()) &&
+                !subsumed(fs, complete.begin(), complete.end())) {
+              /* Remove any fence set that is subsumed by fs from queue. */
+              auto list_iter = ++queue.begin();
+              while (list_iter != queue.end())
+                if (fs.includes(*list_iter)) list_iter = queue.erase(list_iter);
+                else list_iter++;
+
               queue.push_back(fs);
             }
           }
