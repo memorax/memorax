@@ -34,7 +34,6 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
    * channel, which ChannelBwd::convert_trace then can complete the repairs of
    * the trace on. */
   std::unique_ptr<Trace> temp(new Trace(dynamic_cast<const ChannelConstraint*>(trace->constraint(0))->clone()));
-  int temp_pos = 1;
   /* each element in lost_values[pid, nmli][*] corresponds to an element in process
    * pid's buffer to memory location nmli and contains the values of all writes lost */
   std::map<std::pair<int, int>, std::list<std::vector<ZStar<int> > > > lost_values;
@@ -52,8 +51,6 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
       if (pwsc1.write_buffers[pid][nmli].size() + 1 != pwsc2.write_buffers[pid][nmli].size()) {
         /* Value lost in the buffer. */
         assert(pwsc1.write_buffers[pid][nmli].size() == pwsc2.write_buffers[pid][nmli].size());
-        Log::debug << "Write \"" << trans->to_string(common.machine) << "\" hides buffer value "
-                   << pwsc1.write_buffers[pid][nmli].back().to_string() << std::endl;
         lost_values[p(pid, nmli)].back().push_back(pwsc1.write_buffers[pid][nmli].back());
       } else {
         /* No values lost in the buffer. */
@@ -64,6 +61,7 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
       assert(s.get_writes().size() == 1);
       Lang::NML nml(s.get_writes()[0], pid);
       int nmli = common.index(nml);
+      assert(pwsc1.write_buffers[pid][nmli].size() == pwsc2.write_buffers[pid][nmli].size() + 1);
       for (ZStar<int> lost_value : lost_values[p(pid, nmli)].front()) {
         std::unique_ptr<PwsConstraint> clone(pwsc2.clone());
         clone->channel.back().store = clone->channel.back().store.assign(nmli, lost_value);
@@ -81,7 +79,7 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
   temp->print(Log::extreme,Log::extreme,Log::json,common.machine);
   Log::extreme << "\n\n";
 
-  temp = std::unique_ptr<Trace>(ChannelBwd::convert_trace(&*temp, cmn));
+  temp = std::unique_ptr<Trace>(ChannelBwd::convert_trace(temp.get(), cmn));
   // Filter out serialise transitions
   Trace *result = new Trace(0);
   for (int i = 1; i <= temp->size(); ++i) {

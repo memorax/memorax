@@ -31,9 +31,9 @@ std::vector<ChannelContainer::CWrapper*> &PwsContainer::get_F_set(CWrapper *cw) 
 }
 
 void PwsContainer::visit_F(std::function<void(std::vector<CWrapper*>&)> f) {
-  for(auto FPerPcs : F) {
-    for (auto FPerChar : FPerPcs.second) {
-      for (auto subset : FPerChar.second) {
+  for(auto &FPerPcs : F) {
+    for (auto &FPerChar : FPerPcs.second) {
+      for (auto &subset : FPerChar.second) {
         f(subset.second);
       }
     }

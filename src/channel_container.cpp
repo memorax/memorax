@@ -178,8 +178,8 @@ std::vector<ChannelContainer::CWrapper*> &ChannelContainer::get_F_set(CWrapper *
 }
 
 void ChannelContainer::visit_F(std::function<void(std::vector<CWrapper*>&)> f){
-  for(auto FPerPcs : F){
-    for (auto subset : FPerPcs.second){
+  for(auto &FPerPcs : F){
+    for (auto &subset : FPerPcs.second){
       f(subset.second);
     }
   }

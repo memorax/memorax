@@ -368,23 +368,25 @@ PwsConstraint::PwsConstraint(std::vector<int> pcs, const Common::MsgHdr &msg, Co
 
 std::list<const Machine::PTransition*> PwsConstraint::partred() const{
   std::list<const Machine::PTransition*> l;
-  if(use_limit_other_updates){
-    for(unsigned p = 0; p < pcs.size(); ++p){
+  if (use_limit_other_updates) {
+    for (unsigned p = 0; p < pcs.size(); ++p) {
       bool has_read = false;
-      for(auto it = common.transitions_by_pc[p][pcs[p]].begin(); it != common.transitions_by_pc[p][pcs[p]].end(); ++it){
-        if((*it)->instruction.get_reads().size()){
+      for (const Machine::PTransition *trans : common.transitions_by_pc[p][pcs[p]]) {
+        if (trans->instruction.get_reads().size()) {
           has_read = true;
         }
       }
-      for(auto it = common.transitions_by_pc[p][pcs[p]].begin(); it != common.transitions_by_pc[p][pcs[p]].end(); ++it){
-        if((*it)->instruction.get_type() != Lang::UPDATE || has_read || cpointers[p] == int(channel.size())-1){
-          l.push_back(*it);
+      for (const Machine::PTransition *trans : common.transitions_by_pc[p][pcs[p]]) {
+        if (trans->instruction.get_type() != Lang::UPDATE || has_read ||
+            cpointers[p] == int(channel.size())-1) {
+          l.push_back(trans);
         }
       }
     }
-  }else{
-    for(unsigned p = 0; p < pcs.size(); ++p){
-      l.insert(l.end(),common.transitions_by_pc[p][pcs[p]].begin(),common.transitions_by_pc[p][pcs[p]].end());
+  } else {
+    for (unsigned p = 0; p < pcs.size(); ++p) {
+      l.insert(l.end(), common.transitions_by_pc[p][pcs[p]].begin(),
+                        common.transitions_by_pc[p][pcs[p]].end());
     }
   }
   return l;

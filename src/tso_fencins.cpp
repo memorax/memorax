@@ -39,11 +39,6 @@ namespace TsoFencins{
     }
   }
 
-  /* Returns the transition from m which equals w modulo atomizity.
-   *
-   * Pre: w is a write transition or an locked write instruction.
-   *      There is exactly one transition in m which equals w modulo atomizity.
-   */
   Machine::PTransition get_transition_from_machine(const Machine &m, const Machine::PTransition &w){
     const std::set<Automaton::Transition*> &ft = m.automata[w.pid].get_states()[w.source].fwd_transitions;
     Lang::Stmt<int> wi = w.instruction;
@@ -166,9 +161,6 @@ namespace TsoFencins{
     return complete;
   };
 
-  /* Returns a map which maps pointers to writes in trace to the
-   * corresponding pointers to updates in trace.
-   */
   std::map<const Machine::PTransition*,const Machine::PTransition*>
   pair_writes_with_updates(const Trace &trace){
     std::map<const Machine::PTransition*,const Machine::PTransition*> pairs;

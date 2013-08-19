@@ -37,7 +37,7 @@ public:
   class Common : public ChannelConstraint::Common{
   public:
     Common(const Machine &m);
-    virtual ~Common() noexcept {};
+    virtual ~Common() {};
     virtual std::string to_string() const {
       return "<SbConstraint::Common>";
     };
@@ -118,7 +118,7 @@ private:
    * Messages where this does not hold can be discarded, since they
    * will never reach an initial state.
    */
-bool ok_channel();
+  bool ok_channel();
 
   /* Tries to unify messages in channel with messages in lmv. If
    * possible, then the unified channel is returned and *unifiable is

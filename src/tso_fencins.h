@@ -131,7 +131,7 @@ namespace TsoFencins{
                               bool only_one = true);
 
   /* Returns all cycles in trace that are enabled by some TSO
-   * reordering in trace.
+   * reordering in trace. Handles both TSO and PSO traces.
    */
   std::list<cycle_t> find_cycles(const Trace &trace);
 
@@ -192,9 +192,11 @@ namespace TsoFencins{
    */
   bool fence_between(const Trace &trace, const Machine &m, int wi, int ri);
 
-  /* Returns the transition from m which equals w modulo atomicity.
+  /* Returns the transition from m which equals w modulo atomicity. Handles both
+   * TSO and PSO semantics.
    *
-   * Pre: w is a write transition or an locked write instruction.
+   * Pre: w is a write transition, a slocked write transition or an locked write
+   *        instruction.
    *      There is exactly one transition in m which equals w modulo atomicity.
    */
   Machine::PTransition get_transition_from_machine(const Machine &m, const Machine::PTransition &w);
@@ -215,8 +217,8 @@ namespace TsoFencins{
    */
   std::pair<int,int> get_cycle_bounds(const cycle_t &cycle, const Trace &trace);
   
-  /* Returns a map which maps pointers to writes in trace to the
-   * corresponding pointers to updates in trace.
+  /* Returns a map which maps pointers to writes in trace to the corresponding
+   * pointers to updates in trace. Handles both TSO and PSO semantics.
    */
   std::map<const Machine::PTransition*,const Machine::PTransition*>
   pair_writes_with_updates(const Trace &trace);
