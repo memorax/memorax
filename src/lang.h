@@ -637,8 +637,11 @@ namespace Lang {
        * 
        * Returns 0 if *this is equal to lstmt, -1 if *this is smaller
        * than lstmt and 1 if *this is greater than lstmt.
+       *
+       * If cmp_pos, then the source code position of the statements are
+       * compared as well, otherwise the position is ignored.
        */
-      int compare(const labeled_stmt_t &lstmt) const throw();
+      int compare(const labeled_stmt_t &lstmt,bool cmp_pos) const throw();
     };
     /* If statement: if b then s */
     static Stmt<RegId> if_stmt(const BExpr<RegId> &b,

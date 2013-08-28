@@ -827,7 +827,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
         if(bc != 0){
           return bc;
         }else{
-          int s0c = stmts[0].compare(stmt.stmts[0]);
+          int s0c = stmts[0].compare(stmt.stmts[0],cmp_pos);
           if(s0c != 0){
             return s0c;
           }else{
@@ -838,7 +838,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
             }else if(stmt_count == 1){
               return 0;
             }else{
-              return stmts[1].compare(stmt.stmts[1]);
+              return stmts[1].compare(stmt.stmts[1],cmp_pos);
             }
           }
         }
@@ -849,7 +849,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
         if(bc != 0){
           return bc;
         }else{
-          return stmts[0].compare(stmt.stmts[0]);
+          return stmts[0].compare(stmt.stmts[0],cmp_pos);
         }
       }
     case LOCKED:
@@ -865,7 +865,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
             return 1;
           }else{
             for(int i = 0; i < stmt_count; i++){
-              int c = stmts[i].compare(stmt.stmts[i]);
+              int c = stmts[i].compare(stmt.stmts[i],cmp_pos);
               if(c != 0){
                 return c;
               }
@@ -883,7 +883,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
           return 1;
         }else{
           for(int i = 0; i < stmt_count; i++){
-            int c = stmts[i].compare(stmt.stmts[i]);
+            int c = stmts[i].compare(stmt.stmts[i],cmp_pos);
             if(c != 0){
               return c;
             }
@@ -897,13 +897,13 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
   }
 }
 
-template<class RegId> int Lang::Stmt<RegId>::labeled_stmt_t::compare(const labeled_stmt_t &lstmt) const throw(){
+template<class RegId> int Lang::Stmt<RegId>::labeled_stmt_t::compare(const labeled_stmt_t &lstmt,bool cmp_pos) const throw(){
   if(lbl < lstmt.lbl){
     return -1;
   }else if(lbl > lstmt.lbl){
     return 1;
   }else{
-    return stmt.compare(lstmt.stmt);
+    return stmt.compare(lstmt.stmt,cmp_pos);
   }
 }
 

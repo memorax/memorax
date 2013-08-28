@@ -21,6 +21,7 @@
 #ifndef __SB_CONTAINER__
 #define __SB_CONTAINER__
 
+#include "log.h"
 #include "constraint_container.h"
 #include "sb_constraint.h"
 #include "ticket_queue.h"
@@ -172,12 +173,12 @@ private:
     int longest_comparable_array;
     int invalidate_count;
     void print(){
-      std::cout << " ==========================\n"
-                << " = SbContainer statistics =\n"
-                << " ==========================\n"
-                << " longest channel: " << longest_channel << "\n"
-                << " longest comparable array: " << longest_comparable_array << "\n"
-                << " invalidated: " << invalidate_count << "\n";
+      Log::debug << " ==========================\n"
+                 << " = SbContainer statistics =\n"
+                 << " ==========================\n"
+                 << " longest channel: " << longest_channel << "\n"
+                 << " longest comparable array: " << longest_comparable_array << "\n"
+                 << " invalidated: " << invalidate_count << "\n";
     };
   };
 
