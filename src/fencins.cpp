@@ -172,6 +172,15 @@ namespace Fencins{
       }
       assert(m_synced != 0);
 
+      Log::msg << "Trying the following synchronization set:\n";
+      if(mc.empty()){
+        Log::msg << "  (No synchronization)\n";
+      }
+      for(auto s : mc){
+        Log::msg << s->to_string(m);
+      }
+      Log::msg << "\n";
+
       Reachability::Arg *rarg = reach_arg_init(*m_synced,prev_result);
       Reachability::Result *res = r.reachability(rarg);
       if(prev_result) delete prev_result;
@@ -210,6 +219,7 @@ namespace Fencins{
       }else if(res->result == Reachability::UNREACHABLE){
         /* mc is a solution for m */
         /* Clone mc */
+        Log::msg << "Synchronization set shown to be a solution.\n\n";
         std::set<Sync*> fs;
         for(auto it = mc.begin(); it != mc.end(); ++it){
           fs.insert((*it)->clone());
