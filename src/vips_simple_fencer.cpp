@@ -123,7 +123,8 @@ std::map<int,int> VipsSimpleFencer::get_sync_points(const Trace &t){
           for(int j = i-1; j >= 1; --j){
             if(t[j]->pid == t[i]->pid &&
                t[j]->instruction.get_type() == Lang::WRITE &&
-               t[j]->instruction.get_writes() == t[i]->instruction.get_writes()){
+               t[j]->instruction.get_writes() == t[i]->instruction.get_writes() &&
+               sps[j] > t.size()){
               assert(sps.count(j));
               sps[i] = sps[j];
               break;
@@ -522,6 +523,39 @@ P0 L1 L2 syncwr: x := 2
       delete m;
 
     }
+
+    /* Test 6 */
+    {
+      Machine *m = get_machine(R"(
+forbidden *
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: write: x := 2;
+  L2: nop
+)");
+
+      Trace *t = get_vips_trace(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 L1 L2 write: x := 2
+)");
+
+      Test::inner_test("get_sync_points #6",
+                       tst_sps(t,{-1,-1,3,-1,8}));
+
+      delete t;
+      delete m;
+    }
+
   }
 
   /* Test get_reordered_procs */
