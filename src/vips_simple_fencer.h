@@ -42,6 +42,14 @@ public:
 private:
   std::set<VipsFenceSync*> all_fences;
 
+  /* For each process p with a control state q, fences_by_pq[p][q] is
+   * the subset of all_fences corresponding to that process and
+   * control state.
+   *
+   * The pointers point to the same objects as those in all_fences.
+   */
+  std::vector<std::vector<std::set<VipsFenceSync*> > > fences_by_pq;
+
   /* Returns a map m such that for each transition index i into t,
    * m[i] is the synchronization point of t[i] in t.
    */
@@ -59,6 +67,18 @@ private:
 
   /* Returns true iff s is a CAS statement */
   static bool is_cas(const Lang::Stmt<int> &s);
+
+  /* Returns true iff s is a fetch, wrllc or evict */
+  static bool is_sys_event(const Lang::Stmt<int> &s);
+
+  /* Return the subset of all_fences of fences of process pid that fit
+   * immediately between in and out.
+   */
+  std::set<Sync*> fences_between(int pid,
+                                 const Automaton::Transition &in,
+                                 const Automaton::Transition &out,
+                                 const std::vector<const Sync::InsInfo*> &m_infos) const;
+
 };
 
 #endif

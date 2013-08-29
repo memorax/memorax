@@ -27,10 +27,15 @@
 
 VipsSimpleFencer::VipsSimpleFencer(const Machine &m) : TraceFencer(m) {
   {
+    for(unsigned p = 0; p < m.automata.size(); ++p){
+      fences_by_pq.push_back(std::vector<std::set<VipsFenceSync*> >(m.automata[p].get_states().size()));
+    }
     auto S = VipsFenceSync::get_all_possible(m);
     for(auto s : S){
       assert(dynamic_cast<VipsFenceSync*>(s));
-      all_fences.insert(static_cast<VipsFenceSync*>(s));
+      VipsFenceSync *vfs = static_cast<VipsFenceSync*>(s);
+      all_fences.insert(vfs);
+      fences_by_pq[vfs->get_pid()][vfs->get_q()].insert(vfs);
     }
   }
 };
@@ -42,7 +47,35 @@ VipsSimpleFencer::~VipsSimpleFencer(){
 };
 
 std::set<std::set<Sync*> > VipsSimpleFencer::fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{
-  throw new std::logic_error("VipsSimpleFencer::fence: Not implemented.");
+  std::vector<std::set<int> > rps = get_reordered_procs(t);
+
+  std::set<Sync*> syncs;
+
+  for(int i = 1; i <= t.size(); ++i){
+    int pid = t[i]->pid;
+    if(rps[i].count(pid)){
+      /* Find the next instruction transition of pid */
+      int i_next = i+1;
+      while(i_next <= t.size() && 
+            (t[i_next]->pid != pid || is_sys_event(t[i_next]->instruction))){
+        ++i_next;
+      }
+      assert(i_next <= t.size());
+      std::set<Sync*> ss = fences_between(pid,*t[i],*t[i_next],m_infos);
+      syncs.insert(ss.begin(),ss.end());
+    }
+  }
+
+  if(syncs.empty()){
+    return {};
+  }else{
+    /* Clone syncs and put them into an enclosing singleton set */
+    std::set<Sync*> syncs_clone;
+    for(auto s : syncs){
+      syncs_clone.insert(s->clone());
+    }
+    return {syncs_clone};
+  }
 };
 
 std::vector<std::set<int> > VipsSimpleFencer::get_reordered_procs(const Trace &t){
@@ -137,6 +170,50 @@ std::map<int,int> VipsSimpleFencer::get_sync_points(const Trace &t){
   }
 
   return sps;
+};
+
+std::set<Sync*> VipsSimpleFencer::fences_between(int pid,
+                                                 const Automaton::Transition &in,
+                                                 const Automaton::Transition &out,
+                                                 const std::vector<const Sync::InsInfo*> &m_infos) const{
+  assert(in.target == out.source);
+  int q = in.target;
+
+  if(q >= (int)fences_by_pq[pid].size()){
+    q = FenceSync::InsInfo::original_q(m_infos,q);
+  }
+
+  const std::set<VipsFenceSync*> &pqs = fences_by_pq[pid][q];
+
+  /* Return true iff there is some t' in S such that t' changed
+   * according to m_infos equals t.
+   */
+  std::function<bool(const Automaton::Transition&,const FenceSync::TSet&)> member = 
+    [&m_infos,pid](const Automaton::Transition &t,const FenceSync::TSet &S){
+    for(auto it = S.begin(); it != S.end(); ++it){
+      if(t.compare(FenceSync::InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid)),false) == 0){
+        return true;
+      }
+    }
+    return false;
+  };
+
+  std::set<Sync*> syncs;
+
+  for(auto it = pqs.begin(); it != pqs.end(); ++it){
+    /* Check that in and out are in IN and OUT of *it. */
+    if(member(in,(*it)->get_IN()) && member(out,(*it)->get_OUT())){
+      syncs.insert(*it);
+    }
+  }
+
+  return syncs;
+};
+
+bool VipsSimpleFencer::is_sys_event(const Lang::Stmt<int> &s){
+  return s.get_type() == Lang::FETCH ||
+    s.get_type() == Lang::WRLLC ||
+    s.get_type() == Lang::EVICT;
 };
 
 bool VipsSimpleFencer::is_cas(const Lang::Stmt<int> &s){
@@ -558,6 +635,81 @@ P0 L2 L3 read: y = 0
 
       Test::inner_test("get_reordered_procs #4",
                        tst_rps(t,{{},{},{},{0},{0},{0},{}}));
+      delete t;
+      delete m;
+    }
+  }
+
+  /* Test fence */
+  {
+    std::function<bool(const Machine*,const std::set<std::set<Sync*> >, std::vector<std::set<std::string> >)> tst_fence =
+      [&cs](const Machine *m,const std::set<std::set<Sync*> > syncs, std::vector<std::set<std::string> > tgt){
+      std::set<std::pair<int,int> > syncs_pcs, tgt_pcs;
+      for(unsigned p = 0; p < tgt.size(); ++p){
+        for(auto lbl : tgt[p]){
+          tgt_pcs.insert({p,cs(m,p,lbl)});
+        }
+      }
+      if(syncs.size() != 1){
+        return false;
+      }
+      for(auto s : *syncs.begin()){
+        VipsFenceSync *vfs = static_cast<VipsFenceSync*>(s);
+        syncs_pcs.insert({vfs->get_pid(),vfs->get_q()});
+      }
+      return syncs_pcs == tgt_pcs;
+    };
+
+    /* Test 1 */
+    {
+      Machine *m = get_machine(R"(
+forbidden CS CS
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: read: y = 0;
+  CS: write: x := 0;
+  goto L0
+process
+text
+  L0: write: y := 1;
+  L1: read: x = 0;
+  CS: write: y := 0;
+  goto L0
+)");
+
+      Trace *t = get_vips_trace(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 fetch y
+P1 fetch x
+P0 L1 CS read: y = 0
+P1 fetch y
+P1 L0 L1 write: y := 1
+P0 wrllc x
+P0 evict x
+P1 L1 CS read: x = 0
+P1 wrllc y
+)");
+
+      VipsSimpleFencer vsf(*m);
+      std::set<std::set<Sync*> > syncs = vsf.fence(*t,{});
+
+      Test::inner_test("fence #1",tst_fence(m,syncs,{{"L1"},{"L1"}}));
+
+      for(auto ss : syncs){
+        for(auto s : ss){
+          delete s;
+        }
+      }
+
       delete t;
       delete m;
     }
