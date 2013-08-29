@@ -51,6 +51,7 @@ vecset.h vecset.tcc \
 vips_bit_constraint.h vips_bit_constraint.cpp \
 vips_bit_reachability.h vips_bit_reachability.cpp \
 vips_fence_sync.h vips_fence_sync.cpp \
+vips_simple_fencer.h vips_simple_fencer.cpp \
 zstar.h zstar.tcc
 memorax_gui_SOURCES = gui.py
 
