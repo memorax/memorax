@@ -47,6 +47,16 @@ private:
    */
   static std::map<int,int> get_sync_points(const Trace &t);
 
+  /* Returns a vector m such that for each constraint index i into t,
+   * the processes in m[i] are precisely those p such that there
+   * exists indices j <= i < k where t[j]->pid == t[k]->pid == p and
+   * the synchronization point of t[k] strictly preceeds that of t[j].
+   *
+   * The returned vector has the same size as the number of
+   * constraints in t.
+   */
+  static std::vector<std::set<int> > get_reordered_procs(const Trace &t);
+
   /* Returns true iff s is a CAS statement */
   static bool is_cas(const Lang::Stmt<int> &s);
 };

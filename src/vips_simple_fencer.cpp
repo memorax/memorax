@@ -45,6 +45,26 @@ std::set<std::set<Sync*> > VipsSimpleFencer::fence(const Trace &t, const std::ve
   throw new std::logic_error("VipsSimpleFencer::fence: Not implemented.");
 };
 
+std::vector<std::set<int> > VipsSimpleFencer::get_reordered_procs(const Trace &t){
+  std::map<int,int> sps = get_sync_points(t);
+  std::vector<std::set<int> > rps(t.size()+1);
+
+  for(int i = 1; i < t.size(); ++i){
+    if(sps.count(i) == 0) continue; // Ignore this transition
+    for(int j = i+1; j <= t.size(); ++j){
+      if(sps.count(j) == 0 || t[j]->pid != t[i]->pid) continue; // Ignore this transition
+      if(sps[j] < sps[i]){
+        // Reordering, add pid to all intermediate elements in rps
+        for(int k = i; k < j; ++k){
+          rps[k].insert(t[i]->pid);
+        }
+      }
+    }
+  }
+
+  return rps;
+};
+
 std::map<int,int> VipsSimpleFencer::get_sync_points(const Trace &t){
   std::map<int,int> sps;
 
@@ -390,6 +410,7 @@ P0 L2 L3 read: x = 2
       Test::inner_test("get_sync_points #4",
                        tst_sps(t,{-1,-1,6,6,6}));
 
+      delete t;
       delete m;
 
     }
@@ -420,6 +441,125 @@ P0 L1 L2 syncwr: x := 2
       Test::inner_test("get_sync_points #5",
                        tst_sps(t,{-1,1,2}));
 
+      delete t;
+      delete m;
+
+    }
+  }
+
+  /* Test get_reordered_procs */
+  {
+    std::function<bool(const Trace*,std::vector<std::set<int> >)> tst_rps =
+      [](const Trace *t,std::vector<std::set<int> > tgt){
+      return get_reordered_procs(*t) == tgt;
+    };
+
+    /* Test 1,2 */
+    {
+      Machine *m = get_machine(R"(
+forbidden * *
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: read: y = 0;
+  L2: write: x := 0;
+  goto L0
+process
+text
+  L0: write: y := 1;
+  L1: read: x = 0;
+  L2: write: y := 0;
+  goto L0
+)");
+
+      Trace *t = get_vips_trace(m,R"(
+P0 fetch x
+P0 fetch y
+P0 L0 L1 write: x := 1
+P1 fetch y
+P0 L1 L2 read: y = 0
+P1 L0 L1 write: y := 1
+P1 wrllc y
+P1 fetch x
+P1 L1 L2 read: x = 0
+)");
+
+      Test::inner_test("get_reordered_procs #1",
+                       tst_rps(t,{{},{},{},{0},{0},{},{},{},{},{}}));
+
+      delete t;
+
+      t = get_vips_trace(m,R"(
+P0 fetch x
+P0 fetch y
+P0 L0 L1 write: x := 1
+P1 fetch y
+P1 L0 L1 write: y := 1
+P0 L1 L2 read: y = 0
+P1 fetch x
+P1 wrllc y
+P1 L1 L2 read: x = 0
+)");
+
+      Test::inner_test("get_reordered_procs #2",
+                       tst_rps(t,{{},{},{},{0},{0},{0,1},{1},{1},{1},{}}));
+
+      delete t;
+      delete m;
+    }
+
+    /* Test 3,4 */
+    {
+      Machine *m = get_machine(R"(
+forbidden *
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: read: x = 1;
+  L2: read: y = 0;
+  L3: nop
+)");
+
+      Trace *t = get_vips_trace(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 L1 L2 read: x = 1
+P0 wrllc x
+P0 fetch y
+P0 L2 L3 read: y = 0
+)");
+
+      Test::inner_test("get_reordered_procs #3",
+                       tst_rps(t,{{},{},{},{},{},{},{}}));
+      delete t;
+
+      t = get_vips_trace(m,R"(
+P0 fetch y
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 L1 L2 read: x = 1
+P0 wrllc x
+P0 L2 L3 read: y = 0
+)");
+
+      Test::inner_test("get_reordered_procs #4",
+                       tst_rps(t,{{},{},{},{0},{0},{0},{}}));
+      delete t;
+      delete m;
     }
   }
 
