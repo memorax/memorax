@@ -28,10 +28,23 @@
 #include "test.h"              // for testing
 #include "tso_simple_fencer.h" // for testing
 
+#include <algorithm>
 #include <sstream>
 #include <stdexcept>
 
 namespace Fencins{
+
+  void add_disj_to_cnf(const std::set<Sync*> &disj, std::set<std::set<Sync*> > *cnf){
+    for(auto it = cnf->begin(); it != cnf->end(); ){
+      if(std::includes(it->begin(),it->end(),
+                       disj.begin(),disj.end())){
+        it = cnf->erase(it);
+      }else{
+        ++it;
+      }
+    }
+    cnf->insert(disj);
+  };
 
   typedef bool (*sync_ptr_less_t)(Sync * const a, Sync * const b);
   bool sync_ptr_less(Sync * const a, Sync * const b){
@@ -147,7 +160,20 @@ namespace Fencins{
       const Machine *m_synced = 0; // The machine with mc inserted
       // Find the next Sync set to check (mc)
       {
+        {
+          int sync_count = 0;
+          for(auto it = syncs.begin(); it != syncs.end(); ++it){
+            sync_count += it->size();
+          }
+          Log::debug << "Total sync occurrence count: " << sync_count
+                     << " in " << syncs.size() << " disjunctions, avg. count: "
+                     << (double(sync_count) / double(syncs.size())) << "\n";
+        }
+        Timer tm;
+        tm.start();
         std::set<std::set<Sync*> > mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
+        tm.stop();
+        Log::debug << "min_coverage time: " << tm.get_time() << " s.\n";
         assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
         if(mcs.size() == fence_sets.size()){
           // All correct fence sets are already in fence_sets
@@ -186,6 +212,8 @@ namespace Fencins{
       if(prev_result) delete prev_result;
       prev_result = res;
 
+      Log::msg << res->to_string() << "\n";
+
       if(res->result == Reachability::REACHABLE){
         if(!res->trace){
           delete m_synced;
@@ -213,7 +241,7 @@ namespace Fencins{
               sync_ptr[p] = p;
             }
           }
-          syncs.insert(disj);
+          add_disj_to_cnf(disj,&syncs);
         }
         deep_delete(new_syncs);
       }else if(res->result == Reachability::UNREACHABLE){

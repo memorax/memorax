@@ -392,10 +392,10 @@ std::string FenceSync::to_string_aux(const std::function<std::string(const int&)
   std::stringstream ss;
   ss << "FenceSync(P" << pid << ",Q" << q << ",f:" << f.to_string(regts,mlts) << ")\n";
   for(auto it = IN.begin(); it != IN.end(); ++it){
-    ss << "IN: " << it->to_string(regts,mlts) << "\n";
+    ss << "  IN: " << it->to_string(regts,mlts) << "\n";
   }
   for(auto it = OUT.begin(); it != OUT.end(); ++it){
-    ss << "OUT: " << it->to_string(regts,mlts) << "\n";
+    ss << "  OUT: " << it->to_string(regts,mlts) << "\n";
   }
   return ss.str();
 };

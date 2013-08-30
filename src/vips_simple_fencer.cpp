@@ -47,24 +47,30 @@ VipsSimpleFencer::~VipsSimpleFencer(){
 };
 
 std::set<std::set<Sync*> > VipsSimpleFencer::fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{
-  std::vector<std::set<int> > rps = get_reordered_procs(t);
+  Log::debug << "VipsSimpleFencer trace:\n" << t.to_string() << "\n";
+  Trace *t2 = decrease_reorderings(t);
+  Log::extreme << "VipsSimpleFencer trace after rewriting:\n" << t2->to_string() << "\n";
+
+  std::vector<std::set<int> > rps = get_reordered_procs(*t2);
 
   std::set<Sync*> syncs;
 
-  for(int i = 1; i <= t.size(); ++i){
-    int pid = t[i]->pid;
+  for(int i = 1; i <= t2->size(); ++i){
+    int pid = (*t2)[i]->pid;
     if(rps[i].count(pid)){
       /* Find the next instruction transition of pid */
       int i_next = i+1;
-      while(i_next <= t.size() && 
-            (t[i_next]->pid != pid || is_sys_event(t[i_next]->instruction))){
+      while(i_next <= t2->size() && 
+            ((*t2)[i_next]->pid != pid || is_sys_event((*t2)[i_next]->instruction))){
         ++i_next;
       }
-      assert(i_next <= t.size());
-      std::set<Sync*> ss = fences_between(pid,*t[i],*t[i_next],m_infos);
+      assert(i_next <= t2->size());
+      std::set<Sync*> ss = fences_between(pid,*(*t2)[i],*(*t2)[i_next],m_infos);
       syncs.insert(ss.begin(),ss.end());
     }
   }
+
+  delete t2;
 
   if(syncs.empty()){
     return {};
@@ -233,6 +239,236 @@ bool VipsSimpleFencer::is_cas(const Lang::Stmt<int> &s){
   return true;
 }
 
+Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
+  std::vector<Machine::PTransition> ptv;
+  for(int i = 1; i <= t.size(); ++i){
+    ptv.push_back(*t[i]);
+  }
+
+  std::function<void(const std::set<int>&)> remove_pts =
+    [&ptv](const std::set<int> &rm){
+    unsigned next = 0;
+    for(unsigned i = 0; i < ptv.size(); ++i){
+      if(rm.count(i)){
+        // Do nothing
+      }else{
+        ptv[next] = ptv[i];
+        ++next;
+      }
+    }
+    ptv.resize(next,{0,Lang::Stmt<int>::nop(),0,0});
+  };
+
+  std::function<void(int,int)> move_before =
+    [&ptv](int i, int tgt){
+    if(i == tgt || i == tgt-1){
+      // Do nothing
+    }else if(i < tgt){
+      Machine::PTransition pt_i = ptv[i];
+      int j = i;
+      while(j < tgt-1){
+        ptv[j] = ptv[j+1];
+        ++j;
+      }
+      ptv[tgt-1] = pt_i;
+    }else{ // tgt < i
+      Machine::PTransition pt_i = ptv[i];
+      int j = i;
+      while(j > tgt){
+        ptv[j] = ptv[j-1];
+        --j;
+      }
+      ptv[tgt] = pt_i;
+    }
+  };
+
+  std::function<bool(const Machine::PTransition&,const Lang::NML&)> pt_accesses =
+    [](const Machine::PTransition &pt,const Lang::NML &nml){
+    std::set<Lang::NML> pt_nmls;
+    auto ws = pt.instruction.get_writes();
+    auto rs = pt.instruction.get_reads();
+    for(unsigned i = 0; i < ws.size(); ++i){
+      pt_nmls.insert(Lang::NML(ws[i],pt.pid));
+    }
+    for(unsigned i = 0; i < rs.size(); ++i){
+      pt_nmls.insert(Lang::NML(rs[i],pt.pid));
+    }
+    return pt_nmls.count(nml);
+  };
+
+  std::function<int(int,int)> src_pc =
+    [&ptv](int pid, int i){
+    int q = 0;
+    for(int j = 0; j < i; ++j){
+      if(ptv[j].pid == pid){
+        q = ptv[j].target;
+      }
+    }
+    return q;
+  };
+
+  /* Eliminate unnecessary fetch/evict transitions */
+  {
+    std::set<int> remove;
+    // last_fetch[{pid,ml}] is the last seen fetch of ml by pid
+    // only memory locations that are currently in L1 are in last_fetch
+    // only fetches that have not been followed by a variable use are in last_fetch
+    std::map<std::pair<int,Lang::MemLoc<int> >,int> last_fetch;
+    for(unsigned i = 0; i < ptv.size(); ++i){
+      int pid = ptv[i].pid;
+      switch(ptv[i].instruction.get_type()){
+      case Lang::FETCH:
+        assert(last_fetch.count({pid,ptv[i].instruction.get_writes()[0]}) == 0);
+        last_fetch[{pid,ptv[i].instruction.get_writes()[0]}] = i;
+        break;
+      case Lang::EVICT:
+        if(last_fetch.count({pid,ptv[i].instruction.get_writes()[0]})){
+          remove.insert(last_fetch[{pid,ptv[i].instruction.get_writes()[0]}]);
+          last_fetch.erase({pid,ptv[i].instruction.get_writes()[0]});
+          remove.insert(i);
+        }
+        break;
+      case Lang::WRITE:
+        last_fetch.erase({pid,ptv[i].instruction.get_writes()[0]});
+        break;
+      case Lang::READASSERT: case Lang::READASSIGN:
+        last_fetch.erase({pid,ptv[i].instruction.get_reads()[0]});
+        break;
+      case Lang::LOCKED: case Lang::SYNCWR:
+        assert(last_fetch.count({pid,ptv[i].instruction.get_writes()[0]}) == 0);
+        break;
+      default:
+        break;
+      }
+    }
+    for(auto it = last_fetch.begin(); it != last_fetch.end(); ++it){
+      remove.insert(it->second);
+    }
+    // Find unnecessary final evicts
+    {
+      std::set<int> p_has_fenced;
+      std::set<std::pair<int,Lang::MemLoc<int> > > need_evicted;
+      for(int i = int(ptv.size()) - 1; i >= 0; --i){
+        int pid = ptv[i].pid;
+        switch(ptv[i].instruction.get_type()){
+        case Lang::FETCH: case Lang::LOCKED: case Lang::SYNCWR:
+          need_evicted.insert({pid,ptv[i].instruction.get_writes()[0]});
+          break;
+        case Lang::FENCE:
+          p_has_fenced.insert(pid);
+          break;
+        case Lang::EVICT:
+          if(p_has_fenced.count(pid) == 0 &&
+             need_evicted.count({pid,ptv[i].instruction.get_writes()[0]}) == 0){
+            remove.insert(i);
+          }
+          break;
+        default:
+          break;
+        }
+      }
+    }
+
+    // Remove
+    remove_pts(remove);
+  }
+
+  /* Delay fetches as much as possible */
+  {
+    unsigned i = 0;
+    while(i < ptv.size()){
+      int pid = ptv[i].pid;
+      if(ptv[i].instruction.get_type() == Lang::FETCH){
+        Lang::NML nml(ptv[i].instruction.get_writes()[0],pid);
+        unsigned j;
+        for(j = i+1; j < ptv.size(); ++j){
+          int j_pid = ptv[j].pid;
+          if(j_pid == pid && pt_accesses(ptv[j],nml)){
+            ptv[i].source = ptv[i].target = src_pc(pid,j);
+            move_before(i,j);
+            break;
+          }else if(j_pid != pid &&
+                   pt_accesses(ptv[j],nml) &&
+                   (ptv[j].instruction.get_type() == Lang::WRLLC ||
+                    ptv[j].instruction.get_type() == Lang::LOCKED ||
+                    ptv[j].instruction.get_type() == Lang::SYNCWR)){
+            ptv[i].source = ptv[i].target = src_pc(pid,j);
+            move_before(i,j);
+            break;
+          }else{
+            // Do nothing
+          }
+        }
+        assert(j < ptv.size());
+        if(j == i+1){
+          ++i;
+        }
+      }else{
+        ++i;
+      }
+    }
+  }
+
+  /* Advance wrllcs as much as possible */
+  {
+    /* Add wrllcs where missing */
+    {
+      std::set<std::pair<int,Lang::MemLoc<int> > > pending_writes;
+      for(unsigned i = 0; i < ptv.size(); ++i){
+        int pid = ptv[i].pid;
+        if(ptv[i].instruction.get_type() == Lang::WRITE){
+          pending_writes.insert({pid,ptv[i].instruction.get_writes()[0]});
+        }else if(ptv[i].instruction.get_type() == Lang::WRLLC){
+          assert(pending_writes.count({pid,ptv[i].instruction.get_writes()[0]}));
+          pending_writes.erase({pid,ptv[i].instruction.get_writes()[0]});
+        }
+      }
+      for(auto it = pending_writes.begin(); it != pending_writes.end(); ++it){
+        int pid = it->first;
+        Lang::MemLoc<int> ml = it->second;
+        int q = src_pc(pid,ptv.size());
+        ptv.push_back({q,Lang::Stmt<int>::wrllc(ml),q,pid});
+      }
+    }
+    /* Push back wrllcs */
+    for(unsigned i = 0; i < ptv.size(); ++i){
+      if(ptv[i].instruction.get_type() == Lang::WRLLC){
+        int pid = ptv[i].pid;
+        Lang::NML nml(ptv[i].instruction.get_writes()[0],pid);
+        int j;
+        for(j = i-1; j >= 0; --j){
+          int j_pid = ptv[j].pid;
+          if(j_pid == pid &&
+             ptv[j].instruction.get_type() == Lang::WRITE &&
+             pt_accesses(ptv[j],nml)){
+            ptv[i].source = ptv[i].target = src_pc(pid,j+1);
+            move_before(i,j+1);
+            break;
+          }else if(j_pid != pid &&
+                   pt_accesses(ptv[j],nml) &&
+                   (ptv[j].instruction.get_type() == Lang::WRLLC ||
+                    ptv[j].instruction.get_type() == Lang::FETCH ||
+                    ptv[j].instruction.get_type() == Lang::LOCKED ||
+                    ptv[j].instruction.get_type() == Lang::SYNCWR)){
+            ptv[i].source = ptv[i].target = src_pc(pid,j+1);
+            move_before(i,j+1);
+            break;
+          }else{
+            // Do nothing
+          }
+        }
+        assert(j >= 0);
+      }
+    }
+  }
+
+  Trace *t2 = new Trace(0);
+  for(unsigned i = 0; i < ptv.size(); ++i){
+    t2->push_back(ptv[i],0);
+  }
+  return t2;
+};
+
 void VipsSimpleFencer::test(){
   std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
@@ -304,6 +540,8 @@ void VipsSimpleFencer::test(){
       std::string src_lbl, tgt_lbl, sinstr;
       bool is_sys_event = false;
       {
+        while(std::isspace(ln[0])) ln = ln.substr(1);
+        while(std::isspace(ln[ln.size()-1])) ln = ln.substr(0,ln.size()-1);
         std::stringstream lnss(ln);
         std::string s;
         getline(lnss,s,' ');
@@ -723,20 +961,20 @@ text
 P0 fetch x
 P0 L0 L1 write: x := 1
 P0 fetch y
-P1 fetch x
 P0 L1 CS read: y = 0
-P1 fetch y
-P1 L0 L1 write: y := 1
+  P1 fetch y
+  P1 L0 L1 write: y := 1
+  P1 wrllc y
+  P1 fetch x
+  P1 L1 CS read: x = 0
 P0 wrllc x
 P0 evict x
-P1 L1 CS read: x = 0
-P1 wrllc y
 )");
 
       VipsSimpleFencer vsf(*m);
       std::set<std::set<Sync*> > syncs = vsf.fence(*t,{});
 
-      Test::inner_test("fence #1",tst_fence(m,syncs,{{"L1"},{"L1"}}));
+      Test::inner_test("fence #1",tst_fence(m,syncs,{{"L1"},{}}));
 
       for(auto ss : syncs){
         for(auto s : ss){
@@ -746,6 +984,199 @@ P1 wrllc y
 
       delete t;
       delete m;
+    }
+  }
+
+  /* Test decrease_reorderings */
+  {
+    std::function<bool(const Trace&,const Trace &)> eq_trace =
+      [](const Trace &t1, const Trace &t2){
+      if(t1.size() != t2.size()){
+        return false;
+      }
+      for(int i = 1; i <= t1.size(); ++i){
+        if(t1[i]->compare(*t2[i],false) != 0){
+          return false;
+        }
+      }
+      return true;
+    };
+    std::function<bool(const Machine*,std::string,std::string)> tst_dec_reord =
+      [&eq_trace,&get_vips_trace](const Machine *m,std::string t,std::string tgt){
+      Trace *t_tgt = get_vips_trace(m,tgt);
+      Trace *t_t = get_vips_trace(m,t);
+      Trace *t_dec = decrease_reorderings(*t_t);
+      bool eq = eq_trace(*t_tgt,*t_dec);
+      if(!eq){
+        Log::debug << "Expected trace:\n" << t_tgt->to_string(*m)
+                   << "Got trace:\n" << t_dec->to_string(*m);
+      }
+      delete t_dec;
+      delete t_tgt;
+      delete t_t;
+      return eq;
+    };
+
+    /* Test 1 */
+    {
+      Machine *m = get_machine(R"(
+forbidden * *
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: read: y = 0;
+  CS: write: x := 0;
+  goto L0
+process
+text
+  L0: write: y := 1;
+  L1: read: x = 0;
+  CS: write: y := 0;
+  goto L0
+)");
+
+      Machine *m_fenced = get_machine(R"(
+forbidden * *
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: fence;
+  L2: read: y = 0;
+  CS: write: x := 0;
+  goto L0
+process
+text
+  L0: write: y := 1;
+  L1: fence;
+  L2: read: x = 0;
+  CS: write: y := 0;
+  goto L0
+)");
+
+      /* Unnecessary fetch */
+      Test::inner_test("decrease_reorderings #1",
+                       tst_dec_reord(m,
+                                     R"(
+P0 fetch y
+P0 fetch x
+P0 L0 L1 write: x := 1
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+)"));
+
+      /* Unnecessary fetch/evict */
+      Test::inner_test("decrease_reorderings #2",
+                       tst_dec_reord(m,
+                                     R"(
+P0 fetch y
+P0 fetch x
+P0 evict y
+P0 L0 L1 write: x := 1
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+)"));
+
+      /* Unnecessary evict */
+      Test::inner_test("decrease_reorderings #3",
+                       tst_dec_reord(m,
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+)"));
+
+      /* Necessary evict */
+      Test::inner_test("decrease_reorderings #4",
+                       tst_dec_reord(m_fenced,
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 fence
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 fence
+)"));
+
+      /* Unnecessary fetch/evict before fence */
+      Test::inner_test("decrease_reorderings #5",
+                       tst_dec_reord(m_fenced,
+                                     R"(
+P0 fetch x
+P0 fetch y
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 evict y
+P0 L1 L2 fence
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 fence
+)"));
+
+      Test::inner_test("decrease_reorderings #6",
+                       tst_dec_reord(m,
+                                     R"(
+P0 fetch x
+P0 fetch y
+  P1 fetch x
+  P1 fetch y
+P0 L0 L1 write: x := 1
+P0 L1 CS read: y = 0
+  P1 L0 L1 write: y := 1
+  P1 L1 CS read: x = 0
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 fetch y
+P0 L1 CS read: y = 0
+  P1 fetch y
+  P1 L0 L1 write: y := 1
+  P1 wrllc y
+  P1 fetch x
+P0 wrllc x
+  P1 L1 CS read: x = 0
+)"));
+
+      delete m;
+      delete m_fenced;
+
     }
   }
 

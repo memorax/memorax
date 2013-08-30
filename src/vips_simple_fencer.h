@@ -79,6 +79,14 @@ private:
                                  const Automaton::Transition &out,
                                  const std::vector<const Sync::InsInfo*> &m_infos) const;
 
+  /* Return a trace t' with the same trace graph (c.f. Shasha, Snir
+   * 1988) as t. In t' transitions have been interleaved in a
+   * different manner, and system events have been timed differently,
+   * according to heuristics meant to decrease the number of
+   * irrelevant instruction reorderings.
+   */
+  static Trace *decrease_reorderings(const Trace &t);
+
 };
 
 #endif
