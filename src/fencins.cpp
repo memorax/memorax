@@ -136,6 +136,11 @@ namespace Fencins{
      * pointers are the same: s0 == s1).
      */
     std::set<std::set<Sync *> > syncs;
+    /* If mcs_up_to_date is set, then mcs is the min coverage sets of
+     * syncs.
+     */
+    bool mcs_up_to_date = false;
+    std::set<std::set<Sync*> > mcs;
     /* Maps Sync objects o to a pointer p to a Sync object o' such
      * that o == o' and p is in some set in syncs.
      */
@@ -169,11 +174,14 @@ namespace Fencins{
                      << " in " << syncs.size() << " disjunctions, avg. count: "
                      << (double(sync_count) / double(syncs.size())) << "\n";
         }
-        Timer tm;
-        tm.start();
-        std::set<std::set<Sync*> > mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
-        tm.stop();
-        Log::debug << "min_coverage time: " << tm.get_time() << " s.\n";
+        if(!mcs_up_to_date){
+          Timer tm;
+          tm.start();
+          mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
+          mcs_up_to_date = true;
+          tm.stop();
+          Log::debug << "min_coverage time: " << tm.get_time() << " s.\n";
+        }
         assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
         if(mcs.size() == fence_sets.size()){
           // All correct fence sets are already in fence_sets
@@ -242,6 +250,7 @@ namespace Fencins{
             }
           }
           add_disj_to_cnf(disj,&syncs);
+          mcs_up_to_date = false;
         }
         deep_delete(new_syncs);
       }else if(res->result == Reachability::UNREACHABLE){
