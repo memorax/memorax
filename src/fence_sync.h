@@ -152,6 +152,8 @@ public:
   virtual Sync *clone() const = 0;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
+  virtual void print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const;
+  virtual void print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const;
   /* Getters for the parts in (f,pid,q,IN,OUT) */
   Lang::Stmt<int> get_f() const { return f; };
   virtual int get_pid() const { return pid; };
@@ -207,6 +209,9 @@ private:
 
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
+  void print_aux(const std::function<std::string(const int&)> &regts, 
+                 const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
+                 Log::redirection_stream &os, Log::redirection_stream &json_os) const;
 
   /* Returns the power set of s. */
   template<class T,class L = std::less<T> >

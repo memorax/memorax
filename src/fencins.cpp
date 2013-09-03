@@ -171,8 +171,11 @@ namespace Fencins{
             sync_count += it->size();
           }
           Log::debug << "Total sync occurrence count: " << sync_count
-                     << " in " << syncs.size() << " disjunctions, avg. count: "
-                     << (double(sync_count) / double(syncs.size())) << "\n";
+                     << " in " << syncs.size() << " disjunctions";
+          if(syncs.size()){
+            Log::debug << ", avg. count: " << (double(sync_count) / double(syncs.size())) << "\n";
+          }
+          Log::debug << "\n";
         }
         if(!mcs_up_to_date){
           Timer tm;
@@ -211,7 +214,7 @@ namespace Fencins{
         Log::msg << "  (No synchronization)\n";
       }
       for(auto s : mc){
-        Log::msg << s->to_string(m);
+        s->print(m,Log::msg,Log::json);
       }
       Log::msg << "\n";
 

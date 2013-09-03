@@ -47,9 +47,13 @@ VipsSimpleFencer::~VipsSimpleFencer(){
 };
 
 std::set<std::set<Sync*> > VipsSimpleFencer::fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const{
-  Log::debug << "VipsSimpleFencer trace:\n" << t.to_string() << "\n";
+  Log::debug << "VipsSimpleFencer trace:\n";
+  t.print(Log::debug,Log::debug,Log::json,false,true);
+  Log::debug << "\n";
   Trace *t2 = decrease_reorderings(t);
-  Log::extreme << "VipsSimpleFencer trace after rewriting:\n" << t2->to_string() << "\n";
+  Log::extreme << "VipsSimpleFencer trace after rewriting:\n";
+  t2->print(Log::extreme,Log::extreme,Log::json,false,true);
+  Log::extreme << "\n";
 
   std::vector<std::set<int> > rps = get_reordered_procs(*t2);
 

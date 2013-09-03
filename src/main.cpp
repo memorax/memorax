@@ -122,7 +122,7 @@ void print_sync_sets(const Machine &m, const std::set<std::set<Sync*> > &sync_se
         Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
       }else{
         for(auto s : ss){
-          Log::result << s->to_string(m);
+          s->print(m,Log::result,Log::json);
         }
         Log::result << "\n";
       }

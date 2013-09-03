@@ -21,6 +21,7 @@
 #ifndef __SYNC_H__
 #define __SYNC_H__
 
+#include "log.h"
 #include "machine.h"
 
 #include <stdexcept>
@@ -99,6 +100,15 @@ public:
   virtual std::string to_raw_string() const = 0;
   virtual std::string to_string() const { return to_raw_string(); };
   virtual std::string to_string(const Machine &m) const { return to_string(); };
+  /* The print methods work as the to_string methods, but instead of
+   * returning a string, they print it to the stream os. JSON
+   * meta-data is printed to json_os.
+   *
+   * Hint: Use with e.g. Log::msg, Log::json
+   */
+  virtual void print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const { os << to_raw_string(); };
+  virtual void print(Log::redirection_stream &os, Log::redirection_stream &json_os) const { print_raw(os,json_os); };
+  virtual void print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const { print(os,json_os); };
   bool operator<(const Sync &s) const;
   bool operator==(const Sync &s) const;
 protected:

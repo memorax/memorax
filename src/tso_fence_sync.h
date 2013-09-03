@@ -52,6 +52,8 @@ public:
   virtual Sync *clone() const;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
+  virtual void print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const;
+  virtual void print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const;
   static void test();
 
   /* Returns all TsoFenceSyncs that can be inserted into m. */
@@ -61,6 +63,9 @@ protected:
 private:
   std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
+  void print_aux(const std::function<std::string(const int&)> &regts, 
+                 const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
+                 Log::redirection_stream &os, Log::redirection_stream &json_os) const;
 
   /* Get a pair (m2,nml) where m2 is a clone of m, where additionally
    * nml is declared. The memory location nml is a memory location

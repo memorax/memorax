@@ -114,6 +114,20 @@ std::string TsoLockSync::to_string_aux(const std::function<std::string(const int
   return "Lock write: "+w.to_string(regts,mlts);
 };
 
+void TsoLockSync::print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const{
+  os << to_raw_string() << "\n";
+  if(*os.os && w.instruction.get_pos().get_line_no() >= 0){
+    json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << w.instruction.get_pos().to_json() << "}\n";
+  }
+};
+
+void TsoLockSync::print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const{
+  os << to_string(m) << "\n";
+  if(*os.os && w.instruction.get_pos().get_line_no() >= 0){
+    json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << w.instruction.get_pos().to_json() << "}\n";
+  }
+};
+
 int TsoLockSync::compare(const Sync &s) const{
   assert(dynamic_cast<const TsoLockSync*>(&s));
   const TsoLockSync *ls = static_cast<const TsoLockSync*>(&s);

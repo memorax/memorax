@@ -82,6 +82,8 @@ public:
   virtual Sync *clone() const;
   virtual std::string to_raw_string() const;
   virtual std::string to_string(const Machine &m) const;
+  virtual void print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const;
+  virtual void print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const;
 
   /* Returns all TsoFenceSyncs that can be inserted into m. */
   static std::set<Sync*> get_all_possible(const Machine &m);
