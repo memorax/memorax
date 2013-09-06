@@ -64,6 +64,13 @@ namespace MinCoverage {
   std::set<std::set<S> >
   min_coverage_all(const std::set<std::set<S> > &T);
 
+  /* Returns all coverage sets for (T,unit) which are minimal with
+   * respect to set inclusion.
+   */
+  template<typename S>
+  std::set<std::set<S> >
+  subset_min_coverage_all(const std::set<std::set<S> > &T);
+
   void test();
 };
 
