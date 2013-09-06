@@ -604,7 +604,7 @@ int main(int argc, char *argv[]){
       break;
     case TEST:
       Test::add_test("Automaton",Automaton::test);
-      // Test::add_test("Fencins",Fencins::test);
+      Test::add_test("Fencins",Fencins::test);
       Test::add_test("Machine",Machine::test);
       Test::add_test("MinCoverage",MinCoverage::test);
       Test::add_test("Test",Test::test_testing);

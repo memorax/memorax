@@ -39,6 +39,17 @@ namespace Fencins{
    */
   typedef std::function<int(const Sync*)> cost_fn_t;
 
+  /* Describes an aspect with respect to which fencins minimizes
+   * synchronization sets.
+   */
+  enum min_aspect_t{
+    /* Minimize w.r.t. the sum of the costs of synchronizations as
+     * given by a cost function. */
+    COST,
+    /* Minimize w.r.t. set inclusion. */
+    SUBSET
+  };
+
   /* Repeatedly applies r to reach_arg_init(m,prev_result) in order to
    * detect which synchronization must be inserted in order for the
    * forbidden states of m to become unreachable. tf will be used to
@@ -65,6 +76,7 @@ namespace Fencins{
                                      Reachability &r,
                                      reach_arg_init_t reach_arg_init,
                                      TraceFencer &tf,
+                                     min_aspect_t ma,
                                      bool only_one = true,
                                      cost_fn_t cost = [](const Sync*){return 1;});
 

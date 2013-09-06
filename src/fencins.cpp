@@ -111,6 +111,7 @@ namespace Fencins{
                                      Reachability &r,
                                      reach_arg_init_t reach_arg_init,
                                      TraceFencer &tf,
+                                     min_aspect_t ma,
                                      bool only_one,
                                      cost_fn_t cost){
 
@@ -147,7 +148,13 @@ namespace Fencins{
       const Machine *m_synced = 0; // The machine with mc inserted
       // Find the next Sync set to check (mc)
       {
-        std::set<std::set<Sync*> > mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
+        std::set<std::set<Sync*> > mcs;
+        if(ma == COST){
+          mcs = MinCoverage::min_coverage_all<Sync*>(syncs,cost);
+        }else{
+          assert(ma == SUBSET);
+          mcs = MinCoverage::subset_min_coverage_all<Sync*>(syncs);
+        }
         assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
         if(mcs.size() == fence_sets.size()){
           // All correct fence sets are already in fence_sets
@@ -270,7 +277,7 @@ namespace Fencins{
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
       std::set<std::set<Sync*> > fence_sets = 
-      fencins(*m,reach,arg_init,fencer,true);
+      fencins(*m,reach,arg_init,fencer,COST,true);
         Log::set_primary_loglevel(ll);
 
       if(fence_sets.empty()){
@@ -328,8 +335,10 @@ namespace Fencins{
     };
 
     std::function<bool(std::string,std::string,
+                       min_aspect_t,
                        std::function<int(const Sync*)>*)> test_sb_all = 
       [&get_machine,&cs](std::string rmm, std::string fence_poses,
+                         min_aspect_t ma,
                          std::function<int(const Sync*)> *cost){
       Machine *m = get_machine(rmm);
       SbTsoBwd reach;
@@ -343,9 +352,9 @@ namespace Fencins{
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
       if(cost){
-        fence_sets = fencins(*m,reach,arg_init,fencer,false,*cost);
+        fence_sets = fencins(*m,reach,arg_init,fencer,COST,false,*cost);
       }else{
-        fence_sets = fencins(*m,reach,arg_init,fencer,false);
+        fence_sets = fencins(*m,reach,arg_init,fencer,ma,false);
       }
       Log::set_primary_loglevel(ll);
 
@@ -518,7 +527,7 @@ namespace Fencins{
       Test::inner_test("fencins only_one #4",
                        test_sb_only_one(rmm,"L2 | L2"));
       Test::inner_test("fencins all #4.2",
-                       test_sb_all(rmm,"L2 | L2",0));
+                       test_sb_all(rmm,"L2 | L2",COST,0));
     }
 
     /* Test 5 */
@@ -542,7 +551,7 @@ namespace Fencins{
         "  CS: write: y := 0;\n"
         "  goto L0\n";
       Test::inner_test("fencins all #5 (small Dekker variant)",
-                       test_sb_all(rmm,"L1 | L1\nL1 | L2",0));
+                       test_sb_all(rmm,"L1 | L1\nL1 | L2",COST,0));
     }
 
     /* Test 6,7: empty set is solution */
@@ -565,12 +574,12 @@ namespace Fencins{
         "  CS: write: y := 0;\n"
         "  goto L0\n";
       Test::inner_test("fencins all #6",
-                       test_sb_all(rmm,"|",0));
+                       test_sb_all(rmm,"|",COST,0));
       Test::inner_test("fencins only_one #7",
                        test_sb_only_one(rmm,"|"));
     }
 
-    /* Test 8: disjunct solutions */
+    /* Test 8,9: disjunct solutions */
     {
       std::string rmm = 
         "forbidden CS CS\n"
@@ -596,10 +605,14 @@ namespace Fencins{
       Test::inner_test("fencins all #8",
                        test_sb_all(rmm,
                                    "L1 | L1\n"
-                                   "L3 | L3",0));
+                                   "L3 | L3",COST,0));
+      Test::inner_test("fencins all #9",
+                       test_sb_all(rmm,
+                                   "L1 | L1\n"
+                                   "L3 | L3",SUBSET,0));
     }
 
-    /* Test 9,10: disjunct solutions with different costs */
+    /* Test 10,11,12: disjunct solutions with different costs */
     {
       std::string rmm = 
         "forbidden CS CS\n"
@@ -632,8 +645,8 @@ namespace Fencins{
         "    L22: read: x1 = 0\n"
         "  };"
         "  CS: nop\n";
-      Test::inner_test("fencins all #9",
-                       test_sb_all(rmm, "L1 | L1",0));
+      Test::inner_test("fencins all #10",
+                       test_sb_all(rmm, "L1 | L1",COST,0));
       /* Should not return the set "L21 L22 | L21 L22" since it is
        * more expensive than "L1 | L1".
        *
@@ -648,11 +661,19 @@ namespace Fencins{
           return 1;
         }
       };
-      Test::inner_test("fencins all #10",
+      Test::inner_test("fencins all #11",
                        test_sb_all(rmm, 
                                    "L1 | L1\n"
                                    "L21 L22 | L21 L22",
+                                   COST,
                                    &expensive_L1));
+
+      Test::inner_test("fencins all #12",
+                       test_sb_all(rmm, 
+                                   "L1 | L1\n"
+                                   "L21 L22 | L21 L22",
+                                   SUBSET,
+                                   0));
     }
   };
 
