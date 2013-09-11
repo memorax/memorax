@@ -23,6 +23,7 @@
 
 #include "trace_fencer.h"
 #include "vips_fence_sync.h"
+#include "vips_syncwr_sync.h"
 
 #include <map>
 
@@ -41,6 +42,7 @@ public:
   static void test();
 private:
   std::set<VipsFenceSync*> all_fences;
+  std::set<VipsSyncwrSync*> all_syncwrs;
 
   /* For each process p with a control state q, fences_by_pq[p][q] is
    * the subset of all_fences corresponding to that process and
@@ -49,6 +51,13 @@ private:
    * The pointers point to the same objects as those in all_fences.
    */
   std::vector<std::vector<std::set<VipsFenceSync*> > > fences_by_pq;
+  /* For each process p with a control state q, syncwrs_by_pq[p][q] is
+   * the subset of all_syncwrs corresponding to that process and a
+   * write with source control state q.
+   *
+   * The pointers point to the same objects as those in all_syncwrs.
+   */
+  std::vector<std::vector<std::set<VipsSyncwrSync*> > > syncwrs_by_pq;
 
   /* Returns a map m such that for each transition index i into t,
    * m[i] is the synchronization point of t[i] in t.
@@ -86,6 +95,13 @@ private:
    * irrelevant instruction reorderings.
    */
   static Trace *decrease_reorderings(const Trace &t);
+
+  /* Helper for fence(t,m_infos). Returns the syncs of
+   * fence(t,m_infos) that are VipsSyncwrSyncs.
+   *
+   * All returned syncs are pointers into all_syncwrs.
+   */
+  std::set<Sync*> fence_syncwr(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
 
 };
 

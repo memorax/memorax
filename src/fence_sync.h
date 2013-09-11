@@ -130,7 +130,8 @@ public:
      * in[...ij[ik[t]]...] where k == first and j == first+1
      *
      * Pre: All elements in ik,ij,...,in are pointers to
-     * FenceSync::InsInfo objects (or derivatives) or TsoLockSync.
+     * FenceSync::InsInfo objects (or derivatives) or TsoLockSync or
+     * VipsSyncwrSync.
      */
     static Machine::PTransition all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
                                              const Machine::PTransition &t,
