@@ -85,10 +85,10 @@ std::string TsoFenceSync::to_string_aux(const std::function<std::string(const in
   std::stringstream ss;
   ss << "TsoFenceSync(P" << pid << ",Q" << q << ")\n";
   for(auto it = IN.begin(); it != IN.end(); ++it){
-    ss << "IN: " << it->to_string(regts,mlts) << "\n";
+    ss << "  IN: " << it->to_string(regts,mlts) << "\n";
   }
   for(auto it = OUT.begin(); it != OUT.end(); ++it){
-    ss << "OUT: " << it->to_string(regts,mlts) << "\n";
+    ss << "  OUT: " << it->to_string(regts,mlts) << "\n";
   }
   return ss.str();
 };
@@ -109,13 +109,13 @@ void TsoFenceSync::print_aux(const std::function<std::string(const int&)> &regts
                              Log::redirection_stream &os, Log::redirection_stream &json_os) const{
   os << "TsoFenceSync(P" << pid << ",Q" << q << ")\n";
   for(auto it = IN.begin(); it != IN.end(); ++it){
-    os << "IN: " << it->to_string(regts,mlts) << "\n";
+    os << "  IN: " << it->to_string(regts,mlts) << "\n";
     if(*os.os && it->instruction.get_pos().get_line_no() >= 0){
       json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
     }
   }
   for(auto it = OUT.begin(); it != OUT.end(); ++it){
-    os << "OUT: " << it->to_string(regts,mlts) << "\n";
+    os << "  OUT: " << it->to_string(regts,mlts) << "\n";
     if(*os.os && it->instruction.get_pos().get_line_no() >= 0){
       json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
     }

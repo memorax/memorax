@@ -163,8 +163,8 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
 };
 
 int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  std::string used_flags[] = {"a","k","cegar","max-refinements","only-one","rff"};
-  inform_ignore(used_flags,used_flags+6,flags);
+  std::string used_flags[] = {"a","k","cegar","max-refinements","only-one","rff","fmin"};
+  inform_ignore(used_flags,used_flags+7,flags);
   std::unique_ptr<Machine> machine(get_machine(flags,input_stream));
   int max_refinements = -1;
   if(flags.count("max-refinements")){
@@ -194,9 +194,10 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       }
     }
 
-    std::list<TsoFencins::FenceSet> fence_sets;
+    Reachability *reach = 0;
+    TsoFencins::reach_arg_init_t *arg_init = 0;
     if(flags.count("cegar")){
-      PbConstraint::pred_set preds;
+      preds.clear();
       if(machine->predicates.size()){
         Log::msg << "Starting CEGAR from predicates given in .rmm file.\n";
         std::function<TsoVar(const Predicates::DummyVar&)> cv = 
@@ -207,77 +208,148 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
           preds.push_back(new Predicates::Predicate<TsoVar>(machine->predicates[i].convert(cv)));
         }
       }
-      PbCegar pbc;
-      TsoFencins::reach_arg_init_t pbc_arg_init = 
-        [&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res)->Reachability::Arg*{
-        if(prev_res){
-          const PbCegar::Result *pres = static_cast<const PbCegar::Result*>(prev_res);
-          const ExactBwd::Result *eres = static_cast<const ExactBwd::Result*>(pres->last_result);
-          const APList<TsoVar>::pred_set &preds2 = static_cast<const PbConstraint::Common*>(eres->common)->predicates;
-          if(preds2.size() > preds.size()){
-            /* Replace preds with new predicates */
-            for(unsigned i = 0; i < preds.size(); i++){
-              delete preds[i];
-            }
-            preds.clear();
-            for(unsigned i = 0; i < preds2.size(); i++){
-              preds.push_back(new Predicates::Predicate<TsoVar>(*preds2[i]));
+      reach = new PbCegar();
+      arg_init = new TsoFencins::reach_arg_init_t([&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res)->Reachability::Arg*{
+          if(prev_res){
+            const PbCegar::Result *pres = static_cast<const PbCegar::Result*>(prev_res);
+            const ExactBwd::Result *eres = static_cast<const ExactBwd::Result*>(pres->last_result);
+            const APList<TsoVar>::pred_set &preds2 = static_cast<const PbConstraint::Common*>(eres->common)->predicates;
+            if(preds2.size() > preds.size()){
+              /* Replace preds with new predicates */
+              for(unsigned i = 0; i < preds.size(); i++){
+                delete preds[i];
+              }
+              preds.clear();
+              for(unsigned i = 0; i < preds2.size(); i++){
+                preds.push_back(new Predicates::Predicate<TsoVar>(*preds2[i]));
+              }
             }
           }
-        }
-        /* Using preds in constructor for Common will let go of ownership.
-         * Therefore we need to copy predicates. */
-        PbConstraint::pred_set preds_copy;
-        for(unsigned i = 0; i < preds.size(); i++){
-          preds_copy.push_back(new Predicates::Predicate<TsoVar>(*preds[i]));
-        }
-        PbConstraint::Common *common = new PbConstraint::Common(k,m,preds_copy,true);
-        return new PbCegar::Arg(m,new ExactBwd(),new ExactBwd::Arg(m,common,new PbContainer2(m)),
-                                max_refinements,ExactBwd::pb_init_arg);
-      };
-      fence_sets = TsoFencins::fencins(*machine,pbc,pbc_arg_init,flags.count("only-one"));
-      for(unsigned i = 0; i < preds.size(); i++){
-        delete preds[i];
-      }
+          /* Using preds in constructor for Common will let go of ownership.
+           * Therefore we need to copy predicates. */
+          PbConstraint::pred_set preds_copy;
+          for(unsigned i = 0; i < preds.size(); i++){
+            preds_copy.push_back(new Predicates::Predicate<TsoVar>(*preds[i]));
+          }
+          PbConstraint::Common *common = new PbConstraint::Common(k,m,preds_copy,true);
+          return new PbCegar::Arg(m,new ExactBwd(),new ExactBwd::Arg(m,common,new PbContainer2(m)),
+                                  max_refinements,ExactBwd::pb_init_arg);
+        });
     }else{
-      ExactBwd reach;
-      PbConstraint::pred_set preds = PbConstraint::extract_predicates(*machine);
-      TsoFencins::reach_arg_init_t arg_init = 
-        [&preds,k](const Machine &m,const Reachability::Result *)->Reachability::Arg*{
-        PbConstraint::pred_set preds_copy;
-        for(unsigned i = 0; i < preds.size(); i++){
-          preds_copy.push_back(new Predicates::Predicate<TsoVar>(*preds[i]));
-        }
-        PbConstraint::Common *common = new PbConstraint::Common(k,m,preds_copy,true);
-        return new ExactBwd::Arg(m,common,new PbContainer2(m));
-      };
-      fence_sets = TsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
-      for(unsigned i = 0; i < preds.size(); i++){
-        delete preds[i];
-      }
+      reach = new ExactBwd();
+      preds = PbConstraint::extract_predicates(*machine);
+      arg_init = new TsoFencins::reach_arg_init_t([&preds,k](const Machine &m,const Reachability::Result *)->Reachability::Arg*{
+          PbConstraint::pred_set preds_copy;
+          for(unsigned i = 0; i < preds.size(); i++){
+            preds_copy.push_back(new Predicates::Predicate<TsoVar>(*preds[i]));
+          }
+          PbConstraint::Common *common = new PbConstraint::Common(k,m,preds_copy,true);
+          return new ExactBwd::Arg(m,common,new PbContainer2(m));
+        });
     }
-    print_fence_sets(*machine,fence_sets);
-    retval = 0;
-
+    std::string fmin = "cheap";
+    if(flags.count("fmin")){
+      fmin = flags.find("fmin")->second.argument;
+    }
+    if(fmin == "cheap"){
+      Log::msg << "Searching for cheap synchronization sets.\n";
+      std::list<TsoFencins::FenceSet> fence_sets = 
+        TsoFencins::fencins(*machine,*reach,*arg_init,flags.count("only-one"));
+      print_fence_sets(*machine,fence_sets);
+      retval = 0;
+    }else if(fmin == "subset" || fmin == "cost"){
+      Fencins::min_aspect_t min_aspect;
+      if(fmin == "cost"){
+        min_aspect = Fencins::COST;
+        Log::msg << "Searching for cost minimal synchronization sets.\n";
+      }else{
+        min_aspect = Fencins::SUBSET;
+        Log::msg << "Searching for subset minimal synchronization sets.\n";
+      }
+      TsoSimpleFencer fencer(*machine,TsoSimpleFencer::LOCKED);
+      auto sync_sets = Fencins::fencins(*machine,*reach,*arg_init,fencer,min_aspect,flags.count("only-one"));
+      print_sync_sets(*machine,sync_sets);
+      for(auto ss : sync_sets){
+        for(auto s : ss){
+          delete s;
+        }
+      }
+      retval = 0;
+    }else{
+      Log::warning << "Fencins minimality criterion '" << fmin 
+                   << "' is not supported for SB.\n";
+      retval = 1;
+    }
+    for(unsigned i = 0; i < preds.size(); i++){
+      delete preds[i];
+    }
+    delete reach;
+    delete arg_init;
   }else if(flags.find("a")->second.argument == "sb"){
-    std::list<TsoFencins::FenceSet> fence_sets;
     SbTsoBwd reach;
     TsoFencins::reach_arg_init_t arg_init =
       [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
       SbConstraint::Common *common = new SbConstraint::Common(m);
       return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
     };
-    fence_sets = TsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
-    print_fence_sets(*machine,fence_sets);
-    retval = 0;
+    std::string fmin = "cheap";
+    if(flags.count("fmin")){
+      fmin = flags.find("fmin")->second.argument;
+    }
+    if(fmin == "cheap"){
+      Log::msg << "Searching for cheap synchronization sets.\n";
+      std::list<TsoFencins::FenceSet> fence_sets =
+        TsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
+      print_fence_sets(*machine,fence_sets);
+      retval = 0;
+    }else if(fmin == "subset" || fmin == "cost"){
+      Fencins::min_aspect_t min_aspect;
+      if(fmin == "cost"){
+        min_aspect = Fencins::COST;
+        Log::msg << "Searching for cost minimal synchronization sets.\n";
+      }else{
+        min_aspect = Fencins::SUBSET;
+        Log::msg << "Searching for subset minimal synchronization sets.\n";
+      }
+      TsoSimpleFencer fencer(*machine,TsoSimpleFencer::LOCKED);
+      auto sync_sets = Fencins::fencins(*machine,reach,arg_init,fencer,min_aspect,flags.count("only-one"));
+      print_sync_sets(*machine,sync_sets);
+      for(auto ss : sync_sets){
+        for(auto s : ss){
+          delete s;
+        }
+      }
+      retval = 0;
+    }else{
+      Log::warning << "Fencins minimality criterion '" << fmin 
+                   << "' is not supported for SB.\n";
+      return 1;
+    }
   }else if(flags.find("a")->second.argument == "vips"){
+    Fencins::min_aspect_t min_aspect = Fencins::SUBSET;
+    if(flags.count("fmin")){
+      if(flags.find("fmin")->second.argument == "cost"){
+        min_aspect = Fencins::COST;
+      }else if(flags.find("fmin")->second.argument == "subset"){
+        min_aspect = Fencins::SUBSET;
+      }else{
+        Log::warning << "Fencins minimality criterion '" << flags.find("fmin")->second.argument
+                     << "' is not supported for VIPS.\n";
+        return 1;
+      }
+    }
+    switch(min_aspect){
+    case Fencins::SUBSET: Log::msg << "Searching for subset minimal synchronization sets.\n"; break;
+    case Fencins::COST: Log::msg << "Searching for cost minimal synchronization sets.\n"; break;
+    default: break;
+    }
     VipsBitReachability reach;
     Fencins::reach_arg_init_t reach_arg_init = 
       [](const Machine &m,const Reachability::Result*)->Reachability::Arg*{
       return new Reachability::Arg(m);
     };
     VipsSimpleFencer fencer(*machine);
-    auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,Fencins::SUBSET,flags.count("only-one"));
+    auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,min_aspect,flags.count("only-one"));
     print_sync_sets(*machine,sync_sets);
     for(auto ss : sync_sets){
       for(auto s : ss){
@@ -455,6 +527,9 @@ void print_help(int argc, char *argv[]){
             << "        Use CEGAR refinement in reachability analysis.\n"
             << "    --max-refinements <int>\n"
             << "        Perform at most <int> many refinements. (Used only in cegar.)\n"
+            << "    --fencins-minimality <M> / --fmin <M>\n"
+            << "        Use minimality criterion <M> for fence insertion.\n"
+            << "        Possible values are cheap, cost, subset.\n"
             << "    -v / --verbose\n"
             << "        Print output verbosely.\n"
             << "    -vv / --very-verbose\n"
@@ -480,7 +555,17 @@ void print_help(int argc, char *argv[]){
             << "      Sound and complete for finite data domains.\n"
             << "    vips\n"
             << "      VIPS-M. Explicit state forward analysis.\n"
-            << "      Sound and complete for finite data domains.\n";
+            << "      Sound and complete for finite data domains.\n"
+            << std::endl
+            << "  Fencins minimality criteria:\n"
+            << "    subset\n"
+            << "      Find sets of synchronization which are subset minimal.\n"
+            << "    cost\n"
+            << "      Find sets of synchronization with the least cardinality.\n"
+            << "    cheap (sb/pb only)\n"
+            << "      Cheaper fence insertion. Only considers synchronization by locking writes.\n"
+            << "      Usually gives subset minimal synchronization sets, but will occasionally\n"
+            << "      yield larger sets.\n";
 }
 
 int main(int argc, char *argv[]){
@@ -574,6 +659,19 @@ int main(int argc, char *argv[]){
           i++; // Do not account for the next argv twice.
         }else{
           Log::warning << "-k must have an argument.\n";
+          print_help(argc,argv);
+          return 1;
+        }
+      }else if(argv[i] == std::string("--fencins-minimality") || argv[i] == std::string("--fmin")){
+        if(flags.count("fmin")){
+          Log::warning << "Flag " << argv[i] << " specified twice.\n";
+          print_help(argc,argv);
+          return 1;
+        }else if(i < argc-1){
+          flags["fmin"] = Flag("fmin",argv[i],true,argv[i+1]);
+          i++; // Do not account for the next argv twice.
+        }else{
+          Log::warning << argv[i] << " must have an argument.\n";
           print_help(argc,argv);
           return 1;
         }
