@@ -82,6 +82,9 @@ namespace MinCoverage{
         res_id.insert(res2);
         Test::inner_test("#1 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
         Test::inner_test("#1 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+        std::set<std::set<int> > ss_res = {{2,3},{2,4}};
+        Test::inner_test("#1 Min coverage subset all",
+                         subset_min_coverage_all<int>(Tset) == ss_res);
 
       }
     }
@@ -107,6 +110,9 @@ namespace MinCoverage{
 
       Test::inner_test("#2 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
       Test::inner_test("#2 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+      std::set<std::set<int> > ss_res = {{5,2},{3,1,2},{5,6},{3,1,6},{4,1,2},{4,1,6}};
+      Test::inner_test("#2 Min coverage subset all",
+                       subset_min_coverage_all<int>(Tset) == ss_res);
     }
 
     {
@@ -120,6 +126,8 @@ namespace MinCoverage{
 
       Test::inner_test("#3 Min coverage (id)",res.count(min_coverage<int>(Tset,id_cost)));
       Test::inner_test("#3 Min coverage all (id)",res == min_coverage_all<int>(Tset,id_cost));
+      Test::inner_test("#3 Min coverage subset all",
+                       subset_min_coverage_all<int>(Tset) == res);
     }
 
     {
@@ -141,6 +149,8 @@ namespace MinCoverage{
 
       Test::inner_test("#4 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
       Test::inner_test("#4 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+      Test::inner_test("#4 Min coverage subset all",
+                       subset_min_coverage_all<int>(Tset) == res_unit);
     }
 
   };

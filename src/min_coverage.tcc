@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Carl Leonardsson
+ * Copyright (C) 2013 Carl Leonardsson
  * 
  * This file is part of Memorax.
  *
@@ -18,6 +18,7 @@
  *
  */
 
+#include <algorithm>
 #include <cassert>
 #include <map>
 #include <queue>
@@ -50,7 +51,7 @@ namespace MinCoverage{
     /* Returns the cost of this candidate */
     int get_cost() const;
     /* Returns the candidate set */
-    std::set<S> get_set() const;
+    const std::set<S> &get_set() const;
     /* A total order on candidate sets.
      * Compares lexicographically (cost,set). */
     bool operator<(const CandSet&) const;
@@ -107,7 +108,7 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  std::set<S> CandSet<S>::get_set() const{
+  const std::set<S> &CandSet<S>::get_set() const{
     return set;
   };
 
@@ -257,6 +258,51 @@ namespace MinCoverage{
     std::function<int(const S&)> unit_cost = 
       [](const S&){ return 1; };
     return min_coverage_all(T,unit_cost);
+  };
+
+  template<typename S>
+  std::set<std::set<S> >
+  subset_min_coverage_all(const std::set<std::set<S> > &T){
+    std::set<std::set<S> > mcs;
+    std::vector<std::set<S> > Tvec(T.begin(),T.end());
+    const std::map<S,std::set<int> > &cov_map = get_coverage_map(Tvec);
+
+    std::queue<CandSet<S> > candidates;
+    candidates.push(CandSet<S>(Tvec,cov_map,
+                               [](const S&){return 0;})); // Dummy cost
+
+    /* Check whether C is a superset of some set in mcs. */
+    std::function<bool(const CandSet<S>&)> is_subsumed = 
+      [&mcs](const CandSet<S> &C){
+      const std::set<S> &cs = C.get_set();
+      for(auto it = mcs.begin(); it != mcs.end(); ++it){
+        if(std::includes(cs.begin(),cs.end(),
+                         it->begin(),it->end())){
+          return true;
+        }
+      }
+      return false;
+    };
+
+    while(!candidates.empty()){
+      const CandSet<S> &C = candidates.front();
+      if(!is_subsumed(C)){
+        int i = C.get_uncovered_Ti();
+        if(i == -1){
+          // C is a subset minimal coverage set
+          mcs.insert(C.get_set());
+        }else{
+          for(auto it = Tvec[i].begin(); it != Tvec[i].end(); ++it){
+            CandSet<S> C2(C);
+            C2.insert(*it);
+            candidates.push(C2);
+          }
+        }
+      }
+      candidates.pop();
+    }
+
+    return mcs;
   };
 
 };

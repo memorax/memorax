@@ -277,7 +277,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       return new Reachability::Arg(m);
     };
     VipsSimpleFencer fencer(*machine);
-    auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,flags.count("only-one"));
+    auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,Fencins::SUBSET,flags.count("only-one"));
     print_sync_sets(*machine,sync_sets);
     for(auto ss : sync_sets){
       for(auto s : ss){
