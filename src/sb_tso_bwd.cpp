@@ -126,7 +126,9 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
       while((w == writes.size() && proc_pos[p] <= trace->size()) ||
             (w < writes.size() && write_to_update[std::pair<int,int>(p,writes[w].first)] != proc_pos[p])){
         if(trace->transition(proc_pos[p])->pid == int(p) &&
-           trace->transition(proc_pos[p])->instruction.get_type() != Lang::UPDATE){
+           trace->transition(proc_pos[p])->instruction.get_type() != Lang::UPDATE &&
+           !(trace->transition(proc_pos[p])->instruction.get_type() == Lang::LOCKED &&
+             trace->transition(proc_pos[p])->instruction.get_writes().size())){
           tso_trace->push_back(*trace->transition(proc_pos[p]),0);
         }
         ++proc_pos[p];
@@ -134,15 +136,22 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
     }
     if(w < writes.size()){
       /* Perform the update */
-      int wpid = writes[w].second.wpid;
-      int uindex = write_to_update[std::pair<int,int>(wpid,writes[w].first)];
-      assert((*trace)[uindex]->instruction.get_type() == Lang::UPDATE);
-      int q = (*trace)[uindex]->source;
-      VecSet<Lang::MemLoc<int> > mls;
-      for(Lang::NML nml : writes[w].second.nmls){
-        mls.insert(nml.localize(wpid));
+      if((*trace)[writes[w].first]->instruction.get_type() == Lang::LOCKED){
+        /* locked */
+        assert(((write_to_update[std::pair<int,int>(writes[w].second.wpid,writes[w].first)]) == writes[w].first));
+        tso_trace->push_back(*(*trace)[writes[w].first],0);
+      }else{
+        /* ordinary write,update */
+        int wpid = writes[w].second.wpid;
+        int uindex = write_to_update[std::pair<int,int>(wpid,writes[w].first)];
+        assert((*trace)[uindex]->instruction.get_type() == Lang::UPDATE);
+        int q = (*trace)[uindex]->source;
+        VecSet<Lang::MemLoc<int> > mls;
+        for(Lang::NML nml : writes[w].second.nmls){
+          mls.insert(nml.localize(wpid));
+        }
+        tso_trace->push_back({q,Lang::Stmt<int>::update(wpid,mls),q,wpid},0);
       }
-      tso_trace->push_back({q,Lang::Stmt<int>::update(wpid,mls),q,wpid},0);
     }
   }
 
@@ -393,12 +402,12 @@ text
 forbidden CS CS
 
 data
-  u = 0 : [0:1]
-  v = 0 : [0:1]
-  w = 0 : [0:1]
-  x = 0 : [0:1]
-  y = 0 : [0:1]
-  z = 0 : [0:1]
+  u = 0 : [0:10]
+  v = 0 : [0:10]
+  w = 0 : [0:10]
+  x = 0 : [0:10]
+  y = 0 : [0:10]
+  z = 0 : [0:10]
 
 process
 text
@@ -417,7 +426,6 @@ text
     Log::loglevel_t llvl = Log::get_primary_loglevel();
     Log::set_primary_loglevel(Log::loglevel_t(llvl-1));
     SbConstraint::Common c(*m);
-    Log::set_primary_loglevel(llvl);
 
     SbConstraint *sbc = get_sbc(c,{"CS","CS"},0,3);
 
@@ -444,6 +452,7 @@ text
     SbTsoBwd stb;
     Trace *sb_tso_trace = stb.convert_trace(sb_trace,&c);
 
+    Log::set_primary_loglevel(llvl);
     Test::inner_test("convert_trace #1",eq_trace(tso_trace,sb_tso_trace));
 
     delete sb_trace;
@@ -458,12 +467,12 @@ text
 forbidden END
 
 data
-  u = 0 : [0:1]
-  v = 0 : [0:1]
-  w = 0 : [0:1]
-  x = 0 : [0:1]
-  y = 0 : [0:1]
-  z = 0 : [0:1]
+  u = 0 : [0:10]
+  v = 0 : [0:10]
+  w = 0 : [0:10]
+  x = 0 : [0:10]
+  y = 0 : [0:10]
+  z = 0 : [0:10]
 
 process
 text
@@ -475,7 +484,6 @@ text
     Log::loglevel_t llvl = Log::get_primary_loglevel();
     Log::set_primary_loglevel(Log::loglevel_t(llvl-1));
     SbConstraint::Common c(*m);
-    Log::set_primary_loglevel(llvl);
 
     SbConstraint *sbc = get_sbc(c,{"END"},0,3);
 
@@ -499,6 +507,7 @@ text
     SbTsoBwd stb;
     Trace *sb_tso_trace = stb.convert_trace(sb_trace,&c);
 
+    Log::set_primary_loglevel(llvl);
     Test::inner_test("convert_trace #2",eq_trace(tso_trace,sb_tso_trace));
 
     delete sb_trace;
@@ -513,12 +522,12 @@ text
 forbidden END END
 
 data
-  u = 0 : [0:1]
-  v = 0 : [0:1]
-  w = 0 : [0:1]
-  x = 0 : [0:1]
-  y = 0 : [0:1]
-  z = 0 : [0:1]
+  u = 0 : [0:10]
+  v = 0 : [0:10]
+  w = 0 : [0:10]
+  x = 0 : [0:10]
+  y = 0 : [0:10]
+  z = 0 : [0:10]
 
 process
 text
@@ -533,7 +542,6 @@ text
     Log::loglevel_t llvl = Log::get_primary_loglevel();
     Log::set_primary_loglevel(Log::loglevel_t(llvl-1));
     SbConstraint::Common c(*m);
-    Log::set_primary_loglevel(llvl);
 
     SbConstraint *sbc = get_sbc(c,{"END","END"},1,3);
 
@@ -555,7 +563,128 @@ text
     SbTsoBwd stb;
     Trace *sb_tso_trace = stb.convert_trace(sb_trace,&c);
 
+    Log::set_primary_loglevel(llvl);
     Test::inner_test("convert_trace #3",eq_trace(tso_trace,sb_tso_trace));
+
+    delete sb_trace;
+    delete sb_tso_trace;
+    delete tso_trace;
+    delete m;
+  }
+
+  /* Test 4 */
+  {
+    Machine *m = get_machine(R"(
+forbidden END END
+
+data
+  u = 0 : [0:10]
+  v = 0 : [0:10]
+  w = 0 : [0:10]
+  x = 0 : [0:10]
+  y = 0 : [0:10]
+  z = 0 : [0:10]
+
+process
+text
+  L0: read: x = 1;
+  END: nop
+
+process
+text
+  L0: locked write: x := 1;
+  END: nop
+)");
+    Log::loglevel_t llvl = Log::get_primary_loglevel();
+    Log::set_primary_loglevel(Log::loglevel_t(llvl-1));
+    SbConstraint::Common c(*m);
+
+    SbConstraint *sbc = get_sbc(c,{"END","END"},1,3);
+
+    Trace *sb_trace =
+      get_sb_trace(sbc,
+                   {
+                     {"P1 L0 END locked write: x := 1",{{0,-1,-1}}},
+                     {"P0 L0 update P1 x",{{0,-1,-1},{1,3,-1}}},
+                     {"P0 L0 END read: x = 1",{{1,3,-1}}},
+                   });
+
+    Trace *tso_trace = get_tso_trace(*m,
+                                     {"P1 L0 END locked write: x := 1",
+                                      "P0 L0 END read: x = 1"
+                                      });
+
+    SbTsoBwd stb;
+    Trace *sb_tso_trace = stb.convert_trace(sb_trace,&c);
+
+    Log::set_primary_loglevel(llvl);
+    Test::inner_test("convert_trace #4",eq_trace(tso_trace,sb_tso_trace));
+
+    delete sb_trace;
+    delete sb_tso_trace;
+    delete tso_trace;
+    delete m;
+  }
+
+  /* Test 5: Lost messages, also locked writes */
+  {
+    Machine *m = get_machine(R"(
+forbidden END END
+
+data
+  u = 0 : [0:10]
+  v = 0 : [0:10]
+  w = 0 : [0:10]
+  x = 0 : [0:10]
+  y = 0 : [0:10]
+  z = 0 : [0:10]
+
+process
+text
+  L0: write: x := 1;
+  L1: write: y := 2;
+  L2: locked write: x := 3;
+  END: nop
+
+process
+text
+  L0: read: y = 2;
+  L1: read: x = 3;
+  END: nop
+)");
+    Log::loglevel_t llvl = Log::get_primary_loglevel();
+    Log::set_primary_loglevel(Log::loglevel_t(llvl-1));
+    SbConstraint::Common c(*m);
+
+    SbConstraint *sbc = get_sbc(c,{"END","END"},0,3);
+
+    Trace *sb_trace =
+      get_sb_trace(sbc,
+                   {{"P0 L0 L1 write: x := 1",{{0,-1,-1}}},
+                    {"P0 L1 update P0 x",{{0,-1,-1},{0,3,-1}}},
+                    {"P0 L1 L2 write: y := 2",{{0,-1,-1},{0,3,-1}}},
+                    {"P0 L2 update P0 y",{{0,-1,-1},{0,3,-1},{0,4,-1}}},
+                    {"P0 L2 END locked write: x := 3",{{0,-1,-1},{0,3,-1},{0,4,-1}}},
+                    {"P1 L0 update P0 y",{{0,-1,-1},{0,4,-1},{0,3,-1}}},
+                    {"P1 L0 L1 read: y = 2",{{0,4,-1},{0,3,-1}}},
+                    {"P1 L1 update P0 x",{{0,4,-1},{0,3,-1}}},
+                    {"P1 L1 END read: x = 3",{{0,3,-1}}}});
+
+    Trace *tso_trace = get_tso_trace(*m,
+                                     {"P0 L0 L1 write: x := 1",
+                                      "P0 L1 update P0 x",
+                                      "P0 L1 L2 write: y := 2",
+                                      "P0 L2 update P0 y",
+                                      "P1 L0 L1 read: y = 2",
+                                      "P0 L2 END locked write: x := 3",
+                                      "P1 L1 END read: x = 3",
+                                      });
+
+    SbTsoBwd stb;
+    Trace *sb_tso_trace = stb.convert_trace(sb_trace,&c);
+
+    Log::set_primary_loglevel(llvl);
+    Test::inner_test("convert_trace #5",eq_trace(tso_trace,sb_tso_trace));
 
     delete sb_trace;
     delete sb_tso_trace;
