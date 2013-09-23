@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -82,9 +82,9 @@ Machine::Machine(const Parser::Test &test){
     gvars.push_back(test.global_vars[i]);
     pretty_string_nml[Lang::NML::global(i)] = test.global_vars[i].name;
   }
-  
+
   for(int pid = 0; pid < int(test.processes.size()); pid++){
-    std::function<int(const std::string&)> regc = 
+    std::function<int(const std::string&)> regc =
       [&test,pid](const std::string &r)->int{
       for(unsigned i = 0; i < test.processes[pid].regs.size(); i++){
         if(test.processes[pid].regs[i].name == r){
@@ -94,7 +94,7 @@ Machine::Machine(const Parser::Test &test){
       return -1;
     };
     MLC mlc(test,pid,regc);
-    std::function<Lang::MemLoc<int>(const Lang::MemLoc<std::string>&)> mlcf = 
+    std::function<Lang::MemLoc<int>(const Lang::MemLoc<std::string>&)> mlcf =
       [&mlc](const Lang::MemLoc<std::string> &ml){
       return mlc(ml);
     };
@@ -115,7 +115,7 @@ Machine::Machine(const Parser::Test &test){
     for(unsigned i = 0; i < test.processes[pid].regs.size(); i++){
       pretty_string_reg[std::pair<int,int>(i,pid)] = test.processes[pid].regs[i].name;
     }
-    
+
     for(unsigned i = 0; i < test.processes[pid].vars.size(); i++){
       std::stringstream ss;
       ss << test.processes[pid].vars[i].name << "[P" << pid << "]";
@@ -192,7 +192,7 @@ std::string Machine::to_dot() const throw(){
 }
 
 
-void Machine::init_forbidden(const Parser::forbidden_t &fb) 
+void Machine::init_forbidden(const Parser::forbidden_t &fb)
   throw(Automaton::UnDefinedLabel*,ErroneousForbidden*){
 
   if(fb.size() == 0){
@@ -335,7 +335,7 @@ Machine *Machine::remove_registers() const{
             }
           }
         }
-        
+
         /* Canonize registers whose values are irrelevant */
         {
           VecSet<std::vector<int> > vs;
@@ -364,7 +364,7 @@ Machine *Machine::remove_registers() const{
           }
         }
       }
-      
+
       /* Explore the automaton */
       const std::vector<Automaton::State> &old_states = old_atm.get_states();
       while(queue.size()){
@@ -624,7 +624,7 @@ void Machine::update_forbidden(const std::vector<VecSet<int> > &m, int pid){
       new_forbidden.insert(f);
     }
   }
-  
+
   forbidden = new_forbidden.get_vector();
 };
 
@@ -649,9 +649,9 @@ Machine *Machine::remove_superfluous_nops_one_pass() const{
      * - State Q0 may never be removed.
      * - A state q with exactly one backward transition (q',nop,q) may
      *   be merged into q'.
-     * - A state q with exactly one forward transition (q,nop,q') may 
-     *   be merged into q', provided that for every v in forbidden such 
-     *   that v[pid] == q, there is also a vector v[pid := q'] in 
+     * - A state q with exactly one forward transition (q,nop,q') may
+     *   be merged into q', provided that for every v in forbidden such
+     *   that v[pid] == q, there is also a vector v[pid := q'] in
      *   forbidden.
      */
     const std::vector<Automaton::State> &new_states = new_atm.get_states();
@@ -723,7 +723,7 @@ Machine *Machine::remove_superfluous_nops_one_pass() const{
         old_cs_to_new_cs[i] = new_pc;
       }
     }
-      
+
     /* Create a new automaton with the "removed" states actually removed */
     m->automata[pid] = Automaton();
     for(unsigned i = 0; i < new_states.size(); ++i){
@@ -813,7 +813,7 @@ Machine *Machine::forbidden_shave() const{
         }
       }
     }
-    
+
     m->automata[pid] = Automaton();
     if(can_reach[0]){
       std::map<int,int> state_remap;
@@ -849,14 +849,14 @@ Machine *Machine::add_domain_assumes() const{
   Machine *m = new Machine(*this);
 
   /* Returns a BExpr asserting that the expression e is within the finite domain dom. */
-  std::function<Lang::BExpr<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> in_domain = 
+  std::function<Lang::BExpr<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> in_domain =
     [](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::BExpr<int>{
     assert(dom.is_finite());
     return Lang::BExpr<int>::leq(Lang::Expr<int>::integer(dom.get_lower_bound()),e) &&
     Lang::BExpr<int>::leq(e,Lang::Expr<int>::integer(dom.get_upper_bound()));
   };
   /* Wraps in_domain(e,dom) in an assume statement. */
-  std::function<Lang::Stmt<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> assume_in_domain = 
+  std::function<Lang::Stmt<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> assume_in_domain =
     [&in_domain](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::Stmt<int>{
     return Lang::Stmt<int>::assume(in_domain(e,dom));
   };
@@ -979,14 +979,14 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
   std::vector<Lang::Stmt<int> > ss;
 
   /* Returns a BExpr asserting that the expression e is within the finite domain dom. */
-  std::function<Lang::BExpr<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> in_domain = 
+  std::function<Lang::BExpr<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> in_domain =
     [](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::BExpr<int>{
     assert(dom.is_finite());
     return Lang::BExpr<int>::leq(Lang::Expr<int>::integer(dom.get_lower_bound()),e) &&
     Lang::BExpr<int>::leq(e,Lang::Expr<int>::integer(dom.get_upper_bound()));
   };
   /* Wraps in_domain(e,dom) in an assume statement. */
-  std::function<Lang::Stmt<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> assume_in_domain = 
+  std::function<Lang::Stmt<int>(const Lang::Expr<int>&,const Lang::VarDecl::Domain&)> assume_in_domain =
     [&s,&in_domain](const Lang::Expr<int> &e,const Lang::VarDecl::Domain &dom)->Lang::Stmt<int>{
     return Lang::Stmt<int>::assume(in_domain(e,dom),s.get_pos());
   };
@@ -1033,7 +1033,7 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
       Lang::VarDecl::Domain dom = get_declaration(s.get_reg(),pid).domain;
       Lang::VarDecl::Domain dom_ml = get_declaration(s.get_memloc(),pid).domain;
       lv.push_back(s);
-      if(dom.is_finite() && 
+      if(dom.is_finite() &&
          (dom_ml.is_int() || dom_ml.get_lower_bound() < dom.get_lower_bound() || dom_ml.get_upper_bound() > dom.get_upper_bound())){
         lv.push_back(assume_in_domain(Lang::Expr<int>::reg(s.get_reg()),dom));
       }
@@ -1109,7 +1109,7 @@ bool Machine::expr_always_in_domain(const Lang::Expr<int> &e, int pid, const Lan
       rvals[*it] = regs[pid][*it].domain.get_lower_bound();
     }
   }
-  
+
   bool cont = true;
   while(cont){
     if(!dom.member(e.eval<const std::vector<int>&,int*>(rvals,0))){
@@ -1135,7 +1135,7 @@ bool Machine::expr_always_in_domain(const Lang::Expr<int> &e, int pid, const Lan
 };
 
 void Machine::test(){
-  std::function<Machine*(std::string)> get_machine = 
+  std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
     std::stringstream ss(rmm);
     Lexer lex(ss);
@@ -1175,7 +1175,7 @@ void Machine::test(){
     }
 
     /* fb_unique(forbidden) checks that all elements in forbidden are unique. */
-    std::function<bool(const std::vector<std::vector<int> >&)> fb_unique = 
+    std::function<bool(const std::vector<std::vector<int> >&)> fb_unique =
       [](const std::vector<std::vector<int> > &forbidden){
       for(unsigned i = 0; i < forbidden.size(); ++i){
         for(unsigned j = i+1; j < forbidden.size(); ++j){
@@ -1200,13 +1200,13 @@ void Machine::test(){
          "  nop;\n"
          "  BAD: nop\n");
 
-      std::function<bool(const std::vector<int>&)> wellformed = 
+      std::function<bool(const std::vector<int>&)> wellformed =
         [&m](const std::vector<int> &fb){
         if(fb.size() != m->automata.size()){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= int(m->automata[i].get_states().size())){
             return false;
           }
         }
@@ -1233,13 +1233,13 @@ void Machine::test(){
          "  nop\n"
          );
 
-      std::function<bool(const std::vector<int>&)> wellformed = 
+      std::function<bool(const std::vector<int>&)> wellformed =
         [&m](const std::vector<int> &fb){
         if(fb.size() != m->automata.size()){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= int(m->automata[i].get_states().size())){
             return false;
           }
         }
@@ -1266,13 +1266,13 @@ void Machine::test(){
          "  nop\n"
          );
 
-      std::function<bool(const std::vector<int>&)> wellformed = 
+      std::function<bool(const std::vector<int>&)> wellformed =
         [&m](const std::vector<int> &fb){
         if(fb.size() != m->automata.size()){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= int(m->automata[i].get_states().size())){
             return false;
           }
         }
@@ -1301,13 +1301,13 @@ void Machine::test(){
          "  BAD: nop\n"
          );
 
-      std::function<bool(const std::vector<int>&)> wellformed = 
+      std::function<bool(const std::vector<int>&)> wellformed =
         [&m](const std::vector<int> &fb){
         if(fb.size() != m->automata.size()){
           return false;
         }
         for(unsigned i = 0; i < fb.size(); ++i){
-          if(fb[i] < 0 || fb[i] >= (int)m->automata[i].get_states().size()){
+          if(fb[i] < 0 || fb[i] >= int(m->automata[i].get_states().size())){
             return false;
           }
         }
