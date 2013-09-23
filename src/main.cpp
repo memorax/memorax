@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -161,7 +161,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       PbConstraint::pred_set preds;
       if(machine->predicates.size()){
         Log::msg << "Starting CEGAR from predicates given in .rmm file.\n";
-        std::function<TsoVar(const Predicates::DummyVar&)> cv = 
+        std::function<TsoVar(const Predicates::DummyVar&)> cv =
           [](const Predicates::DummyVar&)->TsoVar{
           throw new std::logic_error("Fencins: Non-nullary predicate in predicates of machine.");
         };
@@ -170,7 +170,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
         }
       }
       PbCegar pbc;
-      TsoFencins::reach_arg_init_t pbc_arg_init = 
+      TsoFencins::reach_arg_init_t pbc_arg_init =
         [&preds,k,max_refinements](const Machine &m,const Reachability::Result *prev_res)->Reachability::Arg*{
         if(prev_res){
           const PbCegar::Result *pres = static_cast<const PbCegar::Result*>(prev_res);
@@ -204,7 +204,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     }else{
       ExactBwd reach;
       PbConstraint::pred_set preds = PbConstraint::extract_predicates(*machine);
-      TsoFencins::reach_arg_init_t arg_init = 
+      TsoFencins::reach_arg_init_t arg_init =
         [&preds,k](const Machine &m,const Reachability::Result *)->Reachability::Arg*{
         PbConstraint::pred_set preds_copy;
         for(unsigned i = 0; i < preds.size(); i++){
@@ -252,7 +252,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
   std::string used_flags[] = {"a","k","cegar","rff"};
   inform_ignore(used_flags,used_flags+4,flags);
   std::unique_ptr<Machine> machine(get_machine(flags,input_stream));
-  
+
   Reachability *reach = 0;
   Reachability::Arg *rarg = 0;
 
@@ -270,7 +270,7 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
       if(machine->predicates.size()){
         Log::msg << "Using predicates given in .rmm file.\n";
         /* Use given predicates. */
-        std::function<TsoVar(const Predicates::DummyVar&)> cv = 
+        std::function<TsoVar(const Predicates::DummyVar&)> cv =
           [](const Predicates::DummyVar&)->TsoVar{
           throw new std::logic_error("Fencins: Non-nullary predicate in predicates of machine.");
         };
@@ -593,16 +593,17 @@ int main(int argc, char *argv[]){
     case FENCINS:
       retval = fencins(flags,*input_stream);
       break;
-    case DOTIFY: 
+    case DOTIFY:
       retval = dotify(flags,*input_stream);
       break;
     case TEST:
+      Test::add_test("Machine",Machine::test);
+      Test::add_test("SbTsoBwd",SbTsoBwd::test);
       Test::add_test("Test",Test::test_testing);
       Test::add_test("ZStar",ZStar<int>::test);
-      Test::add_test("Machine",Machine::test);
       retval = Test::run_tests();
       break;
-    default: 
+    default:
       break;
     }
   }catch(Parser::SyntaxError *exc){
