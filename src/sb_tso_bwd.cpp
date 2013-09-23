@@ -135,7 +135,7 @@ Trace *SbTsoBwd::convert_trace(Trace *trace, SbConstraint::Common *common) const
     if(w < writes.size()){
       /* Perform the update */
       int wpid = writes[w].second.wpid;
-      int uindex = write_to_update[{wpid,writes[w].first}];
+      int uindex = write_to_update[std::pair<int,int>(wpid,writes[w].first)];
       assert((*trace)[uindex]->instruction.get_type() == Lang::UPDATE);
       int q = (*trace)[uindex]->source;
       VecSet<Lang::MemLoc<int> > mls;
