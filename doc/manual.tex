@@ -78,7 +78,7 @@ Leonardsson ({\tt carl.leonardsson@it.uu.se}).
 
 \section{Installation}
 
-Memorax can be compiled and installed on UNIX-like systems.
+\memorax\ can be compiled and installed on UNIX-like systems.
 
 \subsection{Requirements}
 
@@ -100,7 +100,7 @@ Memorax can be compiled and installed on UNIX-like systems.
   \item To be able to graphically draw automata, Graphviz is required.
 \end{enumerate}
 
-If you acquired Memorax by other means than downloading the
+If you acquired \memorax\ by other means than downloading the
 installable tarballs (e.g. cloning the git repository) then GNU
 autotools and a latex installation will also be required.
 
@@ -256,13 +256,9 @@ sufficient to guarantee the non-reachability of the forbidden control
 states. Furthermore, $S$ is minimal by some minimality criterion. (See
 \cref{sec:min:criteria}.)
 
-For the TSO memory model, reported fences are identified with write
-instructions. Adding the fence to the \rmm\ program corresponds to
-making that write instruction into a locked write instruction. In the
-actual machine code/assembly code that implements the program runnable
-on real hardware, this corresponds to adding memory fence immediately
-after the writing instruction. On x86, one can alternatively change
-the writing instruction into a LOCK'd version of the same instruction.
+\Cref{sec:sync:types} describes different synchronization mechanisms
+supported by the fence insertion procedure, and how to interpret the
+output of \memorax.
 
 \paragraph{Graphical representation of \rmm\ programs}
 In this mode, \memorax\ produces a PDF file containing a graphical
@@ -391,7 +387,7 @@ Whether CEGAR should be used for automatically refining the PB
 abstraction. Also the user may chose to convert the \rmm\ program into
 \emph{register free form} before analysing it. \explainrff
 
-When particular parts of the \rmm\ code are refered to from the output
+When particular parts of the \rmm\ code are referred to from the output
 area, hovering the mouse over the statements will highlight those
 statements in the code area. Clicking the statements will center the
 code area over those statements.
@@ -547,7 +543,9 @@ that occurs at line 13 in the code. The corresponding fence, which is
 suggested by the inference procedure, should be placed immediately
 after this writing transition. In the \rmm\ language, inserting the
 fence is done by changing {\tt write: x := 1} into {\tt locked write:
-  x := 1} in the code.
+  x := 1} in the code.\footnote{\Cref{sec:sync:types} describes
+  different synchronization mechanisms supported by the fence
+  insertion procedure, and how to interpret the output of \memorax.}
 
 \noindent
 \begin{verbatim}
@@ -691,7 +689,7 @@ A \emph{machine} $(\procs,\automata,\regs,\vars)$ consists of a memory
 with (shared) memory locations $\vars$, and a set of processes
 $\procs$ executing in parallel. Each process $p\in\procs$ has a unique
 process identifier $pid(p) \in \{0,\cdots,|\procs|-1\}$. We will
-subsequently use $p$ and $pid(p)$ interchangingly where there is no
+subsequently use $p$ and $pid(p)$ interchangeably where there is no
 danger of confusion.
 
 \paragraph{Automata}
@@ -1739,7 +1737,7 @@ $(q_{src},i,q_{tgt})_p$ where $p$ is the executing process, $q_{src}$
 and $q_{tgt}$ are respectively the source and target control state,
 and $i$ is the executed instruction. Alternatively $\fetch(p,v)$,
 $evict(p,v)$ or $wrllc(p,v)$ where $p$ is a process and $v$ is a
-memory location. The latter three kinds of transitions are refered to
+memory location. The latter three kinds of transitions are referred to
 as {\em system events}, and may occur non-deterministically without
 being explicit part of the \rmm\ program.
 
@@ -2043,6 +2041,120 @@ Analysis using the VIPS abstraction is an exact, explicit-state,
 forward reachability analysis under the VIPS semantics as described in
 \cref{sec:rmm:vips}.
 
+\section{Fence Insertion}
+
+In order to perform fence insertion, \memorax\ will perform repeated
+reachability checks, while gradually adding memory fences that turn
+out to be necessary in order to guarantee the non-reachability of the
+forbidden control states. \memorax\ will report a collection $C$ of
+sets $S$ of memory fences such that for every set $S$, the memory
+fences in $S$ are sufficient to guarantee the non-reachability of the
+forbidden control states. Furthermore, $S$ is minimal by some
+minimality criterion. (See \cref{sec:min:criteria}.)
+
+Different memory models accommodate different kinds of synchronization
+mechanisms (e.g. fences, instruction locking, dependencies, ...). The
+fence insertion functionality of \memorax\ is not limited to fences,
+but also supports some alternative mechanisms. \Cref{sec:sync:types}
+describes the different kinds.
+
+\subsection{Minimality Criteria}\label{sec:min:criteria}
+
+These are criteria for minimality of fence sets that are yielded by
+the fence insertion procedure of \memorax.
+
+\paragraph{Subset criterion}\mbox{}\\
+%
+Each fence set $S$ is minimal in the sense that if $S'\subset S$ then
+$S'$ is insufficient to guarantee non-reachability of the forbidden
+control states.
+
+\paragraph{Cost criterion}\mbox{}\\
+%
+Each fence set $S$ is minimal in the sense that there is no fence set
+$S'$ such that $|S'| < |S|$ and $S'$ guarantees non-reachability of
+the forbidden control states.
+
+\paragraph{Cheap criterion}\mbox{}\\
+%
+This criterion is not actually a minimality criterion. It is an
+approximation of the subset criterion, which is usually cheaper to
+compute, but may occasionally yield non-minimal fence sets. It is also
+not guaranteed to yield {\em all} subset minimal fence sets. What is
+guaranteed is that 1) if there is a sufficient fence set, then a
+sufficient fence set will be returned, and 2) all returned fence sets
+are sufficient to guarantee non-reachability of the forbidden control
+states.
+
+\subsection{Types of synchronization}\label{sec:sync:types}
+
+\paragraph{Write Locking}\hfill(TSO)
+
+Inserting this kind of synchronization means to change a write
+instruction into a locked write instruction. The output from fence
+insertion with \memorax\ will be of the form
+
+\vspace{10pt}
+
+\noindent
+{\tt Lock write: }$ln$ $proc${\tt : write:}$v${\tt := }$expr$
+
+\vspace{10pt}
+
+The synchronization is then inserted by changing {\tt write:}$v${\tt
+  := }$expr$ on line $ln$ into {\tt locked write:}$v${\tt := }$expr$.
+
+In the actual machine code/assembly code that implements the program
+runnable on real hardware, this corresponds to adding memory fence
+immediately after the writing instruction. On x86, one can
+alternatively change the writing instruction into a LOCK'd version of
+the same instruction.
+
+\paragraph{Write $\rightarrow$ Synchronized Write}\hfill(VIPS)
+
+Similarly to write locking, this synchronization mechanism replaces an
+ordinary write with a synchronized write. The output from
+\memorax\ will be of the following form
+
+\vspace{10pt}
+
+\noindent
+{\tt Make write into syncwr: }$ln$ $proc${\tt : write:}$v${\tt :=}$expr$
+
+\vspace{10pt}
+
+The synchronization is then inserted by changing {\tt write:}$v${\tt
+  :=}$expr$ into {\tt syncwr:}$v${\tt :=}$expr$ on line $ln$.
+
+\paragraph{Fence Insertion}\hfill(VIPS)
+
+This is the synchronization mechanism of inserting a fence instruction
+into the program code. The output from the fence insertion procedure
+of \memorax\ will be of the following form
+
+\vspace{10pt}
+
+\noindent
+{\tt FenceSync(}$proc${\tt , }$q${\tt , f:}$fnc${\tt)}\\
+\rule{10pt}{0pt}{\tt IN: }$ti_0$\\
+\rule{10pt}{0pt}\vdots\\
+\rule{10pt}{0pt}{\tt IN: }$ti_n$\\
+\rule{10pt}{0pt}{\tt OUT: }$to_0$\\
+\rule{10pt}{0pt}\vdots\\
+\rule{10pt}{0pt}{\tt OUT: }$to_m$\\
+
+\vspace{10pt}
+
+Here $q$ is a control location in the \rmm\ automaton for process
+$proc$, and $\{ti_0,\cdots,ti_n\}$ are some transitions targeting $q$,
+and $\{to_0,\cdots,to_m\}$ are some transitions originating in
+$q$.
+%
+The fence instruction $fnc$ (usually {\tt fence}), should be inserted
+in the code of process $proc$ on the position indicated by $q$ such
+that all control paths that pass through some $ti_a$ to $q$ to some
+$to_b$ pass through the fence instruction.
+
 \phantomsection
 \addcontentsline{toc}{section}{References}
 \bibliography{biblio}
@@ -2054,16 +2166,3 @@ forward reachability analysis under the VIPS semantics as described in
 \includepdf[pages=-]{fdl.pdf}
 
 \end{document}
-
- - Problembeskrivning/introduktion
- - Installering
- - Beskrivning av användning av programmet
-   * CLI
-   * GUI
- - Beskrivning av språket
-   * Grammatik
-   * Kontrollstrukturer (beskrivning av hur de översätts till tillståndsmaskiner?)
-   * TSO-semantik för instruktionerna
- - Beskrivning av abstraktionerna
-   * SB
-   * PB
