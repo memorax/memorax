@@ -5,7 +5,7 @@ RMM ::=
 
 BAD-STATES ::= 'forbidden' BAD-STATES-LIST-LIST
 
-BAD-STATES-LIST-LIST ::= 
+BAD-STATES-LIST-LIST ::=
     BAD-STATES-LIST
   | BAD-STATES-LIST ';' BAD-STATES-LIST-LIST
 
@@ -40,10 +40,10 @@ VAR-INIT-LIST ::=
     ID '=' VAR-INIT-VALUE VAR-DOMAIN
   | ID '=' VAR-INIT-VALUE VAR-DOMAIN ',' VAR-INIT-LIST
 
-VAR-INIT-VALUE ::= 
+VAR-INIT-VALUE ::=
     NAT
   | '-' NAT
-  | '*'  
+  | '*'
 
 VAR-DOMAIN ::=
     ''
@@ -71,8 +71,10 @@ STMT ::=
   | 'read:' MEMLOC '=' EXPR
   | 'read:' REG ':=' MEMLOC
   | 'write:' MEMLOC ':=' EXPR
+  | 'syncwr:' MEMLOC ':=' EXPR
   | 'locked write:' MEMLOC ':=' EXPR
   | 'cas(' MEMLOC ',' EXPR ',' EXPR ')'
+  | 'fence'
   | REG ':=' EXPR
   | 'assume:' BEXPR
   | 'if' BEXPR 'then' LSTMT
@@ -128,5 +130,5 @@ MEMLOC ::=
 
 LABEL ::= ID
 
-ID ::= [_a-zA-Z][_a-zA-Z0-9]*      
+ID ::= [_a-zA-Z][_a-zA-Z0-9]*
 

@@ -5,6 +5,7 @@
 
 \usepackage{pdfpages}
 \usepackage{amssymb}
+\usepackage{stmaryrd}
 \usepackage[utf8]{inputenc}
 \usepackage[colorlinks]{hyperref}
 \usepackage{cleveref}
@@ -52,7 +53,7 @@ those safety properties.
 The verification is achieved through state space exploration and
 specifically control state reachability analysis. Inference of fences
 is achieved by repeated reachability analysis according to the method
-described in \cite{AACLR12}. 
+described in \cite{AACLR12}.
 
 Programs running under relaxed memory models tend to have an infinite
 state space, even in the cases where the same program would have a
@@ -61,11 +62,11 @@ state space analysis is impossible. The problem can be handled by
 using under approximation, over approximation or by using exact,
 infinite state analysis methods such as the well-quasi ordering
 method \cite{ACJT96}. \memorax\ is built to accommodate different
-approaches. 
+approaches.
 
-Currently \memorax\ supports two approaches for verification/fence
-insertion of programs executed under the TSO memory model. Details are
-given in \cref{sec:abstractions}.
+Currently \memorax\ supports verification/fence insertion of programs
+executed under the TSO memory model and under the VIPS memory
+model. Details are given in \cref{sec:abstractions}.
 
 This manual will assume basic knowledge about memory models. An
 introduction to the topic can be found in \cite{adve-gharachorloo-96}.
@@ -91,7 +92,7 @@ Memorax can be compiled and installed on UNIX-like systems.
      higher.
 
   \item For predicate abstraction the MathSAT SMT solver as well as the
-     library gmpxx are required. \memorax\ supports MathSAT 4 and 
+     library gmpxx are required. \memorax\ supports MathSAT 4 and
      MathSAT 5. MathSAT 4 is recommended. \memorax\ can be compiled without
      MathSAT and gmpxx, but will then not support predicate
      abstraction.
@@ -228,10 +229,10 @@ depend on which \emph{abstraction} is selected. An abstraction defines
 what a configuration looks like, what are the semantics of the
 analysed program and how the reachability analysis works. Abstractions
 can be over or under approximations of the semantics given in
-\cref{sec:semantics}. They can alternatively be exact, or even an
-approximation that is neither an over approximation nor an under
-approximation. \memorax\ currently supports two abstractions: SB and
-PB. See \cref{sec:abstractions} for details.
+\cref{sec:semantics}. They can alternatively be exact, or even
+approximations that are neither over approximations nor under
+approximations. \memorax\ currently supports three abstractions: SB,
+PB, and VIPS. See \cref{sec:abstractions} for details.
 
 \paragraph{Reachability checking}
  In this mode, \memorax\ will attempt to determine whether or not
@@ -240,7 +241,7 @@ PB. See \cref{sec:abstractions} for details.
  in the \rmm\ program as combinations of control states; one for each
  process. Any configuration where the processes are each in a control
  state such that they together satisfy such a combination is
- considered forbidden. 
+ considered forbidden.
 
  The reachability is determined by some reachability analysis, which
  depends on what abstraction is chosen.
@@ -252,16 +253,8 @@ order to guarantee the non-reachability of the forbidden control
 states. \memorax\ will report a collection $C$ of sets $S$ of memory
 fences such that for every set $S$, the memory fences in $S$ are
 sufficient to guarantee the non-reachability of the forbidden control
-states. Furthermore each fence in $S$ is necessary, in the sense that
-adding all fences except one from $S$ to the program, is insufficient
-to guarantee non-reachability. Here, ``reachability'' should be
-interpreted as reachability according to the given abstraction. Thus,
-an over approximating abstraction may report more fences than are
-actually necessary under the actual memory model, and an under
-approximating abstraction may fail to report fences that are actually
-necessary. The abstractions SB and PB (when run without a bound on the
-number of refinements) guarantee that the reported fences are both
-necessary and sufficient.
+states. Furthermore, $S$ is minimal by some minimality criterion. (See
+\cref{sec:min:criteria}.)
 
 For the TSO memory model, reported fences are identified with write
 instructions. Adding the fence to the \rmm\ program corresponds to
@@ -273,8 +266,8 @@ the writing instruction into a LOCK'd version of the same instruction.
 
 \paragraph{Graphical representation of \rmm\ programs}
 In this mode, \memorax\ produces a PDF file containing a graphical
-representation of automata corresponding to the given \rmm\ 
-program. There will be one automaton per process in the program. 
+representation of automata corresponding to the given \rmm\
+program. There will be one automaton per process in the program.
 
 \subsection{Using the Command Line Interface}
 
@@ -336,6 +329,12 @@ the standard input.
   refinements in the CEGAR loop. If more refinements are necessary,
   then \memorax\ will terminate with an error message.
 
+\item {\tt --fencins-minimality <M>}\\
+%
+  Use minimality criterion {\tt <M>} for fence insertion. Possible
+  values are {\tt cheap}, {\tt cost}, and {\tt subset}. See
+  \cref{sec:min:criteria}.
+
 \item {\tt -v} or {\tt --verbose}\\
   Print output verbosely.
 \item {\tt -vv} or {\tt --very-verbose}\\
@@ -352,10 +351,9 @@ the standard input.
 \subsection{Using the Graphical Interface}
 
 The graphical interface is a python script using tcl/tk, running on
-top of the command line interface. It runs on top of the command line
-interface, provides the CLI with appropriate switches and performs
-some interpretation of the output from the CLI. The graphical
-interface is installed as {\tt \gui{}}.
+top of the command line interface. It provides the CLI with
+appropriate switches and performs some interpretation of the output
+from the CLI. The graphical interface is installed as {\tt \gui{}}.
 
 The GUI window contains, from top to bottom:
 
@@ -388,18 +386,15 @@ will output text to the text fields ``Output'' and ``Error'' at the
 bottom of the GUI window.
 
 For commands ``Reachability'' and ``Fence Insertion'', the user may
-chose what abstraction should be used: SB or PB. (See
-\cref{sec:abstractions}.) Whether CEGAR should be used for
-automatically refining the PB abstraction. Also the user may chose to
-convert the \rmm\ program into \emph{register free form} before
-analysing it. \explainrff
+chose what abstraction should be used. (See \cref{sec:abstractions}.)
+Whether CEGAR should be used for automatically refining the PB
+abstraction. Also the user may chose to convert the \rmm\ program into
+\emph{register free form} before analysing it. \explainrff
 
-When the command ``Fence Insertion'' finds a set of fences, they are
-indicated in the output by textual representation of the writing
-transitions in the \rmm\ automata which should be changed into locked
-writes. Mouse-over will highlight the corresponding lines of code in
-the code area, and clicking them will center the code area over those
-lines.
+When particular parts of the \rmm\ code are refered to from the output
+area, hovering the mouse over the statements will highlight those
+statements in the code area. Clicking the statements will center the
+code area over those statements.
 
 For the command ``Draw Automata'', the user should specify a path,
 where a PDF file displaying the \rmm\ program will be created. When the
@@ -464,7 +459,7 @@ forbidden states can be reached in the SB semantics.
 Now, let us see how \memorax\ can be used to automatically infer the
 fences that are necessary to make the example program safe. Select the
 command ``Fence insertion''. Keep the abstraction ``SB'' and verbosity
-``Messages''. Press the ``Run'' button. 
+``Messages''. Press the ``Run'' button.
 
 If all goes well you should receive an output like this:
 
@@ -577,7 +572,7 @@ Fence set #0:
 \end{verbatim}
 
 The inference procedure terminates, telling us that it detected
-exactly one minimal and sufficient set of memory fences: 
+exactly one minimal and sufficient set of memory fences:
 \begin{displaymath}
 \{\texttt{L13 P0: write: x := 1},\texttt{L22 P1: write: y := 1}\}
 \end{displaymath}
@@ -641,7 +636,7 @@ Total time to insert fences: 0s.
 It tells us that the fence inference procedure starts with no fences
 (no fences except the ones that are explicitly part of the
 program). It runs the reachability analysis and finds that the
-forbidden states are not reachable; the program is safe. \memorax\ 
+forbidden states are not reachable; the program is safe. \memorax\
 concludes by telling us that it found exactly one memory fence set
 that is necessary and sufficient: the empty set. I.e. as expected, the
 program is safe and requires no additional fences.
@@ -669,12 +664,12 @@ abstract machine on which an \rmm\ program runs. We introduce control
 structures and informally explain about instructions under the
 Sequentially Consistent memory model. Finally we give formally and
 informally, the semantics of all instructions under the TSO memory
-model.
+model, as well as under the VIPS semantics.
 
 \subsection{Machine Model and Memory Addressing}\label{sec:abstmachinememaddr}
 
 This section describes the abstract machine on which an \rmm\ program is
-executed. 
+executed.
 
 \newcommand{\vars}{\mathcal{X}} % The set of memory locations
 \newcommand{\procs}{\mathcal{P}} % The set of processes
@@ -689,7 +684,7 @@ executed.
                                             % \pautomaton{p}
 \newcommand{\ptransitions}[1]{\Delta_{#1}} % \ptransitions{p} is the
                                            % set of transitions of
-                                           % \pautomaton{p} 
+                                           % \pautomaton{p}
 
 
 A \emph{machine} $(\procs,\automata,\regs,\vars)$ consists of a memory
@@ -697,7 +692,7 @@ with (shared) memory locations $\vars$, and a set of processes
 $\procs$ executing in parallel. Each process $p\in\procs$ has a unique
 process identifier $pid(p) \in \{0,\cdots,|\procs|-1\}$. We will
 subsequently use $p$ and $pid(p)$ interchangingly where there is no
-danger of confusion. 
+danger of confusion.
 
 \paragraph{Automata}
 Each process $p$ is equipped with an automaton $\pautomaton{p} =
@@ -709,7 +704,7 @@ of a source control state $q_0$, a target control state $q_1$ and an
 \rmm\ \emph{instruction}. Instructions will be defined and given
 semantics in later sections.
 
-\paragraph{Registers} 
+\paragraph{Registers}
 Each process $p$ has a set of registers $\pregs{p}$. Registers
 $r\in\pregs{p}$ hold integer values and can only be accessed by the
 owning process $p$. Registers are not affected by memory model
@@ -730,7 +725,7 @@ summarised in \cref{tbl:memregdiff}.
       \hline
       In arith. expr. & No & Yes\\
       \hline
-      Write & {\tt write}-instruction & 
+      Write & {\tt write}-instruction &
       \begin{tabular}{@{}c@{}}
       Assignment instruction\\
       (E.g. {\tt \$r0 := \$r1 + 1})\\
@@ -738,7 +733,7 @@ summarised in \cref{tbl:memregdiff}.
       (E.g. {\tt read: \$r0 := x})\\
       \end{tabular}\\
       \hline
-      Read & 
+      Read &
       \begin{tabular}{@{}c@{}}
         {\tt read}-instruction \\
         (assigning read or \\
@@ -749,7 +744,7 @@ summarised in \cref{tbl:memregdiff}.
         (E.g. {\tt \$r1 + 1})\\
       \end{tabular}\\
       \hline
-      Names & 
+      Names &
       \begin{tabular}{@{}c@{}}
         Alphanumerical or\\
         alphanumerical followed\\
@@ -767,7 +762,7 @@ summarised in \cref{tbl:memregdiff}.
 Each memory location $v$ and each register $r$ has an associated
 domain $domain(v), domain(r) \subseteq\mathbb{Z}$. The domain is
 either the (infinite) set of integers $\mathbb{Z}$, or a finite
-interval $\{i,i+1,\cdots,j-1,j\}$. 
+interval $\{i,i+1,\cdots,j-1,j\}$.
 
 \paragraph{Memory Addressing}
 Memory locations in $\vars$ are of two kinds: \emph{local} and
@@ -831,13 +826,13 @@ cannot be accessed through pointers.
 \small{
 \begin{verbatim}
  1: /* Dijkstra's lock */
-   
+
  2: forbidden
  3:   CS CS
-   
+
  4: data
  5:   turn = * : [0:1]
-   
+
  6: process
  7: data
  8:   flag = 0 : [0:2]
@@ -919,7 +914,7 @@ control state (label START).
 
 \begin{verbatim}
 forbidden
-  CS CS ; 
+  CS CS ;
   START CS ;
   CS START
 \end{verbatim}
@@ -971,7 +966,7 @@ so they are accessible only to the process owning them, and they are
 not affected by the memory model. In \rmm, registers have
 alphanumerical names preceded by a single \verb+$+ character.
 
-The word \verb+text+ on line 12 informs that the program code begins. 
+The word \verb+text+ on line 12 informs that the program code begins.
 
 The program code is a semi-colon separated sequence of
 statements. Each statement is optionally preceded by a process-unique
@@ -993,7 +988,7 @@ in the local variable \verb+flag+ of process 1 (see
 process 0.
 
 Lines 16 to 21 is a while-loop. The loop condition works on literal
-integers and values in registers. 
+integers and values in registers.
 
 Lines 18-19 and 24-25 are if-statements. The if-condition works on
 literal integers and values in registers. If-statements may optionally
@@ -1009,7 +1004,7 @@ by $LBL$.
 In the \rmm\ language a process's automaton is defined by a statement
 that follows the keyword \verb+text+ in the process
 declaration. Statements come in two kinds: \emph{instructions} and
-\emph{control structures}. 
+\emph{control structures}.
 
 An \emph{instruction} is a statement that can be attached to a
 transition in an automaton, and be executed atomically. An instruction
@@ -1050,7 +1045,8 @@ labelled by those instructions.
     Asserting read & {\tt read: x = 3}\\ & \\
     Assigning read & {\tt read: \$reg := x}\\ & \\
     Write & {\tt write: x := \$r0 + \$r1 - 1}\\ & \\
-    Locked block & {\tt 
+    Synchronized write & {\tt syncwr: x := \$r0 + \$r1 - 1}\\ & \\
+    Locked block & {\tt
       \begin{tabular}{@{}l@{}}
         locked\verb+{+\\
         \rule{5pt}{0pt} read: x = 0;\\
@@ -1060,6 +1056,7 @@ labelled by those instructions.
     }\\ & \\
     (Locked write) & {\tt locked write: x := 1}\\ & \\
     (Compare \& Swap) & {\tt cas(x,2,13)}\\ & \\
+    Fence & {\tt fence}\\ & \\
     \hline
     \hline
     \multicolumn{2}{|c|}{Control statements}\\
@@ -1068,7 +1065,7 @@ labelled by those instructions.
     Name & Example \\
     \hline
     Goto & {\tt goto LBL}\\ & \\
-    Sequence & {\tt 
+    Sequence & {\tt
       \begin{tabular}{@{}l@{}}
         \verb+{+\\
         \rule{5pt}{0pt} read: \$r0 := x;\\
@@ -1077,8 +1074,8 @@ labelled by those instructions.
         \verb+}+\\
       \end{tabular}
     }\\ & \\
-    If-statement & 
-    {\tt 
+    If-statement &
+    {\tt
     \begin{tabular}{@{}l@{}}
     if \$r0 = 0 then \verb+{+\\
     \rule{5pt}{0pt} \$r1 := 1; \\
@@ -1102,7 +1099,7 @@ labelled by those instructions.
       \rule{5pt}{0pt} write: w := 1\\
       \verb+}+\\
     \end{tabular}
-    }\\ & \\
+    }\\
     \hline
   \end{tabular}
   }
@@ -1126,7 +1123,7 @@ locations cannot be used in expressions!
 
 \subsubsection{Instructions Informally}
 
-This section gives an informal description of the semantics of \rmm\ 
+This section gives an informal description of the semantics of \rmm\
 instructions under the SC memory model.
 
 In the below, we use the following conventions: Registers are named
@@ -1166,6 +1163,12 @@ value in register $reg$. The instruction is enabled precisely when the
 value of $v$ in memory is within the domain of $reg$.
 
 \paragraph{Write} \verb+write: +$v$\verb+ := +$expr$
+
+Evaluates the expression $expr$ and writes the result to memory
+location $v$. Enabled when the value of $expr$ is in the domain of
+$v$.
+
+\paragraph{Synchronized Write} \verb+syncwr: +$v$\verb+ := +$expr$
 
 Evaluates the expression $expr$ and writes the result to memory
 location $v$. Enabled when the value of $expr$ is in the domain of
@@ -1218,6 +1221,11 @@ $v$. The instruction
 \verb+cas(+$v$\verb+,+$expr$\verb+,+$expr'$\verb+)+ is syntactic sugar
 for
 \verb+locked{ read: +$v$\verb+ = +$expr$\verb+; write: +$v$\verb+ := +$expr'$\verb+}+
+
+\paragraph{Fence} \verb+fence+
+
+A fence enforces some memory ordering, depending on the memory
+model. Under SC, a {\tt fence} executes as a {\tt nop}.
 
 \subsubsection{Control Structures}
 
@@ -1339,7 +1347,7 @@ $bexpr$ evaluates to true, but no longer.
 }
 \end{center}
 
-\paragraph{Either-statement} 
+\paragraph{Either-statement}
 \verb+either{+$s_0^0$\verb+;+$\cdots$\verb+;+$s_0^m$\verb+ or +$\cdots$\verb+ or +$s_n^0$\verb+;+$\cdots$\verb+;+$s_n^l$\verb+}+
 
 An either statement is a non-deterministic choice. It translates into
@@ -1402,7 +1410,7 @@ Furthermore, each process $p$ is equipped with a FIFO buffer
 len(\buf(p)) - 1$. More recently inserted elements have a lower
 index. For all $0 \leq i \leq n$, the element $\buf(p)_i = (v,w) \in
 \vars\times\mathbb{Z}$ is a pending write of process $p$ to memory
-location $v$ with value $w\in domain(v)$. 
+location $v$ with value $w\in domain(v)$.
 
 When a process executes a write to a memory location under TSO, it
 does not immediately update the memory, but instead it enqueues the
@@ -1419,7 +1427,7 @@ v$. For a register valuation $\regval(p)$ and an arithmetic expression
 $expr$ over registers from $\pregs(p)$, we let $\regval(p)[expr]$
 denote the evaluation of $expr$ where each register $r$ in $expr$
 evaluates to $\regval(p)(r)$. We define similarly $\regval(p)[bexpr]$
-for a boolean expression $bexpr$. 
+for a boolean expression $bexpr$.
 
 \newcommand{\sep}{\rule{10pt}{0pt}}
 
@@ -1443,7 +1451,7 @@ $reg$.
 \begin{displaymath}
   \frac{
     \begin{array}{c}
-      \pc(p) = q_{src} \sep 
+      \pc(p) = q_{src} \sep
       w \in domain(reg)\\
       \regval' = \regval[p:=M_p']\\
       \textrm{where}\\
@@ -1472,7 +1480,7 @@ result is true.
 A read under TSO semantics will read the value of memory location $v$
 from memory, provided that the buffer of $p$ does not contain any
 write to $v$. If there is a write to $v$ in $\buf(p)$, then the value
-of the newest such write in $\buf(p)$ is read. 
+of the newest such write in $\buf(p)$ is read.
 
 To formalise this, we define the function $read :
 ((\vars\mapsto\mathbb{Z})\times buffer) \mapsto \vars \mapsto
@@ -1512,7 +1520,7 @@ the read value to the register $reg$.
 \begin{displaymath}
   \frac{
     \begin{array}{c}
-      \pc(p) = q_{src} \sep 
+      \pc(p) = q_{src} \sep
       w \in domain(reg)\\
       \regval' = \regval[p:=M_p']\\
       \textrm{where}\\
@@ -1603,7 +1611,7 @@ any write to the buffer.
 
 A locked block acts as a fence iff there is some $s_i^j$ that is a
 write. If so, then the whole locked block is enabled only if the
-buffer of process $p$ is empty. 
+buffer of process $p$ is empty.
 
 When a locked block executes, it non-deterministically selects one
 sequence $s_i^0\verb+;+\cdots\verb+;+s_i^{m_i}$ and executing atomically
@@ -1644,7 +1652,7 @@ rules:
 \begin{displaymath}
   \frac{
     \begin{array}{c}
-      \neg is\_write(s) \\ 
+      \neg is\_write(s) \\
       (\mem,\regval,\pc,\buf) \rightarrow_{(\pc(p),s,\pc(p))} (\mem',\regval',\pc',\buf')\\
     \end{array}
   }{(\mem,\regval,\pc,\buf) \rightarrow_s^{locked} (\mem',\regval',\pc',\buf')}
@@ -1653,7 +1661,7 @@ rules:
 \begin{displaymath}
   \frac{
     \begin{array}{c}
-      is\_write(s) \\ 
+      is\_write(s) \\
       (\mem,\regval,\pc,\buf) \rightarrow_{(\pc(p),s,\pc(p))} (\mem',\regval',\pc',\buf')\\
       (\mem',\regval',\pc',\buf') \rightarrow_{update_p} (\mem'',\regval'',\pc'',\buf'')\\
     \end{array}
@@ -1687,6 +1695,228 @@ recommended to not explicitly use locked block unless absolutely
 necessary. It is recommended to limit use of locked blocks to implicit
 use by means of the two instructions \emph{locked write} and
 \emph{Compare \& Swap}.
+
+\subsubsection{VIPS Semantics}\label{sec:rmm:vips}
+
+\newcommand{\lone}{L1}
+\newcommand{\dirty}{{\tt dirty}}
+\newcommand{\clean}{{\tt clean}}
+\newcommand{\fetch}{{\tt fetch}}
+\newcommand{\evict}{{\tt evict}}
+\newcommand{\wrllc}{{\tt wrllc}}
+\newcommand{\fence}{{\tt fence}}
+\newcommand{\syncrwrite}{{\tt syncwr}}
+\newcommand{\inlone}[2]{#2{\tt .has}(#1)}
+\newcommand{\notinlone}[2]{\neg #2{\tt .has}(#1)}
+\newcommand{\lonerem}[2]{#1 \obslash #2}
+\newcommand{\lonevalof}[2]{#1(#2){.\tt val}}
+\newcommand{\lonemodof}[2]{#1(#2){.\tt mod}}
+\newcommand{\theunique}{The\hspace{2pt}}
+
+
+This section describes the VIPS semantics of \rmm\ instructions.
+
+A {\em constraint} $(\mem,\regval,\pc,\lone)$ describes the
+configuration of a machine at a particular time. Each memory location
+$v\in\vars$ has a particular value $\mem(v)\in domain(v)$. Each
+register $r$ owned by each process $p$ has a particular value
+$\regval(p)(r)\in domain(r)$. Each process $p$ is at a particular
+control state $\pc(p)\in\pcstates{p}$.
+
+Furthermore, each process $p$ has a local cache $\lone(p)$. The local
+cache $\lone(p)$ is a set of triples $(v,w,d)$ where $v\in\vars$ is a
+memory location, $w\in domain(v)$ is its value, and
+$d\in\{\dirty,\clean\}$ is its state in the cache.
+
+An initial constraint is one $(\mem,\regval,\pc,\lone)$ where for each
+process $p$, we have $\pc(p) = 0$, and $\lone(p) = \emptyset$, and for
+each register $reg$, we have that $\regval(p)(reg)$ is the initial
+value of $reg$ for $p$. For each memory location $v$, it should be the
+case that $\mem(v)$ is the initial value of $v$.
+
+A transition in VIPS may be of four forms. Firstly
+$(q_{src},i,q_{tgt})_p$ where $p$ is the executing process, $q_{src}$
+and $q_{tgt}$ are respectively the source and target control state,
+and $i$ is the executed instruction. Alternatively $\fetch(p,v)$,
+$evict(p,v)$ or $wrllc(p,v)$ where $p$ is a process and $v$ is a
+memory location. The latter three kinds of transitions are refered to
+as {\em system events}, and may occur non-deterministically without
+being explicit part of the \rmm\ program.
+
+In the below we describe the rules for process $p$ to perform a
+transition $t$. For a function $f$, by $f[x:=v]$ we denote the
+function $f'$ such that $f'(y) = f(y)$ if $y \neq x$ and $f'(x) =
+v$. For a register valuation $\regval(p)$ and an arithmetic expression
+$expr$ over registers from $\pregs(p)$, we let $\regval(p)[expr]$
+denote the evaluation of $expr$ where each register $r$ in $expr$
+evaluates to $\regval(p)(r)$. We define similarly $\regval(p)[bexpr]$
+for a boolean expression $bexpr$.
+
+\paragraph{Additional notation for L1 caches:} For a local cache $\lone(p)$ of a process $p$, and $v\in\vars$ we define the following shorthand notation:
+\begin{itemize}
+\item $\inlone{v}{\lone(p)} \triangleq \exists w, d . (v,w,d) \in \lone(p)$\\
+  I.e. $\inlone{v}{\lone(p)}$ is true iff there is an entry for $v$ in $\lone(p)$.
+\item $\lonerem{\lone(p)}{v} \triangleq \lone(p) \setminus (\{v\}\times\mathbb{Z}\times\{\dirty,\clean\})$\\
+  I.e. $\lonerem{\lone(p)}{v}$ is $\lone(p)$ with the entry for $v$ removed.
+\item $\lonevalof{\lone(p)}{v} \triangleq \theunique w . \exists d . (v,w,d)\in \lone(p)$\\
+  I.e. $\lonevalof{\lone(p)}{v}$ is the value associated with $v$ in $\lone(p)$, or undefined if $\notinlone{v}{\lone(p)}$.
+\item $\lonemodof{\lone(p)}{v} \triangleq \theunique d . \exists w . (v,w,d)\in \lone(p)$\\
+  I.e. $\lonevalof{\lone(p)}{v}$ is the $\dirty/\clean$ state associated with $v$ in $\lone(p)$, or undefined if $\notinlone{v}{\lone(p)}$.
+\end{itemize}
+
+\paragraph{Nop} $t = (q_{src},\verb+nop+,q_{tgt})$
+
+The nop instruction is the same under VIPS semantics as under SC
+semantics: It does nothing.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src}
+  }{(\mem,\regval,\pc,\lone) \rightarrow_t (\mem,\regval,\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{Assignment} $t = (q_{src},reg\verb+ := +expr, q_{tgt})$
+
+The assignment instruction is the same under VIPS semantics as under SC
+semantics: It evaluates $expr$ and assigns the result to the register
+$reg$.
+
+\begin{displaymath}
+  \frac{
+    \begin{array}{c}
+      \pc(p) = q_{src} \sep
+      w \in domain(reg)\\
+      \regval' = \regval[p:=M_p']\\
+      \textrm{where}\\
+      w = \regval(p)[expr]\\
+      M_p' = \regval(p)[reg:=w]\\
+    \end{array}
+  }
+       {(\mem,\regval,\pc,\lone) \rightarrow_t (\mem,\regval',\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{Assume} $t = (q_{src},\verb+assume: +bexpr,q_{tgt})$
+
+The assume instruction is the same under VIPS semantics as under SC
+semantics: It evaluates $bexpr$ and is enabled precisely when the
+result is true.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \regval(p)[bexpr]
+  }{(\mem,\regval,\pc,\lone) \rightarrow_t (\mem,\regval,\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{Asserting Read} $t = (q_{src},\verb+read: +v\verb+ = +expr,q_{tgt})$
+
+A read under VIPS semantics will read the value of memory location $v$
+from the local cache of the executing process.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \inlone{v}{\lone(p)} \sep
+    \lonevalof{\lone(p)}{v} = \regval(p)[expr]
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem,\regval,\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{Assigning Read} $t = (q_{src},\verb+read: +reg\verb+ := +v,q_{tgt})$
+
+An assigning read, reads the value of $v$ from the local cache, and
+assigns that value to $reg$.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \inlone{v}{\lone(p)}
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem,\regval[reg:=\lonevalof{\lone(p)}{v}],\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{Write} $t = (q_{src},\verb+write: +v\verb+ := +expr,q_{tgt})$
+
+A write instruction writes to the local cache, and marks the entry for
+$v$ as \dirty.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \inlone{v}{\lone(p)}
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem,\regval,\pc[p:=q_{tgt}],(\lonerem{\lone(p)}{v})\cup\{v,\regval(p)[expr],\dirty\})}
+\end{displaymath}
+
+\paragraph{Synchronized Write} $t = (q_{src},\verb+syncwr: +v\verb+ := +expr,q_{tgt})$
+
+A synchronized write is similar to an ordinary write, but forces the
+written value to update memory immediately.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \notinlone{v}{\lone(p)}
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem[v:=\regval(p)[expr]],\regval,\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{CAS} $t = (q_{src},\verb+cas(+v\verb+,+expr\verb+,+expr'\verb+)+,q_{tgt})$
+
+A compare-and-swap is enabled only when the value of $v$ in memory
+equals the value of $expr$. It executes as a synchronized write of
+$expr'$ to $v$.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \notinlone{v}{\lone(p)} \sep
+    \mem(v) = \regval(p)[expr]
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem[v:=\regval(p)[expr']],\regval,\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{Fence} $t = (q_{src},\fence,q_{tgt})$
+
+A fence forces the local cache to flush.
+
+\begin{displaymath}
+  \frac{
+    \pc(p) = q_{src} \sep
+    \lone = \emptyset
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem,\regval,\pc[p:=q_{tgt}],\lone)}
+\end{displaymath}
+
+\paragraph{System Event: Fetch} $t = \fetch(p,v)$
+
+A fetch is the system event that occurs when process $p$ gets the
+value of memory location $v$ from memory, and creates a clean entry
+for $v$ in its local cache.
+
+\begin{displaymath}
+  \frac{
+    \notinlone{v}{\lone(p)}
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem,\regval,\pc,\lone\cup\{(v,\mem(v),\clean)\})}
+\end{displaymath}
+
+\paragraph{System Event: Evict} $t = \evict(p,v)$
+
+An evict is the system event that occurs when process $p$ removes a
+clean entry from its local cache.
+
+\begin{displaymath}
+  \frac{
+    \inlone{v}{\lone(p)} \sep
+    \lonemodof{\lone(p)}{v} = \clean
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem,\regval,\pc,\lonerem{\lone(p)}{v})}
+\end{displaymath}
+
+\paragraph{System Event: WrLLC} $t = \wrllc(p,v)$
+
+A WrLLC is the system event that occurs when process $p$ writes the
+value of a dirty entry in its local cache back to memory.
+
+\begin{displaymath}
+  \frac{
+    \inlone{v}{\lone(p)} \sep
+    \lonemodof{\lone(p)}{v} = \dirty
+  }{(\mem,\regval,\pc,\lone)\rightarrow_t(\mem[v:=\lonevalof{\lone(p)}{v}],\regval,\pc,(\lonerem{\lone(p)}{v})\cup\{(v,\lonevalof{\lone(p)}{v},\clean)\})}
+\end{displaymath}
 
 \subsection{Grammar}
 
@@ -1806,6 +2036,12 @@ complete memory snapshot.
 The reachability analysis is by backward state space exploration.
 
 For details about the SB abstraction, see~\cite{AACLR12}.
+
+\subsection{VIPS}
+
+Analysis using the VIPS abstraction is an exact, explicit-state,
+forward reachability analysis under the VIPS semantics as described in
+\cref{sec:rmm:vips}.
 
 \phantomsection
 \addcontentsline{toc}{section}{References}
