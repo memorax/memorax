@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -42,7 +42,7 @@ template<class RegId> std::set<RegId> Lang::BExpr<RegId>::get_registers() const 
   return s;
 };
 
-template<class RegId> template<class RegId2> 
+template<class RegId> template<class RegId2>
 Lang::BExpr<RegId2> Lang::BExpr<RegId>::convert(std::function<RegId2(const RegId&)> &rc) const{
   return BExpr<RegId2>(SyntaxString<RegId>::template convert<RegId2>(rc));
 };
@@ -185,7 +185,7 @@ template<class Id> std::string Lang::MemLoc<Id>::to_string() const throw(){
   case GLOBAL_ID: ss << "var:" << id; break;
   case GLOBAL_INT_DEREF: ss << "[@" << ptr << "]"; break;
   case GLOBAL_REG_DEREF: ss << "[$" << id << "]"; break;
-  case LOCAL: 
+  case LOCAL:
     if(owner == -1)
       ss << "var:" << id << "[my]";
     else
@@ -218,6 +218,8 @@ inline Lang::NML::NML(const Lang::MemLoc<int> &ml, int caller) throw(std::logic_
     id = ml.get_id();
     owner = ml.get_owner(caller);
     break;
+  default:
+    throw new std::logic_error("Lang::NML: Unknown kind of MemLoc.");
   }
 }
 
@@ -230,8 +232,8 @@ inline std::string Lang::NML::to_string() const throw(){
   if(is_global()){
     ss << "gvar:" << id;
   }else{
-    ss << "lvar:P" 
-       << owner << ":" 
+    ss << "lvar:P"
+       << owner << ":"
        << id;
   }
   return ss.str();
@@ -247,8 +249,8 @@ inline bool Lang::NML::operator<(const NML &nml) const throw(){
 
 template<class RegId> Lang::Stmt<RegId>::Stmt(const Lexer::TokenPos &p,
                                               std::vector<Lexer::Token> symbs) :
-  type(NOP), e0(0), e1(0), b(0), 
-  stmts(0), fence(false), lbl(""), 
+  type(NOP), e0(0), e1(0), b(0),
+  stmts(0), fence(false), lbl(""),
   writer(-1), stmt_count(0), pos(p), lex_symbols(symbs)
 {
 };
@@ -508,7 +510,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::update(int writer, VecSet<MemLoc<RegId> > m
 };
 
 template<class RegId>
-Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b, 
+Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b,
                                              const labeled_stmt_t &s0,
                                              const Lexer::TokenPos &p,
                                              std::vector<Lexer::Token> symbs){
@@ -523,7 +525,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b,
 };
 
 template<class RegId>
-Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b, 
+Lang::Stmt<RegId> Lang::Stmt<RegId>::if_stmt(const BExpr<RegId> &b,
                                              const labeled_stmt_t &s0,
                                              const labeled_stmt_t &s1,
                                              const Lexer::TokenPos &p,
@@ -588,7 +590,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::sequence(const std::vector<labeled_stmt_t> 
   return s;
 };
 
-template<class RegId> template<class RegId2> Lang::Stmt<RegId2> 
+template<class RegId> template<class RegId2> Lang::Stmt<RegId2>
 Lang::Stmt<RegId>::convert(std::function<RegId2(const RegId&)> &rc,
                            std::function<MemLoc<RegId2>(const MemLoc<RegId>&)> &mlc) const{
   Stmt<RegId2> s(pos,lex_symbols);
@@ -617,8 +619,8 @@ Lang::Stmt<RegId>::convert(std::function<RegId2(const RegId&)> &rc,
   return s;
 };
 
-template<class RegId> std::string 
-Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &regts, 
+template<class RegId> std::string
+Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &regts,
                              const std::function<std::string(const MemLoc<RegId> &)> &mlts,
                              int indentation,std::string label) const{
   std::string ind;
@@ -635,9 +637,9 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
   case ASSUME: return indlbl+"assume: "+b->to_string(regts);
   case READASSERT: return indlbl+"read: "+mlts(reads[0])+" = "+e0->to_string(regts);
   case READASSIGN: return indlbl+"read: "+regts(reg)+" := "+mlts(reads[0]);
-  case WRITE: 
+  case WRITE:
     return indlbl+"write: "+mlts(writes[0])+" := "+e0->to_string(regts);
-  case SYNCWR: 
+  case SYNCWR:
     return indlbl+"syncwr: "+mlts(writes[0])+" := "+e0->to_string(regts);
   case FENCE: return indlbl+"fence";
   case GOTO: return indlbl+"goto "+lbl;
@@ -665,13 +667,13 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
     if(indentation >= 0){
       return indlbl+"if "+b->to_string(regts)+" then\n"+
         stmts[0].stmt.to_string(regts,mlts,indentation+2,stmts[0].lbl)+
-        (stmt_count == 2 
+        (stmt_count == 2
          ? "\n"+ind+"else\n"+ stmts[1].stmt.to_string(regts,mlts,indentation+2,stmts[1].lbl)
          : "");
     }else{
       return indlbl+"if "+b->to_string(regts)+" then "+
         stmts[0].stmt.to_string(regts,mlts,indentation,stmts[0].lbl)+
-        (stmt_count == 2 
+        (stmt_count == 2
          ? " else "+ stmts[1].stmt.to_string(regts,mlts,indentation,stmts[1].lbl)
          : "");
     }
@@ -754,7 +756,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
   }else{
     switch(type){
     case NOP: return 0;
-    case ASSIGNMENT: 
+    case ASSIGNMENT:
       if(reg < stmt.reg){
         return -1;
       }else if(reg > stmt.reg){
@@ -962,8 +964,8 @@ template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(co
     return true;
   }else{
     switch(type){
-    case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: 
-    case WRITE: case GOTO: case UPDATE: case SYNCWR: case FENCE: 
+    case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN:
+    case WRITE: case GOTO: case UPDATE: case SYNCWR: case FENCE:
     case FETCH: case EVICT: case WRLLC:
       return false;
     case LOCKED: case IF: case WHILE: case EITHER: case SEQUENCE:
@@ -1040,11 +1042,11 @@ template<class RegId> std::set<RegId> Lang::Stmt<RegId>::get_registers() const{
   }
 }
 
-template<class RegId> 
+template<class RegId>
 VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const throw(){
   VecSet<VecSet<MemLoc<RegId> > > no_writes = VecSet<VecSet<MemLoc<RegId> > >::singleton(VecSet<MemLoc<RegId> >());
   switch(type){
-  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case GOTO: 
+  case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case GOTO:
   case FENCE: case FETCH: case EVICT:
     return no_writes;
   case WRITE: case UPDATE: case SYNCWR: case WRLLC:
@@ -1120,7 +1122,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::flatten() const{
 template<class RegId>
 std::vector<std::vector<Lang::Stmt<RegId> > > Lang::Stmt<RegId>::flatten_aux() const{
   VecSet<std::vector<Stmt> > res;
-  
+
   switch(get_type()){
   case LOCKED:
     {

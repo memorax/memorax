@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -45,7 +45,7 @@ public:
   public:
     InsInfo(const TsoLockSync *creator_copy);
     InsInfo(const InsInfo &) = default;
-    virtual InsInfo &operator=(const InsInfo &) = default;
+    InsInfo &operator=(const InsInfo &) = delete;
     virtual ~InsInfo() {};
 
     /* When a TsoLockSync is inserted into a Machine m, creating the
@@ -75,7 +75,7 @@ public:
     static Machine::PTransition all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
                                              const Machine::PTransition &t);
   };
-  
+
   virtual Machine *insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const;
 
   /* Return a deep copy of this object. */
@@ -97,7 +97,7 @@ protected:
 private:
   Machine::PTransition w;
 
-  std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
+  std::string to_string_aux(const std::function<std::string(const int&)> &regts,
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
 };
 

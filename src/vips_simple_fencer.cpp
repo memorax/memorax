@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -75,7 +75,7 @@ std::set<std::set<Sync*> > VipsSimpleFencer::fence(const Trace &t, const std::ve
     if(rps[i].count(pid)){
       /* Find the next instruction transition of pid */
       int i_next = i+1;
-      while(i_next <= t2->size() && 
+      while(i_next <= t2->size() &&
             ((*t2)[i_next]->pid != pid || is_sys_event((*t2)[i_next]->instruction))){
         ++i_next;
       }
@@ -117,7 +117,7 @@ std::set<Sync*> VipsSimpleFencer::fence_syncwr(const Trace &t, const std::vector
            sts.count(t[j]->instruction.get_type()) &&
            sps.count(j) &&
            sps[j] < wsp){
-          /* Yes, then consider making t[i] into a syncwr. 
+          /* Yes, then consider making t[i] into a syncwr.
            * Find the right sync in all_syncwrs */
           for(auto s : syncwrs_by_pq[pid][t[i]->source]){
             assert(dynamic_cast<VipsSyncwrSync*>(s));
@@ -171,7 +171,7 @@ std::map<int,int> VipsSimpleFencer::get_sync_points(const Trace &t){
       {
         /* Search for later, matching wrllc */
         for(int j = i+1; j <= t.size(); ++j){
-          if(t[j]->pid == t[i]->pid && 
+          if(t[j]->pid == t[i]->pid &&
              t[j]->instruction.get_type() == Lang::WRLLC &&
              t[j]->instruction.get_writes() == t[i]->instruction.get_writes()){
             sps[i] = j;
@@ -249,7 +249,7 @@ std::set<Sync*> VipsSimpleFencer::fences_between(int pid,
   /* Return true iff there is some t' in S such that t' changed
    * according to m_infos equals t.
    */
-  std::function<bool(const Automaton::Transition&,const FenceSync::TSet&)> member = 
+  std::function<bool(const Automaton::Transition&,const FenceSync::TSet&)> member =
     [&m_infos,pid](const Automaton::Transition &t,const FenceSync::TSet &S){
     for(auto it = S.begin(); it != S.end(); ++it){
       if(t.compare(FenceSync::InsInfo::all_tchanges(m_infos,Machine::PTransition(*it,pid)),false) == 0){
@@ -367,17 +367,18 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
     // last_fetch[{pid,ml}] is the last seen fetch of ml by pid
     // only memory locations that are currently in L1 are in last_fetch
     // only fetches that have not been followed by a variable use are in last_fetch
-    std::map<std::pair<int,Lang::MemLoc<int> >,int> last_fetch;
+    typedef std::pair<int,Lang::MemLoc<int> > p_ml_t;
+    std::map<p_ml_t,int> last_fetch;
     for(unsigned i = 0; i < ptv.size(); ++i){
       int pid = ptv[i].pid;
       switch(ptv[i].instruction.get_type()){
       case Lang::FETCH:
         assert(last_fetch.count({pid,ptv[i].instruction.get_writes()[0]}) == 0);
-        last_fetch[{pid,ptv[i].instruction.get_writes()[0]}] = i;
+        last_fetch[p_ml_t(pid,ptv[i].instruction.get_writes()[0])] = i;
         break;
       case Lang::EVICT:
-        if(last_fetch.count({pid,ptv[i].instruction.get_writes()[0]})){
-          remove.insert(last_fetch[{pid,ptv[i].instruction.get_writes()[0]}]);
+        if(last_fetch.count(p_ml_t(pid,ptv[i].instruction.get_writes()[0]))){
+          remove.insert(last_fetch[p_ml_t(pid,ptv[i].instruction.get_writes()[0])]);
           last_fetch.erase({pid,ptv[i].instruction.get_writes()[0]});
           remove.insert(i);
         }
@@ -538,7 +539,7 @@ void VipsSimpleFencer::test(){
    * The global memory locations in m should be u,v,w,x,y,z in that
    * order. instr may only access global memory locations.
    */
-  std::function<Machine::PTransition(const Machine*,int,std::string,std::string,std::string)> trans = 
+  std::function<Machine::PTransition(const Machine*,int,std::string,std::string,std::string)> trans =
     [&get_machine](const Machine *m,int pid,std::string src_lbl,std::string instr, std::string tgt_lbl){
     Machine *m2 = get_machine
     ("forbidden *\n"
@@ -580,7 +581,7 @@ void VipsSimpleFencer::test(){
     return Machine::PTransition(q,stmt,q,pid);
   };
 
-  std::function<Trace*(const Machine*,std::string)> get_vips_trace = 
+  std::function<Trace*(const Machine*,std::string)> get_vips_trace =
     [&trans,&cs,&update](const Machine *m,std::string tstr){
     while(std::isspace(tstr[0])) tstr = tstr.substr(1);
     while(std::isspace(tstr[tstr.size()-1])) tstr = tstr.substr(0,tstr.size()-1);
@@ -641,7 +642,7 @@ void VipsSimpleFencer::test(){
       [](const Trace *t, std::vector<int> tgt){
       std::map<int,int> sps = get_sync_points(*t);
       for(auto pr : sps){
-        if(pr.first < 1 || pr.first >= tgt.size()){
+        if(pr.first < 1 || pr.first >= int(tgt.size())){
           return false;
         }
       }

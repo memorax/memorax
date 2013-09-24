@@ -42,7 +42,7 @@ public:
   public:
     InsInfo(const FenceSync::InsInfo &fs_info, const Lang::NML &fence_nml);
     InsInfo(const InsInfo &) = default;
-    virtual InsInfo &operator=(const InsInfo &) = default;
+    InsInfo &operator=(const InsInfo &) = delete;
     virtual ~InsInfo();
     /* The dummy memory location that was used for the inserted fence
      * instruction. */

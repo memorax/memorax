@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -85,7 +85,7 @@ public:
    *
    * (See above.)
    */
-  FenceSync(Lang::Stmt<int> f, int pid, int q, 
+  FenceSync(Lang::Stmt<int> f, int pid, int q,
             TSet IN, TSet OUT);
   virtual ~FenceSync() {};
 
@@ -94,7 +94,7 @@ public:
     InsInfo(const FenceSync *creator_copy)
     : Sync::InsInfo(creator_copy), fence(-1,Lang::Stmt<int>::nop(),-1,-1) {};
     InsInfo(const InsInfo &) = default;
-    virtual InsInfo &operator=(const InsInfo &) = default;
+    InsInfo &operator=(const InsInfo &) = delete;
     virtual ~InsInfo(){};
     /* When a FenceSync is inserted into a Machine m, creating the
      * Machine m', for each transition t in m, tchanges[t] is that
@@ -179,8 +179,8 @@ protected:
    * Hint: Use from deriving concrete class FS as follows:
    * get_all_possible(m,fs,[](f,pid,q,IN,OUT){ return new FS(f,pid,q,IN,OUT); })
    */
-  typedef std::function<Sync*(Lang::Stmt<int> f, int pid, int q, 
-                              TSet IN, 
+  typedef std::function<Sync*(Lang::Stmt<int> f, int pid, int q,
+                              TSet IN,
                               TSet OUT)> fs_init_t;
   static std::set<Sync*> get_all_possible(const Machine &m,
                                           const std::set<Lang::Stmt<int> > &fs,
@@ -208,9 +208,9 @@ private:
   /* Returns S\T */
   static TSet set_minus(const TSet &S, const TSet &T);
 
-  std::string to_string_aux(const std::function<std::string(const int&)> &regts, 
+  std::string to_string_aux(const std::function<std::string(const int&)> &regts,
                             const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
-  void print_aux(const std::function<std::string(const int&)> &regts, 
+  void print_aux(const std::function<std::string(const int&)> &regts,
                  const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
                  Log::redirection_stream &os, Log::redirection_stream &json_os) const;
 

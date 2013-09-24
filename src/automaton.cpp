@@ -511,19 +511,19 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
 
   class state_t{
   public:
-    state_t(const Automaton &a1, const Automaton &a2, bool cmp_pos) : a1(a1), a2(a2), cmp_pos(cmp_pos) {
+    state_t(const Automaton *a1, const Automaton *a2, bool cmp_pos) : a1(a1), a2(a2), cmp_pos(cmp_pos) {
       std::set<int> all;
-      for(int q = 0; q < int(a1.states.size()); ++q){
+      for(int q = 0; q < int(a1->states.size()); ++q){
         all.insert(q);
       }
-      qmap.resize(a1.states.size(),all);
+      qmap.resize(a1->states.size(),all);
       limit_to(0,0);
       label_limit();
       edge_limit();
       propagate();
     };
-    const Automaton &a1;
-    const Automaton &a2;
+    const Automaton *a1;
+    const Automaton *a2;
     bool cmp_pos;
     /* Maps control states q in a1 to sets of control states in a2
      * that are currently considered possible matches for q. */
@@ -532,7 +532,7 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
     void propagate(){
       while(prop_stack.size()){
         int q = prop_stack.back();
-        const State &qstate = a1.states[q];
+        const State &qstate = a1->states[q];
         prop_stack.pop_back();
         assert(qmap[q].size() <= 1);
         if(qmap[q].size() == 0){
@@ -540,7 +540,7 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
           return;
         }else{
           int q2 = *qmap[q].begin();
-          const State &qstate2 = a2.states[q2];
+          const State &qstate2 = a2->states[q2];
           /* Eliminate the state q2 from all other qmap[q'] */
           for(int qq = 0; qq < int(qmap.size()); ++qq){
             if(qq != q){
@@ -649,8 +649,8 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
         std::set<int> newqmap;
         for(auto it = qmap[q].begin(); it != qmap[q].end(); ++it){
           int q2 = *it;
-          const State &qstate = a1.states[q];
-          const State &q2state = a2.states[q2];
+          const State &qstate = a1->states[q];
+          const State &q2state = a2->states[q2];
           if(same_instrs(qstate.bwd_transitions,q2state.bwd_transitions) &&
              same_instrs(qstate.fwd_transitions,q2state.fwd_transitions)){
             newqmap.insert(q2);
@@ -661,27 +661,27 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
     };
     void label_limit(){
       /* Check that both automata have the same labels */
-      if(a1.label_map.size() != a2.label_map.size()){
+      if(a1->label_map.size() != a2->label_map.size()){
         fail();
         return;
       }
-      for(auto it = a1.label_map.begin(); it != a1.label_map.end(); ++it){
-        if(a2.label_map.count(it->first) == 0){
+      for(auto it = a1->label_map.begin(); it != a1->label_map.end(); ++it){
+        if(a2->label_map.count(it->first) == 0){
           fail();
           return;
         }
       }
       /* Limit the control state mapping */
-      for(auto it = a1.label_map.begin(); it != a1.label_map.end(); ++it){
+      for(auto it = a1->label_map.begin(); it != a1->label_map.end(); ++it){
         int q = it->second;
-        assert(a2.label_map.count(it->first));
-        int q2 = a2.label_map.at(it->first);
+        assert(a2->label_map.count(it->first));
+        int q2 = a2->label_map.at(it->first);
         limit_to(q,q2);
       }
     };
     std::string to_string() const{
       std::stringstream ss;
-      for(unsigned i = 0; i < a1.states.size(); ++i){
+      for(unsigned i = 0; i < a1->states.size(); ++i){
         ss << "Q" << i << ": {";
         for(auto it = qmap[i].begin(); it != qmap[i].end(); ++it){
           if(it != qmap[i].begin()) ss << ", ";
@@ -718,7 +718,7 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
   };
 
   std::vector<state_t> stack;
-  stack.push_back(state_t(*this,a2,cmp_pos));
+  stack.push_back(state_t(this,&a2,cmp_pos));
   while(stack.size()){
     state_t &st = stack.back();
     int searchvar;

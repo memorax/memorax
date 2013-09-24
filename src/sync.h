@@ -55,13 +55,7 @@ public:
      */
     InsInfo(const Sync *creator_copy) : sync(creator_copy) {};
     InsInfo(const InsInfo &ii) : sync(ii.sync ? ii.sync->clone() : 0) {};
-    virtual InsInfo &operator=(const InsInfo &ii){
-      if(&ii != this){
-        if(sync) delete sync;
-        sync = ii.sync;
-      }
-      return *this;
-    };
+    InsInfo &operator=(const InsInfo &ii) = delete;
     virtual ~InsInfo() { if(sync) delete sync; };
     /* A copy of the Sync that created this InsInfo. */
     const Sync *sync;
