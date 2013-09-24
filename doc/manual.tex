@@ -455,13 +455,18 @@ forbidden states can be reached in the SB semantics.
 Now, let us see how \memorax\ can be used to automatically infer the
 fences that are necessary to make the example program safe. Select the
 command ``Fence insertion''. Keep the abstraction ``SB'' and verbosity
-``Messages''. Press the ``Run'' button.
+``Messages''. Use minimality criterion ``cheap'' (see
+\cref{sec:min:criteria} for details). Press the ``Run'' button.
 
 If all goes well you should receive an output like this:
 
 \noindent
 \begin{verbatim}
-$ /path/to/memorax fencins --json -v --abstraction sb
+$ /home/claerulf/memorax/src/memorax fencins --json -v --rff \
+  --abstraction sb --fencins-minimality cheap
+Transforming machine into register free form.
+Removing superfluous nop instructions from machine.
+Searching for cheap synchronization sets.
 Currently examining fence set:
   (No fences)
 
@@ -469,7 +474,7 @@ Reachability analysis results:
   Reachable:             Yes
   Generated constraints: 500
   Size of visited set:   216
-  Time consumption:      0.01 s
+  Time consumption:      0.0 s
 
 Cycles found in trace:
 TsoCycle (complete):
@@ -486,20 +491,31 @@ Reachability analysis results:
   Reachable:             No
   Generated constraints: 86
   Size of visited set:   39
-  Time consumption:      0 s
+  Time consumption:      0.0 s
 
-Found 1 fence set:
-Fence set #0:
-  L13 P0: write: x := 1
-  L22 P1: write: y := 1
+Found 1 synchronization set:
+Sync set #0:
+Lock write: L13 P0: write: x := 1
+Lock write: L22 P1: write: y := 1
 
-Total time to insert fences: 0.01s.
+Total time to insert fences: 0.0 s
 \end{verbatim}
 
 Reading it from top to bottom, it tells us the following:
 
 \noindent
 \begin{verbatim}
+Transforming machine into register free form.
+Removing superfluous nop instructions from machine.
+\end{verbatim}
+
+\memorax\ transforms the code into ``register free form'' before
+analysing it. This transformation preserves reachability, but often
+gives performance improvement.
+
+\noindent
+\begin{verbatim}
+Searching for cheap synchronization sets.
 Currently examining fence set:
   (No fences)
 \end{verbatim}
@@ -563,10 +579,10 @@ sufficient for safety.
 
 \noindent
 \begin{verbatim}
-Found 1 fence set:
+Found 1 synchronization set:
 Fence set #0:
-  L13 P0: write: x := 1
-  L22 P1: write: y := 1
+Lock write: L13 P0: write: x := 1
+Lock write: L22 P1: write: y := 1
 \end{verbatim}
 
 The inference procedure terminates, telling us that it detected
@@ -613,8 +629,11 @@ again. We get the following result:
 
 \noindent
 \begin{verbatim}
-$ /path/to/memorax/build/bin/memorax fencins --json -v \
-    --abstraction sb
+$ /home/claerulf/memorax/src/memorax fencins --json -v --rff \
+  --abstraction sb --fencins-minimality cheap
+Transforming machine into register free form.
+Removing superfluous nop instructions from machine.
+Searching for cheap synchronization sets.
 Currently examining fence set:
   (No fences)
 
@@ -622,13 +641,15 @@ Reachability analysis results:
   Reachable:             No
   Generated constraints: 86
   Size of visited set:   39
-  Time consumption:      0 s
+  Time consumption:      0.0 s
 
-Found 1 fence set:
-Fence set #0:
-  (No fences)
+Found 1 synchronization set:
+Sync set #0:
+  (No synchronizations)
+  (This means that the program is safe without any additional \
+   fences.)
 
-Total time to insert fences: 0s.
+Total time to insert fences: 0.0 s
 \end{verbatim}
 
 It tells us that the fence inference procedure starts with no fences
@@ -2124,7 +2145,7 @@ ordinary write with a synchronized write. The output from
 \vspace{10pt}
 
 The synchronization is then inserted by changing {\tt write:}$v${\tt
-  :=}$expr$ into {\tt syncwr:}$v${\tt :=}$expr$ on line $ln$.
+  :=}$expr$ on line $ln$ into {\tt syncwr:}$v${\tt :=}$expr$.
 
 \paragraph{Fence Insertion}\hfill(VIPS)
 
@@ -2135,7 +2156,7 @@ of \memorax\ will be of the following form
 \vspace{10pt}
 
 \noindent
-{\tt FenceSync(}$proc${\tt , }$q${\tt , f:}$fnc${\tt)}\\
+{\tt Insert }$fnc$ {\tt for }$proc$ {\tt at }$q$\\
 \rule{10pt}{0pt}{\tt IN: }$ti_0$\\
 \rule{10pt}{0pt}\vdots\\
 \rule{10pt}{0pt}{\tt IN: }$ti_n$\\

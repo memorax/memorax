@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -92,7 +92,7 @@ namespace TsoFencins{
   }
 
   std::list<FenceSet> fencins(const Machine &m, Reachability &r,
-                              reach_arg_init_t reach_arg_init, 
+                              reach_arg_init_t reach_arg_init,
                               bool only_one){
     std::list<FenceSet> queue;
     queue.push_back(FenceSet(m));
@@ -102,7 +102,7 @@ namespace TsoFencins{
     while(!queue.empty()){
 
       Log::msg << queue.front().to_string() << "\n" << std::flush;
-      
+
       Reachability::Arg *next_arg = reach_arg_init(queue.front().get_atomized_machine(),result);
       Reachability::Result *tmp_result = r.reachability(next_arg);
       delete next_arg;
@@ -167,7 +167,7 @@ namespace TsoFencins{
       const Machine::PTransition *trans = trace.transition(t);
       const Lang::Stmt<int> &s = trans->instruction;
       int pid = trans->pid;
-      
+
       switch(s.get_type()){
       case Lang::WRITE:
         pending_writes[pid].push_back(trans);
@@ -209,7 +209,7 @@ namespace TsoFencins{
      */
     std::list<cycle_t> pending_cycles;
 
-    std::function<void(const Machine::PTransition*)> non_locked_read = 
+    std::function<void(const Machine::PTransition*)> non_locked_read =
       [&wrupdates,&pending_writes,&pending_cycles,proc_count](const Machine::PTransition *read){
       for(auto wit = pending_writes[read->pid].begin(); wit != pending_writes[read->pid].end(); wit++){
         TsoCycle tc(proc_count);
@@ -323,7 +323,7 @@ namespace TsoFencins{
      */
 
     /* The set of memory locations where a value written by process
-     * pid reaches memory between positions wi and ri in the trace 
+     * pid reaches memory between positions wi and ri in the trace
      */
     std::set<Lang::NML> written;
     /* Check that there are no interfering instructions between wi and ri.
@@ -340,7 +340,7 @@ namespace TsoFencins{
         }else if(s.get_reads().size() > 0){
           return false;
         }else if(s.is_fence()){
-          if(s.get_type() == Lang::LOCKED && 
+          if(s.get_type() == Lang::LOCKED &&
              s.get_statement_count() == 1 &&
              s.get_statement(0)->get_type() == Lang::WRITE &&
              !is_locked(m,*trace[i])){
@@ -359,9 +359,9 @@ namespace TsoFencins{
       }
     }
     return true;
-   
+
   };
-  
+
   std::set<Machine::PTransition>
   get_critical_writes(const cycle_t &cycle, const Trace &trace, const Machine &m){
     std::set<Machine::PTransition> s;
@@ -370,7 +370,7 @@ namespace TsoFencins{
       std::list<std::pair<const Machine::PTransition *,const Machine::PTransition*> > cws = cycle.cycle.get_critical_pairs();
       for(auto cwit = cws.begin(); cwit != cws.end(); ++cwit){
         const Machine::PTransition *w = trace[committed_index(trace,cwit->first)];
-        if(s.count(*w) == 0 && cwit->first->instruction.get_writes().size() && 
+        if(s.count(*w) == 0 && cwit->first->instruction.get_writes().size() &&
            cwit->second->instruction.get_writes().size() == 0){
           VecSet<Lang::MemLoc<int> > wmls(cwit->first->instruction.get_writes());
           VecSet<Lang::MemLoc<int> > rmls(cwit->second->instruction.get_reads());
@@ -390,10 +390,10 @@ namespace TsoFencins{
       insert(*it);
     }
   };
-  
+
   FenceSet::FenceSet(const Machine &m)
     : machine(m), atomized_machine(m)
-  { 
+  {
   };
 
   void FenceSet::insert(const Machine::PTransition &t){
@@ -450,6 +450,14 @@ namespace TsoFencins{
                          fs.writes.begin(),fs.writes.end());
   };
 
+  std::set<Sync*> FenceSet::to_sync_set() const{
+    std::set<Sync*> S;
+    for(auto it = writes.begin(); it != writes.end(); ++it){
+      S.insert(new TsoLockSync(*it));
+    }
+    return S;
+  };
+
   int index(const Trace &trace, const Machine::PTransition *t){
     for(int i = 1; i <= trace.size(); ++i){
       if(trace[i] == t)
@@ -494,7 +502,7 @@ namespace TsoFencins{
     std::list<std::pair<const Machine::PTransition *,const Machine::PTransition*> > cps = cycle.cycle.get_critical_pairs();
     int reorderings = 0;
     for(auto cpit = cps.begin(); cpit != cps.end(); ++cpit){
-      if((index(trace,cpit->first) < index(trace,cpit->second)) != 
+      if((index(trace,cpit->first) < index(trace,cpit->second)) !=
          (committed_index(trace,cpit->first) < committed_index(trace,cpit->second))){
         reorderings++;
       }

@@ -133,31 +133,16 @@ void print_sync_sets(const Machine &m, const std::set<std::set<Sync*> > &sync_se
 };
 
 void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceSet> &fence_sets){
-  Log::result << "Found " << fence_sets.size() << " fence set";
-  if(fence_sets.size() == 0){
-    Log::result << "s.\n";
-    Log::result << "\nNOTICE: This means that the program is unsafe regardless of fences!\n\n";
-  }else{
-    if(fence_sets.size() == 1){
-      Log::result << ":\n";
-    }else{
-      Log::result << "s:\n";
-    }
-    int ctr = 0;
-    for(auto it = fence_sets.begin(); it != fence_sets.end(); it++){
-      Log::result << "Fence set #" << ctr << ":\n";
-      if(it->get_writes().empty()){
-        Log::result << "  (No fences)\n";
-        Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
-      }else{
-        const std::set<Machine::PTransition> &writes = it->get_writes();
-        for(auto wit = writes.begin(); wit != writes.end(); wit++){
-          Log::result << "  " << wit->to_string(machine) << "\n";
-          Log::json << "json: {\"action\":\"Link Fence\", \"pos\":" << wit->instruction.get_pos().to_json() << "}\n";
-        }
-        Log::result << "\n";
-      }
-      ctr++;
+  std::set<std::set<Sync*> > sync_sets;
+  for(auto it = fence_sets.begin(); it != fence_sets.end(); ++it){
+    sync_sets.insert(it->to_sync_set());
+  }
+
+  print_sync_sets(machine,sync_sets);
+
+  for(auto it = sync_sets.begin(); it != sync_sets.end(); ++it){
+    for(auto s : *it){
+      delete s;
     }
   }
 };
