@@ -449,7 +449,7 @@ Reachability analysis results:
 \end{verbatim}
 
 You will also receive a ``witness trace'' showing \emph{how} the
-forbidden states can be reached in the SB semantics.
+forbidden states can be reached in the TSO semantics.
 
 \paragraph{Fence inference}
 Now, let us see how \memorax\ can be used to automatically infer the
@@ -598,26 +598,28 @@ set will center the code over the highlighted instructions.
 Let us manually insert the fences, and then try again. Rewrite the
 code by adding ``{\tt locked}'' in two places as shown below:
 
+\newcommand{\ind}{\rule{10pt}{0pt}}
+
 \begin{center}
 \small{\tt
 \begin{tabular}{l|l}
 /* An example code */\\
 \\
 forbidden\\
-  CS CS\\
+\ind CS CS\\
 \\
 data\\
-  x = 0 : [0:1]\\
-  y = 0 : [0:1]\\
+\ind x = 0 : [0:1]\\
+\ind y = 0 : [0:1]\\
 \\
-process                  & process\\
-text                     & text\\
-L0:                      & L0:\\
-  \fbox{locked} write: x := 1;  & \fbox{locked} write: y := 1;\\
-  read: y = 0;           & read: x = 0;\\
-CS:                      & CS:\\
-  write: x := 0;         & write: y := 0;\\
-  goto L0                & goto L0 \\
+process                            & process\\
+text                               & text\\
+L0:                                & L0:\\
+\ind \fbox{locked} write: x := 1;  & \ind\fbox{locked} write: y := 1;\\
+\ind read: y = 0;                  & \ind read: x = 0;\\
+CS:                                & CS:\\
+\ind write: x := 0;                & \ind write: y := 0;\\
+\ind goto L0                       & \ind goto L0 \\
 \end{tabular}}
 \end{center}
 
