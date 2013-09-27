@@ -995,6 +995,14 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         while(s[c] == ' '):
             c = c + 1
         ln = "L{0}".format(pos['lineno'])
+        # Try to find the next occurence of ln in s
+        d = c
+        while(d < len(s) and not(s.startswith(ln,d))):
+            d = d + 1
+        if d < len(s):
+            # There was a next occurence, then skip until that occurence.
+            # Otherwise start from the first non-space character.
+            c = d
         pos0 = "{0}.{1}".format(lnk['output_line'],c)
         try:
             if(s[c:c+len(ln)] == ln):
