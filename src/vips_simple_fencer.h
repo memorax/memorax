@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -38,6 +38,14 @@ public:
   VipsSimpleFencer &operator=(const VipsSimpleFencer&) = default;
   ~VipsSimpleFencer();
   virtual std::set<std::set<Sync*> > fence(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
+
+  /* Return a trace t' with the same trace graph (c.f. Shasha, Snir
+   * 1988) as t. In t' transitions have been interleaved in a
+   * different manner, and system events have been timed differently,
+   * according to heuristics meant to decrease the number of
+   * irrelevant instruction reorderings.
+   */
+  static Trace *decrease_reorderings(const Trace &t);
 
   static void test();
 private:
@@ -87,14 +95,6 @@ private:
                                  const Automaton::Transition &in,
                                  const Automaton::Transition &out,
                                  const std::vector<const Sync::InsInfo*> &m_infos) const;
-
-  /* Return a trace t' with the same trace graph (c.f. Shasha, Snir
-   * 1988) as t. In t' transitions have been interleaved in a
-   * different manner, and system events have been timed differently,
-   * according to heuristics meant to decrease the number of
-   * irrelevant instruction reorderings.
-   */
-  static Trace *decrease_reorderings(const Trace &t);
 
   /* Helper for fence(t,m_infos). Returns the syncs of
    * fence(t,m_infos) that are VipsSyncwrSyncs.

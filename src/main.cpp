@@ -431,6 +431,12 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
   Reachability::Result *result = reach->reachability(rarg);
 
   if(result->result == Reachability::REACHABLE){
+    if(flags.find("a")->second.argument == "vips"){
+      /* Rewrite trace to improve readability. */
+      Trace *t2 = VipsSimpleFencer::decrease_reorderings(*result->trace);
+      delete result->trace;
+      result->trace = t2;
+    }
     Log::msg << "\n *** Witness trace ***\n";
     result->trace->print(Log::msg,Log::debug,Log::json,*machine);
   }
