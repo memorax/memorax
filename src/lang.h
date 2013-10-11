@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -467,7 +467,11 @@ namespace Lang {
     SYNCWR,
     /* Fence: A full memory fence. Used in particular in VIPS-M. */
     FENCE,
-    /* Locked block: 
+    /* SSFence: A memory fence that enforces W->W order. */
+    SSFENCE,
+    /* LLFence: A memory fence that enforces R->R order. */
+    LLFENCE,
+    /* Locked block:
      * locked {
      *   stmts[0]
      * or
@@ -475,7 +479,7 @@ namespace Lang {
      * or
      *   stmts[stmt_count-1]
      * }
-     * Invariant: 
+     * Invariant:
      *   No labels occur in stmts.
      *   The only kinds statements which may occur in stmts are
      *   nop, assignment, assume, readassert, readassign, write, locked, sequence
@@ -508,10 +512,10 @@ namespace Lang {
     IF,
     /* While statement: while b do stmts[0] */
     WHILE,
-    /* Either statement: 
+    /* Either statement:
      * either{
      *   stmts[0]
-     * or 
+     * or
      *   ...
      * or
      *   stmts[stmt_count-1]
@@ -570,7 +574,13 @@ namespace Lang {
     /* Full memory fence */
     static Stmt<RegId> full_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                                   std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
-    /* Locked block: 
+    /* Memory fence enforcing W->W order. */
+    static Stmt<RegId> ss_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Memory fence enforcing R->R order. */
+    static Stmt<RegId> ll_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Locked block:
      * locked{
      *   ss[0]
      * or
@@ -600,8 +610,8 @@ namespace Lang {
                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Update: An update concerning memory locations mls, and a
-     * write performed by process writer. 
-     * 
+     * write performed by process writer.
+     *
      * Memory locations in mls should be from the perspective of the
      * owner of the update, not from the process writer (unless the
      * owner and the writer are the same).
@@ -634,7 +644,7 @@ namespace Lang {
       label_t lbl; // lbl == "" represents an unlabeled statement
       Stmt<RegId> stmt;
       /* Defines a total order over labeled statements.
-       * 
+       *
        * Returns 0 if *this is equal to lstmt, -1 if *this is smaller
        * than lstmt and 1 if *this is greater than lstmt.
        *
@@ -659,7 +669,7 @@ namespace Lang {
                                   const labeled_stmt_t &s,
                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                                   std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
-    /* Either statement: 
+    /* Either statement:
      * either{
      *   ss[0]
      * or
@@ -667,7 +677,7 @@ namespace Lang {
      * or
      *   ss[ss.size()-1]
      * }
-     * 
+     *
      * Pre: ss.size() > 0
      */
     static Stmt<RegId> either(const std::vector<Stmt> &ss,
@@ -748,7 +758,7 @@ namespace Lang {
      * been replaced by the register rc(r) and the memory location
      * mlc(ml).
      */
-    template<class RegId2> Stmt<RegId2> 
+    template<class RegId2> Stmt<RegId2>
     convert(std::function<RegId2(const RegId&)> &rc,
             std::function<MemLoc<RegId2>(const MemLoc<RegId>&)> &mlc) const;
     /* Returns an Stmt equal to this one, but if this Stmt is a locked
@@ -765,7 +775,7 @@ namespace Lang {
      */
     Stmt flatten() const;
     /* Returns a string representation of this statement.
-     * 
+     *
      * Registers r and memory locations ml will be represented with
      * respectively regts(r) and mlts(ml).
      *
@@ -776,7 +786,7 @@ namespace Lang {
      * If label != "" then the statement will be labeled by label in
      * the representation.
      */
-    std::string to_string(const std::function<std::string(const RegId&)> &regts, 
+    std::string to_string(const std::function<std::string(const RegId&)> &regts,
                           const std::function<std::string(const MemLoc<RegId> &)> &mlts,
                           int indentation = -1,std::string label = "") const;
 

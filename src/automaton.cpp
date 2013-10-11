@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -54,7 +54,7 @@ Automaton::Automaton(const Lang::Stmt<int> &ast) :
   }
 
   /* The last state may be superfluous. If so, remove it. */
-  if(states.size() > 1 && 
+  if(states.size() > 1 &&
      states.back().bwd_transitions.empty() &&
      states.back().fwd_transitions.empty()){
     states.resize(states.size()-1);
@@ -68,7 +68,7 @@ void Automaton::clear_and_copy(const Automaton &a){
   dealloc();
   label_map.clear();
   states.clear();
-  
+
   /* copy */
   label_map = a.label_map;
   for(unsigned i = 0; i < a.states.size(); i++){
@@ -104,9 +104,10 @@ Automaton &Automaton::operator=(const Automaton &a){
 void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsat_goto,
                                    int source){
   switch(ast.get_type()){
-  case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME: 
-  case Lang::READASSERT: case Lang::READASSIGN: case Lang::WRITE: 
+  case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME:
+  case Lang::READASSERT: case Lang::READASSIGN: case Lang::WRITE:
   case Lang::LOCKED: case Lang::SYNCWR: case Lang::FENCE:
+  case Lang::SSFENCE: case Lang::LLFENCE:
     /* Ordinary instructions */
     {
       int i = states.size() - 1;
@@ -343,16 +344,16 @@ Automaton::~Automaton(){
   dealloc();
 }
 
-std::string Automaton::Transition::to_string(const std::function<std::string(const int&)> &regts, 
+std::string Automaton::Transition::to_string(const std::function<std::string(const int&)> &regts,
                                              const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const throw(){
   std::stringstream ss;
-  ss << "(Q" << source << ", " 
-     << instruction.to_string(regts,mlts) 
+  ss << "(Q" << source << ", "
+     << instruction.to_string(regts,mlts)
      << ", Q" << target << ")";
   return ss.str();
 }
 
-std::string Automaton::to_string(const std::function<std::string(const int&)> &regts, 
+std::string Automaton::to_string(const std::function<std::string(const int&)> &regts,
                                  const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
                                  int indentation) const throw(){
   std::string s;
@@ -397,7 +398,7 @@ int Automaton::state_index_of_label(Lang::label_t lbl) const throw(UnDefinedLabe
     throw new UnDefinedLabel(lbl);
 }
 
-std::string Automaton::to_dot(const std::function<std::string(const int&)> &regts, 
+std::string Automaton::to_dot(const std::function<std::string(const int&)> &regts,
                               const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const throw(){
   static int gv_id = 0; // Used in names for nodes to ensure uniqueness
 
@@ -414,7 +415,7 @@ std::string Automaton::to_dot(const std::function<std::string(const int&)> &regt
     for(std::set<Transition*>::const_iterator it = states[i].fwd_transitions.begin();
         it != states[i].fwd_transitions.end(); it++){
       ss << "  automaton_node_" << gv_id << "_" << i << " -> " <<
-        "automaton_node_" << gv_id << "_" << (*it)->target << 
+        "automaton_node_" << gv_id << "_" << (*it)->target <<
         " [label=\"" << (*it)->instruction.to_string(regts,mlts,-1,"") << "\"]\n";
     }
   }
@@ -748,7 +749,7 @@ bool Automaton::same_automaton(const Automaton &a2, bool cmp_pos) const{
 void Automaton::test(){
   /* Test same_automaton */
   {
-    std::function<Automaton(std::string)> auto_stmt = 
+    std::function<Automaton(std::string)> auto_stmt =
       [](std::string s){
       std::stringstream ss;
       ss << "forbidden\n"

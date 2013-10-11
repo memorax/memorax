@@ -412,6 +412,24 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::full_fence(const Lexer::TokenPos &p,
 };
 
 template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::ss_fence(const Lexer::TokenPos &p,
+                                              std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
+  s.type = SSFENCE;
+  s.fence = true;
+  return s;
+};
+
+template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::ll_fence(const Lexer::TokenPos &p,
+                                              std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
+  s.type = LLFENCE;
+  s.fence = true;
+  return s;
+};
+
+template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::fetch(MemLoc<RegId> ml,
                                            const Lexer::TokenPos &p,
                                            std::vector<Lexer::Token> symbs){
@@ -642,6 +660,8 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
   case SYNCWR:
     return indlbl+"syncwr: "+mlts(writes[0])+" := "+e0->to_string(regts);
   case FENCE: return indlbl+"fence";
+  case SSFENCE: return indlbl+"ssfence";
+  case LLFENCE: return indlbl+"llfence";
   case GOTO: return indlbl+"goto "+lbl;
   case UPDATE:
     {
@@ -793,7 +813,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
       }else{
         return e0->compare(*stmt.e0);
       }
-    case FENCE:
+    case FENCE: case SSFENCE: case LLFENCE:
       return 0;
     case GOTO:
       if(lbl < stmt.lbl){
@@ -913,7 +933,7 @@ template<class RegId> int Lang::Stmt<RegId>::labeled_stmt_t::compare(const label
 template<class RegId> bool Lang::Stmt<RegId>::check_locked_invariant(const Stmt &stmt, std::string *comment){
   switch(stmt.get_type()){
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case LOCKED:
-  case FENCE: case SYNCWR:
+  case FENCE: case SSFENCE: case LLFENCE: case SYNCWR:
     return true;
   case SEQUENCE:
     {
@@ -965,8 +985,8 @@ template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(co
   }else{
     switch(type){
     case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN:
-    case WRITE: case GOTO: case UPDATE: case SYNCWR: case FENCE:
-    case FETCH: case EVICT: case WRLLC:
+    case WRITE: case GOTO: case UPDATE: case SYNCWR: case FENCE: case SSFENCE:
+    case LLFENCE: case FETCH: case EVICT: case WRLLC:
       return false;
     case LOCKED: case IF: case WHILE: case EITHER: case SEQUENCE:
       {
@@ -1010,7 +1030,7 @@ template<class RegId> void Lang::Stmt<RegId>::populate_reads_writes(){
 template<class RegId> std::set<RegId> Lang::Stmt<RegId>::get_registers() const{
   std::set<RegId> set;
   switch(type){
-  case NOP: case FENCE: return set;
+  case NOP: case FENCE: case SSFENCE: case LLFENCE: return set;
   case ASSIGNMENT:
     set = e0->get_registers();
     set.insert(reg);
@@ -1047,7 +1067,7 @@ VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const 
   VecSet<VecSet<MemLoc<RegId> > > no_writes = VecSet<VecSet<MemLoc<RegId> > >::singleton(VecSet<MemLoc<RegId> >());
   switch(type){
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case GOTO:
-  case FENCE: case FETCH: case EVICT:
+  case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT:
     return no_writes;
   case WRITE: case UPDATE: case SYNCWR: case WRLLC:
     return VecSet<VecSet<MemLoc<RegId> > >::singleton(writes);
@@ -1111,7 +1131,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::flatten() const{
       return locked_block(vs.get_vector(),get_pos());
     }
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
-  case SYNCWR: case FENCE: case FETCH: case EVICT: case WRLLC:
+  case SYNCWR: case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT: case WRLLC:
     return *this;
   case IF: case WHILE: case EITHER: case SEQUENCE: case GOTO:
   default:
@@ -1152,7 +1172,7 @@ std::vector<std::vector<Lang::Stmt<RegId> > > Lang::Stmt<RegId>::flatten_aux() c
       break;
     }
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
-  case FENCE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
+  case FENCE: case SSFENCE: case LLFENCE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
     {
       res.insert(std::vector<Stmt>(1,*this));
       break;

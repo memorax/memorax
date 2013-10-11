@@ -164,7 +164,8 @@ std::map<int,int> VipsSimpleFencer::get_sync_points(const Trace &t){
   for(int i = 1; i <= t.size(); ++i){
     switch(t[i]->instruction.get_type()){
     case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME:
-    case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
+    case Lang::FENCE: case Lang::SSFENCE: case Lang::LLFENCE:
+    case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
       // Do nothing
       break;
     case Lang::WRITE:
@@ -412,6 +413,8 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
         case Lang::FENCE:
           p_has_fenced.insert(pid);
           break;
+        case Lang::SSFENCE: case Lang::LLFENCE:
+          throw new std::logic_error("VipsSimpleFencer::decrease_reorderings: {ss,ll}fence are not yet supported.");
         case Lang::EVICT:
           if(p_has_fenced.count(pid) == 0 &&
              need_evicted.count({pid,ptv[i].instruction.get_writes()[0]}) == 0){

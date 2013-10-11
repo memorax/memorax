@@ -426,7 +426,8 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
 
   switch(stmt.get_type()){
   case Lang::NOP: case Lang::GOTO: case Lang::UPDATE:
-  case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
+  case Lang::FENCE: case Lang::SSFENCE: case Lang::LLFENCE:
+  case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
     s.insert(pr_t(stmt,v));
     break;
   case Lang::ASSIGNMENT:
@@ -559,7 +560,8 @@ void Machine::get_reg_relevant_aux(int reg, const Lang::Stmt<int> &stmt,
   *overwrites = false;
   switch(stmt.get_type()){
   case Lang::NOP: case Lang::GOTO: case Lang::UPDATE:
-  case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
+  case Lang::FENCE: case Lang::SSFENCE: case Lang::LLFENCE:
+  case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
     return;
   case Lang::ASSIGNMENT:
     *may_read = stmt.get_expr().get_registers().count(reg);
@@ -993,7 +995,8 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
 
   switch(s.get_type()){
   case Lang::NOP: case Lang::ASSUME: case Lang::READASSERT:
-  case Lang::FENCE: case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
+  case Lang::FENCE: case Lang::SSFENCE: case Lang::LLFENCE:
+  case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
     ss.push_back(s);
     break;
   case Lang::WRITE:

@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -288,7 +288,7 @@ VipsBitConstraint *VipsBitConstraint::Common::clone(const VipsBitConstraint &vbc
   return vbc2;
 };
 
-VipsBitConstraint *VipsBitConstraint::post(Common &c, 
+VipsBitConstraint *VipsBitConstraint::post(Common &c,
                                            const Machine::PTransition &t) const{
   int pid = t.pid;
   const Lang::Stmt<int> &s = t.instruction;
@@ -517,7 +517,7 @@ std::string VipsBitConstraint::to_string(const Common &c) const{
   for(unsigned i = 0; i < c.all_nmls.size(); ++i){
     if(i != 0) ss << " ";
     ss << c.machine.pretty_string_nml.at(c.all_nmls[i])
-       << "=" 
+       << "="
        << c.bfget(bits,c.mem(c.all_nmls[i]));
   }
   ss << "]\n";
@@ -528,7 +528,7 @@ std::string VipsBitConstraint::to_string(const Common &c) const{
       ss << "       regs:[";
       for(unsigned i = 0; i < c.machine.regs[p].size(); ++i){
         if(i != 0) ss << " ";
-        ss << c.machine.regs[p][i].name 
+        ss << c.machine.regs[p][i].name
            << "="
            << c.bfget(bits,c.reg(p,i));
       }
@@ -539,7 +539,7 @@ std::string VipsBitConstraint::to_string(const Common &c) const{
       if(i != 0) ss << " ";
       int vd = c.bfget(bits,c.l1(p,c.all_nmls[i]));
       ss << c.machine.pretty_string_nml.at(c.all_nmls[i])
-         << "=" 
+         << "="
          << c.l1val_valof(vd)
          << (c.l1val_is_dirty(vd) ? "*" : "");
     }
@@ -594,7 +594,7 @@ bool VipsBitConstraint::Common::possible_to_pointer_pack(const Machine &machine)
   /* The maximum allowed domain size for a memory location or register. */
   /* Sufficiently small to fit both value and dirty/clean state into one data_t. */
   data_t max_sz = std::numeric_limits<data_t>::max() / 2 + 1;
-  
+
   /* pcs */
   for(unsigned p = 0; p < machine.automata.size(); ++p){
     if((data_t)machine.automata[p].get_states().size() > remains) return false;
@@ -757,7 +757,7 @@ std::set<VipsBitConstraint*> VipsBitConstraint::Common::get_initial_constraints(
   /* mr_decls[i] is the declaration of the i:th entry in mr_valuation. */
   std::vector<Lang::VarDecl> mr_decls;
 
-  /* Setup mr_{valuation,reg,proc,wild,decls} 
+  /* Setup mr_{valuation,reg,proc,wild,decls}
    * for the smallest initial valuation */
   {
     for(unsigned i = 0; i < all_nmls.size(); ++i){
@@ -899,6 +899,10 @@ Trace *VipsBitConstraint::explicit_vips_trace(const Trace &vbctrace){
           }
           break;
         }
+      case Lang::SSFENCE: case Lang::LLFENCE:
+        {
+          throw new std::logic_error("VipsBitConstraint::explicit_vips_trace: {ss,ll}fence are not yet supported.");
+        }
       case Lang::LOCKED: case Lang::SYNCWR:
         {
           assert(!(s.get_type() == Lang::LOCKED) || is_cas(s));
@@ -999,7 +1003,7 @@ void VipsBitConstraint::test(){
   }
 
   /* Test fields in VipsBitConstraint */
-  std::function<Machine*(std::string)> get_machine = 
+  std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
     std::stringstream ss(rmm);
     Lexer lex(ss);
@@ -1117,8 +1121,8 @@ void VipsBitConstraint::test(){
 
     /* Test 11: Registers */
     Test::inner_test("#2.11: VBC registers (init,basic)",
-                     common.bfget(vbc->bits,common.reg(0,0)) == 0 && 
-                     common.bfget(vbc->bits,common.reg(0,1)) == 2 && 
+                     common.bfget(vbc->bits,common.reg(0,0)) == 0 &&
+                     common.bfget(vbc->bits,common.reg(0,1)) == 2 &&
                      common.bfget(vbc->bits,common.reg(1,0)) == -1);
 
     common.dealloc(vbc);
@@ -1236,8 +1240,8 @@ void VipsBitConstraint::test(){
 
     /* Test 22,23: Registers */
     Test::inner_test("#2.22: VBC registers (init,basic)",
-                     common.bfget(vbc->bits,common.reg(0,0)) == 0 && 
-                     common.bfget(vbc->bits,common.reg(0,1)) == 2 && 
+                     common.bfget(vbc->bits,common.reg(0,0)) == 0 &&
+                     common.bfget(vbc->bits,common.reg(0,1)) == 2 &&
                      common.bfget(vbc->bits,common.reg(1,0)) == -1);
 
     RegVal regval(0,common,vbc->bits);
@@ -1330,7 +1334,7 @@ void VipsBitConstraint::test(){
     /* Return some PTransition from m which originates in the control
      * state of process pid which is labelled lbl.
      */
-    std::function<Machine::PTransition(int,std::string)> trans = 
+    std::function<Machine::PTransition(int,std::string)> trans =
       [m](int pid, std::string lbl){
       int s = m->automata[pid].state_index_of_label(lbl);
       Automaton::Transition *t = *m->automata[pid].get_states()[s].fwd_transitions.begin();
@@ -1341,12 +1345,12 @@ void VipsBitConstraint::test(){
      * state of process pid which is labelled srclbl, and targets the
      * control state labelled tgtlbl.
      */
-    std::function<Machine::PTransition(int,std::string,std::string)> trans2 = 
+    std::function<Machine::PTransition(int,std::string,std::string)> trans2 =
       [m](int pid, std::string srclbl, std::string tgtlbl){
       int src = m->automata[pid].state_index_of_label(srclbl);
       int tgt = m->automata[pid].state_index_of_label(tgtlbl);
       Automaton::Transition *t = 0;
-      for(auto it = m->automata[pid].get_states()[src].fwd_transitions.begin(); 
+      for(auto it = m->automata[pid].get_states()[src].fwd_transitions.begin();
           it != m->automata[pid].get_states()[src].fwd_transitions.end();
           ++it){
         if((*it)->target == tgt){
@@ -1396,7 +1400,7 @@ void VipsBitConstraint::test(){
                        vbc2 != 0 &&
                        common.bfget(vbc2->bits,common.pcs[0]) == 0 &&
                        common.bfget(vbc2->bits,common.reg(1,0)) == 1 &&
-                       common.bfget(vbc2->bits,common.reg(1,1)) == 0 && 
+                       common.bfget(vbc2->bits,common.reg(1,1)) == 0 &&
                        common.bfget(vbc2->bits,common.reg(0,0)) == 0 &&
                        common.bfget(vbc2->bits,common.reg(0,1)) == 0);
 
@@ -1421,7 +1425,7 @@ void VipsBitConstraint::test(){
 
     /* Test assume */
     {
-      
+
       VipsBitConstraint *vbc2 = vbc->post(common,trans2(1,"Lass0","Lass1"));
       VipsBitConstraint *vbc3 = vbc2->post(common,trans(1,"Lass1"));
       VipsBitConstraint *vbc4 = vbc3->post(common,trans(1,"Lass2"));
@@ -1495,7 +1499,7 @@ void VipsBitConstraint::test(){
       Test::inner_test("#3.18: read assign",
                        vbc8 != 0 &&
                        common.bfget(vbc8->bits,common.reg(0,0)) == 1);
-      
+
 
       common.dealloc(vbc8);
       // Do not delete vbc7
@@ -1729,9 +1733,9 @@ void VipsBitConstraint::test(){
        * Also that all caches contain clean values which are the same
        * as the values in memory.
        */
-      std::function<bool(const VipsBitConstraint*)> unwild = 
+      std::function<bool(const VipsBitConstraint*)> unwild =
         [&c,&x,&y,&flag0,&flag1](const VipsBitConstraint *vbc){
-        return 
+        return
         /* Fixed initial values */
         c.bfget(vbc->bits,c.mem(y)) == 1 &&
         c.bfget(vbc->bits,c.mem(flag0)) == 0 &&
@@ -1750,7 +1754,7 @@ void VipsBitConstraint::test(){
       /* A predicate that should return true for exactly one of the
        * initial constraints.
        */
-      std::function<bool(const VipsBitConstraint*)> spot_check0 = 
+      std::function<bool(const VipsBitConstraint*)> spot_check0 =
         [&c,&x,&flag1](const VipsBitConstraint *vbc){
         return
         c.bfget(vbc->bits,c.mem(x)) == 0 &&
@@ -1878,5 +1882,5 @@ void VipsBitConstraint::test(){
       delete m;
     }
   }
-  
+
 };

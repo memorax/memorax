@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -73,12 +73,12 @@ namespace Parser{
   };
 };
 
-void Parser::force(Lexer &lex, Lexer::TokenType toktyp, 
+void Parser::force(Lexer &lex, Lexer::TokenType toktyp,
                    std::string complaint_pre,std::string complaint_post){
   force_toks(lex,toktyp,0,complaint_pre,complaint_post);
 }
 
-void Parser::force_toks(Lexer &lex, Lexer::TokenType toktyp, 
+void Parser::force_toks(Lexer &lex, Lexer::TokenType toktyp,
                         std::vector<Lexer::Token> *toks,
                         std::string complaint_pre,std::string complaint_post){
   Lexer::Token tok;
@@ -97,7 +97,7 @@ Parser::expr_t Parser::p_expr_arith_unit(Lexer &lex,std::vector<Lexer::Token> *t
   lex >> tok;
 
   switch(tok.type){
-  case Lexer::REG: 
+  case Lexer::REG:
     {
       ppush(toks,tok);
       return expr_t::reg(tok.value);
@@ -160,7 +160,7 @@ Parser::expr_t Parser::p_expr_arith_r(Lexer &lex,const expr_t &left,std::vector<
   }
 }
 
-Parser::expr_t Parser::p_expr(Lexer &lex) 
+Parser::expr_t Parser::p_expr(Lexer &lex)
   throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*){
   return p_expr_toks(lex,0);
 }
@@ -196,7 +196,7 @@ Parser::stmt_t Parser::p_stmt_list(Lexer &lex,const Context &ctx,std::vector<Lex
   std::vector<stmt_t::labeled_stmt_t> seq;
 
   seq.push_back(p_lstmt(lex,ctx,&mytoks));
-  
+
   lex >> tok;
   while(tok.type == Lexer::SEMICOLON){
     ppush(&mytoks,tok);
@@ -240,7 +240,7 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
         throw new SyntaxError("Invalid pointer value at "+ml.pos.to_long_string()+".",ml.pos);
       }
     }else{
-      std::function<int(const std::string&)> regids = 
+      std::function<int(const std::string&)> regids =
         [&ctx,&ml](const std::string &s)->int{
         for(unsigned i = 0; i < ctx.regs.size(); ++i){
           if(ctx.regs[i].name == s){
@@ -251,7 +251,7 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
       };
       Lang::Expr<int> e_i = e.convert(regids);
       ZStar<int>::Vector regstars(ctx.regs.size());
-      
+
       /* Check if e contains unbounded registers */
       bool e_has_unbounded_reg = false;
       std::set<int> regs = e_i.get_registers();
@@ -260,7 +260,7 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
           e_has_unbounded_reg = true;
         }
       }
-      
+
       std::vector<stmt_t> v;
       for(unsigned i = 0; i < ctx.global_vars.size(); ++i){
         /* Check whether this variable can be pointed to by e */
@@ -287,7 +287,7 @@ Parser::stmt_t Parser::resolve_pointer(const memloc_or_pointer_t &ml,
   }
 };
 
-Parser::stmt_t Parser::p_stmt(Lexer &lex,const Context &ctx) 
+Parser::stmt_t Parser::p_stmt(Lexer &lex,const Context &ctx)
   throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*){
   return p_stmt_toks(lex,ctx,0);
 }
@@ -304,7 +304,7 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
     ppush(&mytoks,tok);
     res_stmt = stmt_t::nop(tok.pos,mytoks);
     break;
-  case Lexer::READ: 
+  case Lexer::READ:
     {
       ppush(&mytoks,tok);
       force_toks(lex,Lexer::COLON,&mytoks);
@@ -313,7 +313,7 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
         ppush(&mytoks,tok1);
         force_toks(lex,Lexer::ASSIGNMENT,&mytoks);
         memloc_or_pointer_t ml = p_memloc_toks(lex,ctx,&mytoks);
-        res_stmt = resolve_pointer(ml,[&tok1,&tok](const memloc_t &ml){ 
+        res_stmt = resolve_pointer(ml,[&tok1,&tok](const memloc_t &ml){
             return stmt_t::read_assign(tok1.value,ml,tok.pos);
           },ctx,mytoks);
       }else{
@@ -357,7 +357,19 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
       res_stmt = stmt_t::full_fence(tok.pos,mytoks);
       break;
     }
-  case Lexer::CAS: 
+  case Lexer::SSFENCE:
+    {
+      ppush(&mytoks,tok);
+      res_stmt = stmt_t::ss_fence(tok.pos,mytoks);
+      break;
+    }
+  case Lexer::LLFENCE:
+    {
+      ppush(&mytoks,tok);
+      res_stmt = stmt_t::ll_fence(tok.pos,mytoks);
+      break;
+    }
+  case Lexer::CAS:
     {
       ppush(&mytoks,tok);
       force_toks(lex,Lexer::LPAREN,&mytoks);
@@ -372,7 +384,7 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
         },ctx,mytoks);
       break;
     }
-  case Lexer::REG: 
+  case Lexer::REG:
     {
       ppush(&mytoks,tok);
       force_toks(lex,Lexer::ASSIGNMENT,&mytoks);
@@ -380,7 +392,7 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
       res_stmt = stmt_t::assignment(tok.value,e,tok.pos,mytoks);
       break;
     }
-  case Lexer::IF: 
+  case Lexer::IF:
     {
       ppush(&mytoks,tok);
       bexpr_t b(p_bexpr_toks(lex,&mytoks));
@@ -508,7 +520,7 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
   return res_stmt;
 }
 
-Parser::bexpr_t Parser::p_bexpr(Lexer &lex) 
+Parser::bexpr_t Parser::p_bexpr(Lexer &lex)
 throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*){
   return p_bexpr_toks(lex,0);
 }
@@ -641,7 +653,7 @@ Parser::bexpr_t Parser::p_bexpr_atom_r(Lexer &lex,const expr_t &left,std::vector
   }
 }
 
-Parser::memloc_or_pointer_t Parser::p_memloc(Lexer &lex, const Context &ctx) 
+Parser::memloc_or_pointer_t Parser::p_memloc(Lexer &lex, const Context &ctx)
   throw(SyntaxError*,Lang::Exception*,Lexer::BadToken*){
   return p_memloc_toks(lex,ctx,0);
 }
@@ -769,7 +781,7 @@ std::vector<Parser::Proc> Parser::p_proc_list(Lexer &lex, const Context &ctx){
   std::pair<Proc,int> p = p_proc(lex,ctx);
   for(int i = 0; i < p.second; i++)
     vec.push_back(p.first);
-  
+
   Lexer::Token tok;
   lex >> tok;
   while(tok.type == Lexer::PROCESS){
@@ -780,7 +792,7 @@ std::vector<Parser::Proc> Parser::p_proc_list(Lexer &lex, const Context &ctx){
     lex >> tok;
   }
   lex.putback(tok);
-  
+
   return vec;
 }
 
@@ -788,7 +800,7 @@ Lang::VarDecl Parser::p_var_decl(Lexer &lex, declaration_type dcl_type){
   Lexer::Token tok0,tok1,tok2;
 
   lex >> tok0;
-  
+
   if(dcl_type == DCL_ML){
     if(tok0.type != Lexer::ID)
       throw new SyntaxError("Expected variable initialization at "+tok0.pos.to_long_string()+".",tok0.pos);
@@ -796,7 +808,7 @@ Lang::VarDecl Parser::p_var_decl(Lexer &lex, declaration_type dcl_type){
     if(tok0.type != Lexer::REG)
       throw new SyntaxError("Expected register initialization at "+tok0.pos.to_long_string()+".",tok0.pos);
   }
-  
+
   force(lex,Lexer::EQ);
   lex >> tok1;
 
@@ -914,7 +926,7 @@ std::vector<Lang::VarDecl> Parser::p_var_decl_list(Lexer &lex, declaration_type 
 
   lex >> tok;
   lex.putback(tok);
-  while((dcl_type == DCL_ML && tok.type == Lexer::ID) || 
+  while((dcl_type == DCL_ML && tok.type == Lexer::ID) ||
         (dcl_type == DCL_REG && tok.type == Lexer::REG)){
     Lang::VarDecl dcl = p_var_decl(lex,dcl_type);
     for(unsigned i = 0; i < vec.size(); i++){
@@ -964,7 +976,7 @@ Parser::forbidden_t Parser::p_forbidden(Lexer &lex){
     }
 
   }
-  
+
   lex.putback(tok);
 
   return fb;
@@ -974,7 +986,7 @@ Parser::Test Parser::p_test(Lexer &lex) throw(SyntaxError*,Lang::Exception*,Lexe
   Test test;
 
   test.forbidden = p_forbidden(lex);
-  
+
   Lexer::Token tok;
   lex >> tok;
 
@@ -983,7 +995,7 @@ Parser::Test Parser::p_test(Lexer &lex) throw(SyntaxError*,Lang::Exception*,Lexe
     lex >> tok; // Get rid of 'predicates'
 
     std::map<std::string,int> m;
-    std::function<int(const std::string&)> rc = 
+    std::function<int(const std::string&)> rc =
       [&m](const std::string &s)->int{
       if(m.count(s) == 0){
         int i = m.size();
@@ -1015,6 +1027,6 @@ Parser::Test Parser::p_test(Lexer &lex) throw(SyntaxError*,Lang::Exception*,Lexe
   }
 
   force(lex,Lexer::TOKEOF);
-  
+
   return test;
 }
