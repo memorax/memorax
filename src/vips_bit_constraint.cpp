@@ -428,6 +428,31 @@ VipsBitConstraint *VipsBitConstraint::post(Common &c,
       }
       return vbc;
     }
+  case Lang::SSFENCE:
+    {
+      for(unsigned i = 0; i < c.all_nmls.size(); ++i){
+        /* Check that the L1 entry is clean */
+        if(c.l1val_is_dirty(c.bfget(bits,c.l1(pid,c.all_nmls[i])))){
+          /* ssfence is not enabled. */
+          c.dealloc(vbc);
+          return 0;
+        }
+      }
+      return vbc;
+    }
+  case Lang::LLFENCE:
+    {
+      for(unsigned i = 0; i < c.all_nmls.size(); ++i){
+        /* Force clean entries to update from memory */
+        if(!c.l1val_is_dirty(c.bfget(bits,c.l1(pid,c.all_nmls[i])))){
+          /* Update the L1 entry from memory. */
+          /* This is to simulate the implicit fetch after the fence. */
+          int val = c.bfget(bits,c.mem(c.all_nmls[i]));
+          c.bfset(&vbc->bits,c.l1(pid,c.all_nmls[i]),c.l1val_clean(val));
+        }/* else leave the entry alone */
+      }
+      return vbc;
+    }
   case Lang::LOCKED:
     {
       /* The only supported locked statement is CAS */
@@ -860,6 +885,14 @@ Trace *VipsBitConstraint::explicit_vips_trace(const Trace &vbctrace){
     }
   }
 
+  /* Keep track of whether a memory location is clean or dirty in each L1 */
+  std::map<std::pair<int,Lang::NML>,bool> clean_entry;
+  for(int p = 0; p < proc_count; ++p){
+    for(Lang::NML nml : all_nmls){
+      clean_entry[std::pair<int,Lang::NML>(p,nml)] = true;
+    }
+  }
+
   /* First fetch everything */
   /* Since VipsBitConstraints always start with full L1 */
   {
@@ -899,9 +932,29 @@ Trace *VipsBitConstraint::explicit_vips_trace(const Trace &vbctrace){
           }
           break;
         }
-      case Lang::SSFENCE: case Lang::LLFENCE:
+      case Lang::SSFENCE:
         {
-          throw new std::logic_error("VipsBitConstraint::explicit_vips_trace: {ss,ll}fence are not yet supported.");
+          vips_trace->push_back(*vbctrace.transition(i),0);
+          break;
+        }
+      case Lang::LLFENCE:
+        {
+          int src = vbctrace.transition(i)->source;
+          int tgt = vbctrace.transition(i)->target;
+          for(auto it = all_nmls.begin(); it != all_nmls.end(); ++it){
+            if(clean_entry.at({pid,*it})){
+              Lang::MemLoc<int> ml = it->localize(pid);
+              vips_trace->push_back(Machine::PTransition(src,Lang::Stmt<int>::evict(ml),src,pid),0);
+            }
+          }
+          vips_trace->push_back(*vbctrace.transition(i),0);
+          for(auto it = all_nmls.begin(); it != all_nmls.end(); ++it){
+            if(clean_entry.at({pid,*it})){
+              Lang::MemLoc<int> ml = it->localize(pid);
+              vips_trace->push_back(Machine::PTransition(tgt,Lang::Stmt<int>::fetch(ml),tgt,pid),0);
+            }
+          }
+          break;
         }
       case Lang::LOCKED: case Lang::SYNCWR:
         {
@@ -917,6 +970,22 @@ Trace *VipsBitConstraint::explicit_vips_trace(const Trace &vbctrace){
           vips_trace->push_back(Machine::PTransition(src,Lang::Stmt<int>::evict(ml),src,pid),0);
           vips_trace->push_back(*vbctrace.transition(i),0);
           vips_trace->push_back(Machine::PTransition(tgt,Lang::Stmt<int>::fetch(ml),tgt,pid),0);
+          break;
+        }
+      case Lang::WRITE:
+        {
+          assert(vbctrace.transition(i)->instruction.get_writes().size() == 1);
+          Lang::MemLoc<int> ml = vbctrace.transition(i)->instruction.get_writes()[0];
+          clean_entry.at({pid,Lang::NML(ml,pid)}) = false;
+          vips_trace->push_back(*vbctrace.transition(i),0);
+          break;
+        }
+      case Lang::WRLLC:
+        {
+          assert(vbctrace.transition(i)->instruction.get_writes().size() == 1);
+          Lang::MemLoc<int> ml = vbctrace.transition(i)->instruction.get_writes()[0];
+          clean_entry.at({pid,Lang::NML(ml,pid)}) = true;
+          vips_trace->push_back(*vbctrace.transition(i),0);
           break;
         }
       default:
@@ -1296,8 +1365,13 @@ void VipsBitConstraint::test(){
        "  or\n"
        "    write: x := 3;\n"
        "    F1: write: y := 4;\n"
-       "    F2: fence;\n"
-       "    goto F3\n"
+       "    F2: either{\n"
+       "      fence; goto F3\n"
+       "    or\n"
+       "      ssfence; goto F4\n"
+       "    or\n"
+       "      llfence; goto F5\n"
+       "    }\n"
        "  or\n"
        "    cas(x,0,4); goto CEND"
        "  or\n"
@@ -1321,6 +1395,8 @@ void VipsBitConstraint::test(){
        "  };\n"
        "  END: nop;\n"
        "  F3: nop;\n"
+       "  F4: nop;\n"
+       "  F5: nop;\n"
        "  CEND: nop;\n"
        "  FAIL: nop\n"
        );
@@ -1578,12 +1654,140 @@ void VipsBitConstraint::test(){
       common.dealloc(vbc2);
     }
 
+    /* Test ssfence */
+    {
+      VipsBitConstraint *vbc2 = vbc->post(common,trans(0,"Lnop"));
+      VipsBitConstraint *vbc3 = vbc2->post(common,trans2(0,"Lnop1","Lreads")); // P0: write: x := 1
+      VipsBitConstraint *vbc4 = vbc3->post(common,trans2(1,"Lass0","F1")); // P1: write: x := 3
+      VipsBitConstraint *vbc5 = vbc4->post(common,trans2(1,"F1","F2")); // P1: write: y := 4
+      VipsBitConstraint *vbc6 = vbc5->post(common,trans2(1,"F2","F4")); // P1: ssfence
+      Test::inner_test("#3.24: ssfence", vbc6 == 0);
+      VipsBitConstraint *vbc7 = vbc5->post(common,wrllc(1,"F2",x));
+      VipsBitConstraint *vbc8 = vbc7->post(common,trans2(1,"F2","F4")); // P1: ssfence
+      Test::inner_test("#3.25: ssfence", vbc8 == 0);
+      VipsBitConstraint *vbc9 = vbc7->post(common,wrllc(1,"F2",y));
+      VipsBitConstraint *vbc10 = vbc9->post(common,trans2(1,"F2","F4")); // P1: ssfence
+      Test::inner_test("#3.26: ssfence",
+                       vbc10 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(1,x))) == 3 &&
+                       !common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(1,y))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(1,y))) == 4 &&
+                       common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(0,y))) == 0 &&
+                       common.bfget(vbc10->bits,common.mem(x)) == 3 &&
+                       common.bfget(vbc10->bits,common.mem(y)) == 4);
+      VipsBitConstraint *vbc11 = vbc9->post(common,wrllc(0,"Lreads",x));
+      VipsBitConstraint *vbc12 = vbc11->post(common,trans2(1,"F2","F4")); // P1: ssfence
+      Test::inner_test("#3.27: ssfence",
+                       vbc12 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(1,x))) == 3 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(1,y))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(1,y))) == 4 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(0,y))) == 0 &&
+                       common.bfget(vbc12->bits,common.mem(x)) == 1 &&
+                       common.bfget(vbc12->bits,common.mem(y)) == 4);
+
+      common.dealloc(vbc12);
+      common.dealloc(vbc11);
+      common.dealloc(vbc10);
+      common.dealloc(vbc9);
+      // Do not delete vbc8
+      common.dealloc(vbc7);
+      // Do not delete vbc6
+      common.dealloc(vbc5);
+      common.dealloc(vbc4);
+      common.dealloc(vbc3);
+      common.dealloc(vbc2);
+    }
+
+    /* Test llfence */
+    {
+      VipsBitConstraint *vbc2 = vbc->post(common,trans(0,"Lnop"));
+      VipsBitConstraint *vbc3 = vbc2->post(common,trans2(0,"Lnop1","Lreads")); // P0: write: x := 1
+      VipsBitConstraint *vbc4 = vbc3->post(common,trans2(1,"Lass0","F1")); // P1: write: x := 3
+      VipsBitConstraint *vbc5 = vbc4->post(common,trans2(1,"F1","F2")); // P1: write: y := 4
+      VipsBitConstraint *vbc6 = vbc5->post(common,trans2(1,"F2","F5")); // P1: llfence
+      Test::inner_test("#3.28: llfence",
+                       vbc6 != 0 &&
+                       common.l1val_is_dirty(common.bfget(vbc6->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc6->bits,common.l1(1,x))) == 3 &&
+                       common.l1val_is_dirty(common.bfget(vbc6->bits,common.l1(1,y))) &&
+                       common.l1val_valof(common.bfget(vbc6->bits,common.l1(1,y))) == 4 &&
+                       common.l1val_is_dirty(common.bfget(vbc6->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc6->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc6->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc6->bits,common.l1(0,y))) == 0 &&
+                       common.bfget(vbc6->bits,common.mem(x)) == 0 &&
+                       common.bfget(vbc6->bits,common.mem(y)) == 0);
+      VipsBitConstraint *vbc7 = vbc5->post(common,wrllc(1,"F2",x));
+      VipsBitConstraint *vbc8 = vbc7->post(common,trans2(1,"F2","F5")); // P1: llfence
+      Test::inner_test("#3.29: llfence",
+                       vbc8 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc8->bits,common.l1(1,x))) == 3 &&
+                       common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(1,y))) &&
+                       common.l1val_valof(common.bfget(vbc8->bits,common.l1(1,y))) == 4 &&
+                       common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc8->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc8->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc8->bits,common.l1(0,y))) == 0 &&
+                       common.bfget(vbc8->bits,common.mem(x)) == 3 &&
+                       common.bfget(vbc8->bits,common.mem(y)) == 0);
+      VipsBitConstraint *vbc9 = vbc7->post(common,wrllc(1,"F2",y));
+      VipsBitConstraint *vbc10 = vbc9->post(common,trans2(1,"F2","F5")); // P1: llfence
+      Test::inner_test("#3.30: llfence",
+                       vbc10 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(1,x))) == 3 &&
+                       !common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(1,y))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(1,y))) == 4 &&
+                       common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc10->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc10->bits,common.l1(0,y))) == 0 &&
+                       common.bfget(vbc10->bits,common.mem(x)) == 3 &&
+                       common.bfget(vbc10->bits,common.mem(y)) == 4);
+      VipsBitConstraint *vbc11 = vbc9->post(common,wrllc(0,"Lreads",x));
+      VipsBitConstraint *vbc12 = vbc11->post(common,trans2(1,"F2","F5")); // P1: llfence
+      Test::inner_test("#3.31: llfence",
+                       vbc12 != 0 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(1,x))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(1,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(1,y))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(1,y))) == 4 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(0,x))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(0,x))) == 1 &&
+                       !common.l1val_is_dirty(common.bfget(vbc12->bits,common.l1(0,y))) &&
+                       common.l1val_valof(common.bfget(vbc12->bits,common.l1(0,y))) == 0 &&
+                       common.bfget(vbc12->bits,common.mem(x)) == 1 &&
+                       common.bfget(vbc12->bits,common.mem(y)) == 4);
+
+      common.dealloc(vbc12);
+      common.dealloc(vbc11);
+      common.dealloc(vbc10);
+      common.dealloc(vbc9);
+      common.dealloc(vbc8);
+      common.dealloc(vbc7);
+      common.dealloc(vbc6);
+      common.dealloc(vbc5);
+      common.dealloc(vbc4);
+      common.dealloc(vbc3);
+      common.dealloc(vbc2);
+    }
+
     /* Test CAS */
     {
       VipsBitConstraint *vbc2 = vbc->post(common,trans(0,"Lnop"));
       VipsBitConstraint *vbc3 = vbc2->post(common,trans2(0,"Lnop1","Lreads")); // P0: write: x := 1
       VipsBitConstraint *vbc4 = vbc3->post(common,trans2(1,"Lass0","CEND")); // P1: cas(x,0,4)
-      Test::inner_test("#3.24: cas",
+      Test::inner_test("#3.32: cas",
                        vbc4 != 0 &&
                        !common.l1val_is_dirty(common.bfget(vbc4->bits,common.l1(1,x))) &&
                        common.l1val_valof(common.bfget(vbc4->bits,common.l1(1,x))) == 4 &&
@@ -1597,14 +1801,14 @@ void VipsBitConstraint::test(){
                        common.bfget(vbc4->bits,common.mem(y)) == 0);
       VipsBitConstraint *vbc5 = vbc3->post(common,wrllc(0,"Lreads",x));
       VipsBitConstraint *vbc6 = vbc5->post(common,trans2(1,"Lass0","CEND")); // P1: cas(x,0,4)
-      Test::inner_test("#3.25: cas",vbc6 == 0);
+      Test::inner_test("#3.33: cas",vbc6 == 0);
       VipsBitConstraint *vbc7 = vbc3->post(common,trans2(1,"Lass0","C1")); // P1: write: x := 0
       VipsBitConstraint *vbc8 = vbc7->post(common,trans2(1,"C1","C2")); // P1: write: y := 1
       VipsBitConstraint *vbc9 = vbc8->post(common,trans2(1,"C2","CEND")); // P1: cas(x,0,4)
-      Test::inner_test("#3.26: cas", vbc9 == 0);
+      Test::inner_test("#3.34: cas", vbc9 == 0);
       VipsBitConstraint * vbc10 = vbc8->post(common,wrllc(1,"C2",x));
       VipsBitConstraint *vbc11 = vbc10->post(common,trans2(1,"C2","CEND")); // P1: cas(x,0,4)
-      Test::inner_test("#3.27: cas",
+      Test::inner_test("#3.35: cas",
                        vbc11 != 0 &&
                        !common.l1val_is_dirty(common.bfget(vbc11->bits,common.l1(1,x))) &&
                        common.l1val_valof(common.bfget(vbc11->bits,common.l1(1,x))) == 4 &&
@@ -1618,7 +1822,7 @@ void VipsBitConstraint::test(){
                        common.bfget(vbc11->bits,common.mem(y)) == 0);
       VipsBitConstraint *vbc12 = vbc10->post(common,wrllc(0,"Lreads",x));
       VipsBitConstraint *vbc13 = vbc12->post(common,trans2(1,"C2","CEND")); // P1: cas(x,0,4)
-      Test::inner_test("#3.28: cas", vbc13 == 0);
+      Test::inner_test("#3.36: cas", vbc13 == 0);
 
       // Do not delete vbc13
       common.dealloc(vbc12);

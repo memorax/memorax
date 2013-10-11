@@ -410,11 +410,12 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
         case Lang::FETCH: case Lang::LOCKED: case Lang::SYNCWR:
           need_evicted.insert({pid,ptv[i].instruction.get_writes()[0]});
           break;
-        case Lang::FENCE:
+        case Lang::FENCE: case Lang::LLFENCE:
           p_has_fenced.insert(pid);
           break;
-        case Lang::SSFENCE: case Lang::LLFENCE:
-          throw new std::logic_error("VipsSimpleFencer::decrease_reorderings: {ss,ll}fence are not yet supported.");
+        case Lang::SSFENCE:
+          // Do nothing
+          break;
         case Lang::EVICT:
           if(p_has_fenced.count(pid) == 0 &&
              need_evicted.count({pid,ptv[i].instruction.get_writes()[0]}) == 0){
