@@ -187,7 +187,18 @@ protected:
                                           const fs_init_t &fsinit);
 
   virtual int compare(const Sync &s) const;
+
+  /* Returns a human readable string representation of f. Used by
+   * to_string and print methods. */
+  virtual std::string f_string() const;
+  virtual std::string f_string(const Machine&) const;
 private:
+  /* Helpers for to_string and print */
+  std::string print_to_string(const Machine &m, Log::redirection_stream *os, Log::redirection_stream *json_os) const;
+  std::string print_to_string(std::function<std::string(const Automaton::Transition&)> tts,
+                              std::string f_string,
+                              Log::redirection_stream *os, Log::redirection_stream *json_os) const;
+
   /* Returns true iff IN (and OUT) is subset related to fs.IN
    * (resp. fs.OUT) */
   bool subset_related(const FenceSync &fs) const;
@@ -207,12 +218,6 @@ private:
   static bool disjunct(const TSet &S, const TSet &T);
   /* Returns S\T */
   static TSet set_minus(const TSet &S, const TSet &T);
-
-  std::string to_string_aux(const std::function<std::string(const int&)> &regts,
-                            const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const;
-  void print_aux(const std::function<std::string(const int&)> &regts,
-                 const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
-                 Log::redirection_stream &os, Log::redirection_stream &json_os) const;
 
   /* Returns the power set of s. */
   template<class T,class L = std::less<T> >

@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -31,18 +31,22 @@
 #include <sstream>
 #include <stdexcept>
 
-FenceSync::FenceSync(Lang::Stmt<int> f, int pid, int q, 
+FenceSync::FenceSync(Lang::Stmt<int> f, int pid, int q,
                      TSet IN, TSet OUT)
   : f(f), pid(pid), q(q), IN(IN), OUT(OUT) {
 };
 
 std::string FenceSync::to_raw_string() const{
-  return to_string_aux(Lang::int_reg_to_string(),
-                       Lang::int_memloc_to_string());
+  std::function<std::string(const Automaton::Transition&)> tts =
+    [this](const Automaton::Transition &t){
+    return Machine::PTransition(t,this->pid).to_string(Lang::int_reg_to_string(),
+                                                       Lang::int_memloc_to_string());
+  };
+  return print_to_string(tts,f_string(),0,0);
 };
 
 std::string FenceSync::to_string(const Machine &m) const{
-  return to_string_aux(m.reg_pretty_vts(pid),m.ml_pretty_vts(pid));
+  return print_to_string(m,0,0);
 };
 
 Machine *FenceSync::insert(const Machine &m,
@@ -160,7 +164,7 @@ Machine *FenceSync::insert(const Machine &m,
   auto old_qs_it = old_qs.begin();
   int next_new_state = m.automata[this->pid].get_states().size();
   std::set<int> new_qs = old_qs;
-  std::function<int()> new_state = 
+  std::function<int()> new_state =
     [this,&old_qs,&m,&old_qs_it,&next_new_state,&new_qs](){
     if(old_qs_it != old_qs.end() && *old_qs_it == this->q){
       ++old_qs_it;
@@ -189,7 +193,7 @@ Machine *FenceSync::insert(const Machine &m,
     }
   }
 
-  std::function<void(int,const FS&,int)> add_fence = 
+  std::function<void(int,const FS&,int)> add_fence =
     [this,m2,my_info,&m_infos](int src,const FS &fs,int tgt){
     Automaton::Transition t(src,fs.fs->f,tgt);
     m2->automata[this->pid].add_transition(t);
@@ -394,43 +398,60 @@ FenceSync::get_m_q_IN_OUT(const Machine &m,
 };
 
 void FenceSync::print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const{
-  print_aux(Lang::int_reg_to_string(),
-            Lang::int_memloc_to_string(),
-            os,json_os);
+  std::function<std::string(const Automaton::Transition&)> tts =
+    [this](const Automaton::Transition &t){
+    return Machine::PTransition(t,this->pid).to_string(Lang::int_reg_to_string(),
+                                                       Lang::int_memloc_to_string());
+  };
+  print_to_string(tts,f_string(),&os,&json_os);
 };
 
 void FenceSync::print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const{
-  print_aux(m.reg_pretty_vts(pid),m.ml_pretty_vts(pid),
-            os,json_os);
+  print_to_string(m,&os,&json_os);
 };
 
-void FenceSync::print_aux(const std::function<std::string(const int&)> &regts, 
-                          const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
-                          Log::redirection_stream &os, Log::redirection_stream &json_os) const{
-  os << "FenceSync(P" << pid << ",Q" << q << ",f:" << f.to_string(regts,mlts) << ")\n";
-  for(auto it = IN.begin(); it != IN.end(); ++it){
-    os << "  IN: " << it->to_string(regts,mlts) << "\n";
-    if(*os.os && it->instruction.get_pos().get_line_no() >= 0){
-      json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
-    }
-  }
-  for(auto it = OUT.begin(); it != OUT.end(); ++it){
-    os << "  OUT: " << it->to_string(regts,mlts) << "\n";
-    if(*os.os && it->instruction.get_pos().get_line_no() >= 0){
-      json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
-    }
-  }
+std::string FenceSync::f_string() const{
+  return f.to_string(Lang::int_reg_to_string(),Lang::int_memloc_to_string());
 };
 
-std::string FenceSync::to_string_aux(const std::function<std::string(const int&)> &regts, 
-                                     const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const{
+std::string FenceSync::f_string(const Machine &m) const{
+  return f.to_string(m.reg_pretty_vts(this->pid),
+                     m.ml_pretty_vts(this->pid));
+};
+
+std::string FenceSync::print_to_string(const Machine &m, Log::redirection_stream *os, Log::redirection_stream *json_os) const{
+  std::function<std::string(const Automaton::Transition&)> tts =
+    [&m,this](const Automaton::Transition &t){
+    return Machine::PTransition(t,this->pid).to_string(m);
+  };
+  return print_to_string(tts,f_string(m),os,json_os);
+};
+
+std::string FenceSync::print_to_string(std::function<std::string(const Automaton::Transition&)> tts,
+                                       std::string f_string,
+                                       Log::redirection_stream *os, Log::redirection_stream *json_os) const{
   std::stringstream ss;
-  ss << "FenceSync(P" << pid << ",Q" << q << ",f:" << f.to_string(regts,mlts) << ")\n";
+  ss << "Insert " << f_string << " for P" << pid << " at Q" << q << "\n";
+  if(os){
+    (*os) << "Insert " << f_string << " for P" << pid << " at Q" << q << "\n";
+  }
   for(auto it = IN.begin(); it != IN.end(); ++it){
-    ss << "  IN: " << it->to_string(regts,mlts) << "\n";
+    ss << "  IN: " << tts(*it) << "\n";
+    if(os){
+      (*os) << "  IN: " << tts(*it) << "\n";
+    }
+    if(os && json_os && *os->os && it->instruction.get_pos().get_line_no() >= 0){
+      (*json_os) << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
+    }
   }
   for(auto it = OUT.begin(); it != OUT.end(); ++it){
-    ss << "  OUT: " << it->to_string(regts,mlts) << "\n";
+    ss << "  OUT: " << tts(*it) << "\n";
+    if(os){
+      (*os) << "  OUT: " << tts(*it) << "\n";
+    }
+    if(os && json_os && *os->os && it->instruction.get_pos().get_line_no() >= 0){
+      (*json_os) << "json: {\"action\":\"Link Fence\", \"pos\":" << it->instruction.get_pos().to_json() << "}\n";
+    }
   }
   return ss.str();
 };
@@ -597,7 +618,7 @@ int FenceSync::InsInfo::original_q(m_infos_t ivec, int q){
         q = fs->get_q();
       }
     }else{
-      assert(dynamic_cast<const TsoLockSync::InsInfo*>(ivec[i]) || 
+      assert(dynamic_cast<const TsoLockSync::InsInfo*>(ivec[i]) ||
              dynamic_cast<const VipsSyncwrSync::InsInfo*>(ivec[i]));
     }
   }
@@ -686,7 +707,7 @@ void FenceSync::test(){
     }
   }
 
-  std::function<Machine*(std::string)> get_machine = 
+  std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
     std::stringstream ss(rmm);
     PPLexer pp(ss);
@@ -702,7 +723,7 @@ void FenceSync::test(){
   /* Dummy concrete implementation of FenceSync. */
   class Dummy : public FenceSync{
   public:
-    Dummy(Lang::Stmt<int> f, int pid, int q, 
+    Dummy(Lang::Stmt<int> f, int pid, int q,
           TSet IN, TSet OUT)
       : FenceSync(f,pid,q,IN,OUT) {};
     ~Dummy() {};
@@ -714,7 +735,7 @@ void FenceSync::test(){
         IN == d.IN && OUT == d.OUT;
     };
     bool operator<(const Dummy &d) const{
-      return 
+      return
         (f < d.f) ||
         (f == d.f && pid < d.pid) ||
         (f == d.f && pid == d.pid && q < d.q) ||
@@ -730,7 +751,7 @@ void FenceSync::test(){
       }
       std::set<Lang::Stmt<int>,StmtCmp> IN_stmts, OUT_stmts;
       {
-        std::string pre = 
+        std::string pre =
           "forbidden *\n"
           "data\n"
           "  fnc = *\n"
@@ -751,7 +772,7 @@ void FenceSync::test(){
           PPLexer lex(ss);
           Machine m(Parser::p_test(lex));
           for(unsigned j = 0; j < m.automata[0].get_states().size(); ++j){
-            const std::set<Automaton::Transition*> &s = 
+            const std::set<Automaton::Transition*> &s =
               m.automata[0].get_states()[j].fwd_transitions;
             for(auto it = s.begin(); it != s.end(); ++it){
               IN_stmts.insert((*it)->instruction);
@@ -763,7 +784,7 @@ void FenceSync::test(){
           PPLexer lex(ss);
           Machine m(Parser::p_test(lex));
           for(unsigned j = 0; j < m.automata[0].get_states().size(); ++j){
-            const std::set<Automaton::Transition*> &s = 
+            const std::set<Automaton::Transition*> &s =
               m.automata[0].get_states()[j].fwd_transitions;
             for(auto it = s.begin(); it != s.end(); ++it){
               OUT_stmts.insert((*it)->instruction);
@@ -817,8 +838,8 @@ void FenceSync::test(){
     fs0.insert(Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),
                                              Lang::Expr<int>::integer(0)));
 
-    fs_init_t fsinit = 
-      [](Lang::Stmt<int> f, int pid, int q, 
+    fs_init_t fsinit =
+      [](Lang::Stmt<int> f, int pid, int q,
          TSet IN, TSet OUT){ return new Dummy(f,pid,q,IN,OUT); };
 
     /* tgt_s specifies one Dummy per line. The format is
@@ -830,7 +851,7 @@ void FenceSync::test(){
      * All statements in m should be unique and may reference global
      * memory locations fnc, x, y, and registers $r0, $r1, $r2.
      */
-    std::function<bool(const Machine*,const std::set<Sync*>&,std::string)> tst = 
+    std::function<bool(const Machine*,const std::set<Sync*>&,std::string)> tst =
       [](const Machine *m,const std::set<Sync*> &syncset,std::string tgt_s){
       /* Parse tgt_s, create target Dummys */
       std::set<Dummy> dummys;
@@ -855,7 +876,7 @@ void FenceSync::test(){
       std::all_of(syncset.begin(),syncset.end(),
                   [&dummys](const Sync *sync){
                     const Dummy *d = static_cast<const Dummy*>(sync);
-                    return 
+                    return
                     std::any_of(dummys.begin(),dummys.end(),
                                 [d](const Dummy &d2){
                                   return
@@ -981,7 +1002,7 @@ void FenceSync::test(){
                                         "0{$r0:=0}to{$r0:=1}\n"
                                         "0{$r0:=0}to{$r0:=2}\n"
                                         "0{$r0:=0}to{$r0:=1;$r0:=2}\n"
-                                        
+
                                         /* Disallowed since neither IN nor OUT is complete:
                                          * "0{$r0:=1}to{$r0:=3}\n"
                                          * "0{$r0:=1}to{$r0:=4}\n"
@@ -1231,9 +1252,9 @@ void FenceSync::test(){
             int src1 = pr.second.source;
             Automaton::Transition t0 = pr.first;
             Automaton::Transition t1 = pr.second;
-            const std::set<Automaton::Transition*> fwd0 = 
+            const std::set<Automaton::Transition*> fwd0 =
               m->automata[pid].get_states()[src0].fwd_transitions;
-            const std::set<Automaton::Transition*> fwd1 = 
+            const std::set<Automaton::Transition*> fwd1 =
               m2->automata[pid].get_states()[src1].fwd_transitions;
             if(!std::any_of(fwd0.begin(),fwd0.end(),
                             [&t0](const Automaton::Transition *t){
@@ -1539,7 +1560,7 @@ void FenceSync::test(){
       Machine *mb5 = d69.insert(*mb4,b_infos,&info); b_infos.push_back(info);
 
       Test::inner_test("insert #10 (multiple inserts)",
-                       m->automata[1].same_automaton(ma5->automata[0],false) && 
+                       m->automata[1].same_automaton(ma5->automata[0],false) &&
                        m->automata[1].same_automaton(mb5->automata[0],false));
 
       for(unsigned i = 0; i < a_infos.size(); ++i) delete a_infos[i];
@@ -1667,7 +1688,7 @@ void FenceSync::test(){
       Machine *mb5 = d689.insert(*mb4,b_infos,&info); b_infos.push_back(info);
 
       Test::inner_test("insert #11 (multiple inserts)",
-                       m->automata[1].same_automaton(ma5->automata[0],false) && 
+                       m->automata[1].same_automaton(ma5->automata[0],false) &&
                        m->automata[1].same_automaton(mb5->automata[0],false));
 
       for(unsigned i = 0; i < a_infos.size(); ++i) delete a_infos[i];
@@ -1933,7 +1954,7 @@ void FenceSync::test(){
       Dummy d2 = Dummy::parse_dummy(m,"0{$r0:=1;$r0:=3}to{$r0:=4;$r0:=6}");
       Dummy d3 = Dummy::parse_dummy(m,"0{$r0:=1}to{$r0:=4;$r0:=6}");
       Dummy d4 = Dummy::parse_dummy(m,"0{$r0:=3}to{$r0:=4;$r0:=6}");
-      
+
       Sync::InsInfo *info;
       std::vector<const Sync::InsInfo*> m_infos_01, m_infos_10;
       Machine *m0 = d0.insert(*m,m_infos_01,&info); m_infos_01.push_back(info);
@@ -2220,7 +2241,7 @@ void FenceSync::test(){
       delete m7;
       delete m8;
       delete m9;
-      
+
     }
 
     /* Test 20: Two fences at the same location */

@@ -38,15 +38,9 @@ public:
   /* Returns all VipsFenceSyncs that can be inserted into m. */
   static std::set<Sync*> get_all_possible(const Machine &m);
 
-  virtual std::string to_string(const Machine &m) const;
-  virtual void print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const;
-
   static void test();
 protected:
   virtual int compare(const Sync &s) const { return FenceSync::compare(s); };
-private:
-  /* Helper for to_string and print */
-  std::string print_to_string(const Machine &m, Log::redirection_stream *os, Log::redirection_stream *json_os) const;
 };
 
 #endif
