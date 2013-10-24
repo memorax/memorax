@@ -127,7 +127,7 @@ VipsBitConstraint::Common::Common(const Machine &m) : machine(m) {
   BFSeq bfseq(pointer_pack);
   /* pcs */
   for(int p = 0; p < proc_count; ++p){
-    pcs.push_back(bfseq.next((int)m.automata[p].get_states().size() + 1,0));
+    pcs.push_back(bfseq.next((int)m.automata[p].get_states().size(),0));
   }
 
   /* mem */
@@ -1114,9 +1114,9 @@ void VipsBitConstraint::test(){
     /* Test 1,2: pcs */
     Test::inner_test("#2.1: Common pcs (init, basic)",
                      common.pcs.size() == 3 &&
-                     common.pcs[0].mod == 3 &&
-                     common.pcs[1].mod == 6 &&
-                     common.pcs[2].mod == 5);
+                     common.pcs[0].mod == 2 &&
+                     common.pcs[1].mod == 5 &&
+                     common.pcs[2].mod == 4);
 
     VipsBitConstraint *vbc = common.get_initial_constraint();
 
@@ -1233,9 +1233,9 @@ void VipsBitConstraint::test(){
     /* Test 12,13: pcs */
     Test::inner_test("#2.12: Common pcs (init, basic)",
                      common.pcs.size() == 3 &&
-                     common.pcs[0].mod == 3 &&
-                     common.pcs[1].mod == 6 &&
-                     common.pcs[2].mod == 5);
+                     common.pcs[0].mod == 2 &&
+                     common.pcs[1].mod == 5 &&
+                     common.pcs[2].mod == 4);
 
     VipsBitConstraint *vbc = common.get_initial_constraint();
 
