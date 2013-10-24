@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -202,6 +202,7 @@ namespace Fencins{
             // Try this one
             try{
               mc = *it;
+              m_infos.clear();
               m_synced = insert_syncs(m,mc,&m_infos);
               break;
             }catch(Sync::Incompatible *exc){
@@ -308,12 +309,12 @@ namespace Fencins{
       return new Machine(Parser::p_test(lex));
     };
 
-    std::function<int(const Machine&,int,std::string)> cs = 
+    std::function<int(const Machine&,int,std::string)> cs =
       [](const Machine &m, int pid, std::string lbl){
       return m.automata[pid].state_index_of_label(lbl);
     };
 
-    std::function<bool(std::string,std::string)> test_sb_only_one = 
+    std::function<bool(std::string,std::string)> test_sb_only_one =
       [&get_machine,&cs](std::string rmm, std::string fence_poses){
       Machine *m = get_machine(rmm);
       SbTsoBwd reach;
@@ -325,7 +326,7 @@ namespace Fencins{
       TsoSimpleFencer fencer(*m,TsoSimpleFencer::FENCE);
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
-      std::set<std::set<Sync*> > fence_sets = 
+      std::set<std::set<Sync*> > fence_sets =
       fencins(*m,reach,arg_init,fencer,COST,true);
         Log::set_primary_loglevel(ll);
 
@@ -385,7 +386,7 @@ namespace Fencins{
 
     std::function<bool(std::string,std::string,
                        min_aspect_t,
-                       std::function<int(const Sync*)>*)> test_sb_all = 
+                       std::function<int(const Sync*)>*)> test_sb_all =
       [&get_machine,&cs](std::string rmm, std::string fence_poses,
                          min_aspect_t ma,
                          std::function<int(const Sync*)> *cost){
@@ -467,7 +468,7 @@ namespace Fencins{
 
     /* Test 1 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -489,7 +490,7 @@ namespace Fencins{
 
     /* Test 2 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -513,7 +514,7 @@ namespace Fencins{
 
     /* Test 3 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -581,7 +582,7 @@ namespace Fencins{
 
     /* Test 5 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -605,7 +606,7 @@ namespace Fencins{
 
     /* Test 6,7: empty set is solution */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -630,7 +631,7 @@ namespace Fencins{
 
     /* Test 8,9: disjunct solutions */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x0 = 0 : [0:1]\n"
@@ -663,7 +664,7 @@ namespace Fencins{
 
     /* Test 10,11,12: disjunct solutions with different costs */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x0 = 0 : [0:1]\n"
@@ -701,7 +702,7 @@ namespace Fencins{
        *
        * Next we increase the price of L1 so we get both sets.
        */
-      std::function<int(const Sync*)> expensive_L1 = 
+      std::function<int(const Sync*)> expensive_L1 =
         [](const Sync *s){
         const FenceSync *p = dynamic_cast<const FenceSync*>(s);
         if(p->get_q() == 1){
@@ -711,14 +712,14 @@ namespace Fencins{
         }
       };
       Test::inner_test("fencins all #11",
-                       test_sb_all(rmm, 
+                       test_sb_all(rmm,
                                    "L1 | L1\n"
                                    "L21 L22 | L21 L22",
                                    COST,
                                    &expensive_L1));
 
       Test::inner_test("fencins all #12",
-                       test_sb_all(rmm, 
+                       test_sb_all(rmm,
                                    "L1 | L1\n"
                                    "L21 L22 | L21 L22",
                                    SUBSET,

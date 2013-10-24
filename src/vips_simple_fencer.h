@@ -79,8 +79,41 @@ private:
    *
    * The returned vector has the same size as the number of
    * constraints in t.
+   *
+   * sps should be the synchronization points of t, as given by
+   * get_sync_points.
    */
-  static std::vector<std::set<int> > get_reordered_procs(const Trace &t);
+  static std::vector<std::set<int> > get_reordered_procs(const Trace &t,
+                                                         const std::map<int,int> &sps);
+
+  /* Returns a vector v such that for each transition index i in t,
+   * the set v[i] contains precisely the transition indices j in t
+   * such that t[i] and t[j] are memory accessing transitions of the
+   * same process, and the synchronization points of i and j are in
+   * the opposite order of i and j
+   *
+   * (i.e. i != j && sps[i] != sps[j] && (i < j) == (sps[j] < sps[i])).
+   *
+   * sps should be the synchronization points of t, as given by
+   * get_sync_points.
+   */
+  static std::vector<std::set<int> > get_reordered_transes(const Trace &t,
+                                                           const std::map<int,int> &sps);
+
+  /* Returns the least j such that i < j and t[j] is a transition of
+   * the same process as t[i], and t[j] is an instruction transition
+   * (not a system event).
+   *
+   * If there is no such j, then 0 is returned.
+   */
+  static int get_next_instr(const Trace &t, int i);
+  /* Returns the greatest j such that j < i and t[j] is a transition
+   * of the same process as t[i], and t[j] is an instruction
+   * transition (not a system event).
+   *
+   * If there is no such j, then 0 is returned.
+   */
+  static int get_prev_instr(const Trace &t, int i);
 
   /* Returns true iff s is a CAS statement */
   static bool is_cas(const Lang::Stmt<int> &s);
@@ -90,11 +123,15 @@ private:
 
   /* Return the subset of all_fences of fences of process pid that fit
    * immediately between in and out.
+   *
+   * Always returns full fences. Also returns ssfences (and llfences)
+   * if have_ssfences (and have_llfence) is set.
    */
   std::set<Sync*> fences_between(int pid,
                                  const Automaton::Transition &in,
                                  const Automaton::Transition &out,
-                                 const std::vector<const Sync::InsInfo*> &m_infos) const;
+                                 const std::vector<const Sync::InsInfo*> &m_infos,
+                                 bool have_ssfence, bool have_llfence) const;
 
   /* Helper for fence(t,m_infos). Returns the syncs of
    * fence(t,m_infos) that are VipsSyncwrSyncs.
@@ -103,6 +140,10 @@ private:
    */
   std::set<Sync*> fence_syncwr(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
 
+  /* Return a trace following the same path as t, but with all
+   * synchronization described in m_infos removed.
+   */
+  Trace *unsync_trace(const Trace &t, FenceSync::m_infos_t m_infos) const;
 };
 
 #endif

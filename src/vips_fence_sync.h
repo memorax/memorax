@@ -23,24 +23,60 @@
 
 #include "fence_sync.h"
 
-/* VipsFenceSync instantiates FenceSync for the VIPS fence
- * instruction.
+/* VipsFenceSync is an abstract class which is the super class of all
+ * FenceSyncs for VIPS.
  */
 class VipsFenceSync : public FenceSync{
 public:
-  /* Constructs the FenceSync (f,pid,q,IN,OUT) where f is the VIPS
-   * fence instruction.
+  /* Constructs the FenceSync (f,pid,q,IN,OUT).
    */
-  VipsFenceSync(int pid, int q, TSet IN, TSet OUT);
+  VipsFenceSync(Lang::Stmt<int> f, int pid, int q, TSet IN, TSet OUT);
   virtual ~VipsFenceSync();
-  virtual Sync *clone() const;
+  virtual Sync *clone() const = 0;
+
+  virtual Machine *insert(const Machine &m, m_infos_t m_infos, Sync::InsInfo **info) const;
 
   /* Returns all VipsFenceSyncs that can be inserted into m. */
   static std::set<Sync*> get_all_possible(const Machine &m);
-
-  static void test();
 protected:
   virtual int compare(const Sync &s) const { return FenceSync::compare(s); };
+};
+
+/* VipsFullFenceSync is an instance of VipsFenceSync corresponding to
+ * the full fence.
+ */
+class VipsFullFenceSync : public VipsFenceSync {
+public:
+  /* Constructs the FenceSync (f,pid,q,IN,OUT) where f is a full
+   * fence.
+   */
+  VipsFullFenceSync(int pid, int q, TSet IN, TSet OUT);
+  virtual ~VipsFullFenceSync();
+  virtual Sync *clone() const;
+};
+
+/* VipsSSFenceSync is an instance of VipsFenceSync corresponding to
+ * the ssfence.
+ */
+class VipsSSFenceSync : public VipsFenceSync {
+public:
+  /* Constructs the FenceSync (f,pid,q,IN,OUT) where f is an ssfence.
+   */
+  VipsSSFenceSync(int pid, int q, TSet IN, TSet OUT);
+  virtual ~VipsSSFenceSync();
+  virtual Sync *clone() const;
+};
+
+/* VipsLLFenceSync is an instance of VipsFenceSync corresponding to
+ * the llfence.
+ */
+class VipsLLFenceSync : public VipsFenceSync {
+public:
+  /* Constructs the FenceSync (f,pid,q,IN,OUT) where f is an llfence.
+   */
+  VipsLLFenceSync(int pid, int q, TSet IN, TSet OUT);
+  virtual ~VipsLLFenceSync();
+  virtual Sync *clone() const;
 };
 
 #endif
