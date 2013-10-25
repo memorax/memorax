@@ -758,6 +758,7 @@ int main(int argc, char *argv[]){
       Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
       Test::add_test("VIPS-M Bit",VipsBitConstraint::test);
       Test::add_test("VIPS-M Bit Reachability",VipsBitReachability::test);
+      Test::add_test("VipsFenceSync",VipsFenceSync::test);
       Test::add_test("VipsSimpleFencer",VipsSimpleFencer::test);
       Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
       Test::add_test("ZStar",ZStar<int>::test);

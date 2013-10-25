@@ -342,7 +342,7 @@ std::set<Sync*> VipsSimpleFencer::fences_between(int pid,
   assert(in.target == out.source);
   int q = in.target;
 
-  assert(0 <= q && q < fences_by_pq[pid].size());
+  assert(0 <= q && q < int(fences_by_pq[pid].size()));
 
   const std::set<VipsFenceSync*> &pqs = fences_by_pq[pid][q];
 
@@ -1370,6 +1370,20 @@ text
       t->push_back({q1,Lang::Stmt<int>::ss_fence(),q2,0},0);
       t->push_back({q2,Lang::Stmt<int>::read_assert(y,Lang::Expr<int>::integer(0)),cs(m2,0,"CS"),0},0);
       t->push_back({cs(m2,1,"L1"),Lang::Stmt<int>::read_assert(x,Lang::Expr<int>::integer(0)),cs(m2,1,"CS"),1},0);
+
+      /*
+        P0 fetch x
+          P1 fetch y
+        P0 write: x := 1
+          P1 write: y := 1
+        P0 fetch y
+          P1 wrllc y
+          P1 fetch x
+        P0 wrllc x
+        P0 ssfence
+        P0 read: y = 0
+          P1 read: x = 0
+       */
 
       VipsSimpleFencer vsf(*m);
 
