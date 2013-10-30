@@ -639,6 +639,18 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
             ptv[i].source = ptv[i].target = src_pc(pid,j+1);
             move_before(i,j+1);
             break;
+          }else if(j_pid == pid &&
+                   ptv[j].instruction.get_type() == Lang::LLFENCE){
+            /* Move past the llfence, but now we need to insert evict
+             * nml, fetch nml surrounding the llfence. */
+            int q_src = ptv[j].source;
+            int q_tgt = ptv[j].target;
+            ptv.push_back({q_src,Lang::Stmt<int>::evict(nml.localize(pid)),q_src,pid});
+            move_before(int(ptv.size())-1,j);
+            ptv.push_back({q_tgt,Lang::Stmt<int>::fetch(nml.localize(pid)),q_tgt,pid});
+            move_before(int(ptv.size())-1,j+2);
+            i += 2; // the index i has been pushed two steps to the right
+            // j is now the index of the evict. Leave it there.
           }else{
             // Do nothing
           }
@@ -1404,6 +1416,91 @@ text
       }
       delete m2;
     }
+
+    /* Test 5 */
+    /* From a bug that showed up in fencins on Peterson's lock. */
+    {
+      Machine *m = get_machine(R"(
+forbidden
+  L4 L5
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: write: u := 1;
+  L2: read: y = 0;
+  L3: read: u = 1;
+  L4: nop
+process
+text
+  L0: write: y := 1;
+  L1: write: u := 0;
+  L2: read: x = 0;
+  L3: llfence;
+  L4: read: u = 0;
+  L5: nop
+)");
+
+      Trace *t = get_vips_trace(m,R"(
+P0 fetch u
+P0 fetch x
+P0 fetch y
+  P1 fetch u
+  P1 fetch x
+  P1 fetch y
+P0 L0 L1 write: x := 1
+P0 L1 L2 write: u := 1
+P0 L2 L3 read: y = 0
+P0 L3 L4 read: u = 1
+  P1 L0 L1 write: y := 1
+  P1 L1 L2 write: u := 0
+  P1 L2 L3 read: x = 0
+  P1 evict x
+  P1 L3 L4 llfence
+  P1 fetch x
+  P1 L4 L5 read: u = 0
+)");
+
+      VipsSimpleFencer vsf(*m);
+
+      std::set<std::set<Sync*> > syncs = vsf.fence(*t,{});
+
+      /* Check that the fencer does not suggest to insert another
+       * llfence next to the already present llfence.
+       */
+
+      std::function<bool(Sync*)> is_bad_llfence =
+        [&cs,m](Sync *s){
+        VipsLLFenceSync *llfnc = dynamic_cast<VipsLLFenceSync*>(s);
+        if(!llfnc) return false;
+        int q = llfnc->get_q();
+        return (llfnc->get_pid() == 1) &&
+        ((q == cs(m,1,"L3")) || (q == cs(m,1,"L4")));
+      };
+
+      std::function<bool(const std::set<Sync*>&)> has_bad_llfence =
+        [&is_bad_llfence](const std::set<Sync*> &S){
+        return std::any_of(S.begin(),S.end(),is_bad_llfence);
+      };
+
+      Test::inner_test("fence #5",
+                       !std::any_of(syncs.begin(),syncs.end(),has_bad_llfence));
+
+      for(auto ss : syncs){
+        for(auto s : ss){
+          delete s;
+        }
+      }
+
+      delete t;
+      delete m;
+    }
   }
 
   /* Test decrease_reorderings */
@@ -1596,6 +1693,44 @@ P0 wrllc x
       delete m;
       delete m_fenced;
 
+    }
+
+    {
+      Machine *m = get_machine(R"(
+forbidden *
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: llfence;
+  L2: read: x = 1;
+  L3: nop
+)");
+
+      Test::inner_test("decrease_reorderings #7",
+                       tst_dec_reord(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 L1 L2 llfence
+P0 L2 L3 read: x = 1
+)",
+                                     R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 llfence
+P0 fetch x
+P0 L2 L3 read: x = 1
+)"));
+
+      delete m;
     }
   }
 
