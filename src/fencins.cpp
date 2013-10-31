@@ -154,7 +154,8 @@ namespace Fencins{
      * syncs.
      */
     bool mcs_up_to_date = false;
-    std::set<VecSet<Sync*> > mcs;
+    std::pair<MinCoverage::sol_iterator<Sync*>,
+              MinCoverage::sol_iterator<Sync*> > mcs;
     /* Maps Sync objects o to a pointer p to a Sync object o' such
      * that o == o' and p is in some set in syncs.
      */
@@ -204,17 +205,16 @@ namespace Fencins{
           tm.stop();
           Log::debug << "min_coverage time: " << tm.get_time() << " s.\n";
         }
-        assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
-        if(mcs.size() == fence_sets.size()){
+        if(mcs.first.size() == fence_sets.size()){
           // All correct fence sets are already in fence_sets
           break;
         }
         // Otherwise find one which is not in fence_sets
-        for(auto it = mcs.begin(); it != mcs.end(); ++it){
-          if(fence_sets_uncloned.count(*it) == 0){
+        for(; mcs.first != mcs.second; ++mcs.first){
+          if(fence_sets_uncloned.count(*mcs.first) == 0){
             // Try this one
             try{
-              mc = *it;
+              mc = *mcs.first;
               m_infos.clear();
               m_synced = insert_syncs(m,mc,&m_infos);
               break;

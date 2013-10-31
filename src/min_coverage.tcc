@@ -483,66 +483,20 @@ namespace MinCoverage{
      * T that can be translated to Ui by replacing each i in Ti by
      * some s which is in the equivalence class i.
      */
-    std::set<VecSet<S> > translate_back(const std::set<VecSet<int> > &T) const;
-    /* Returns a singleton set {U} where U is a member of
-     * translate_back(T), if T contains at least one
-     * element. Otherwise returns the empty set. */
-    std::set<VecSet<S> > translate_back_one(const std::set<VecSet<int> > &T) const;
+    std::pair<sol_iterator<S>,sol_iterator<S> >
+    translate_back(const std::set<VecSet<int> > &T) const;
   private:
     std::map<int,VecSet<int> > cov_map_i;
     std::vector<VecSet<int> > Tvec_i;
     /* trans_i2S[i] is the set of elements s in the equivalence class i. */
     std::vector<VecSet<S> > trans_i2S;
     std::function<int(const int&)> cost_i;
-
-    void translate_back(const VecSet<int> &T,
-                        std::set<VecSet<S> > &TGT) const;
   };
 
   template<typename S>
-  void Preprocessed<S>::translate_back(const VecSet<int> &T,
-                                       std::set<VecSet<S> > &TGT) const{
-    std::set<VecSet<S> > *Ss = new std::set<VecSet<S> >();
-    Ss->insert(VecSet<S>());
-
-    for(int i : T){
-      std::set<VecSet<S> > *Ss2 = new std::set<VecSet<S> >();
-      for(auto it = trans_i2S[i].begin(); it != trans_i2S[i].end(); ++it){
-        for(VecSet<S> S2 : *Ss){
-          S2.insert(*it);
-          Ss2->insert(S2);
-        }
-      }
-      delete Ss;
-      Ss = Ss2;
-    }
-
-    TGT.insert(Ss->begin(),Ss->end());
-    delete Ss;
-  };
-
-  template<typename S>
-  std::set<VecSet<S> > Preprocessed<S>::translate_back(const std::set<VecSet<int> > &T) const{
-    std::set<VecSet<S> > T2;
-    for(auto it = T.begin(); it != T.end(); ++it){
-      translate_back(*it,T2);
-    }
-    return T2;
-  };
-
-  template<typename S>
-  std::set<VecSet<S> > Preprocessed<S>::translate_back_one(const std::set<VecSet<int> > &T) const{
-    if(T.empty()){
-      return {};
-    }
-
-    VecSet<S> U;
-    for(int i : *T.begin()){
-      assert(0 <= i && i < int(trans_i2S.size()));
-      assert(trans_i2S[i].size());
-      U.insert(*trans_i2S[i].begin());
-    }
-    return {U};
+  std::pair<sol_iterator<S>,sol_iterator<S> >
+  Preprocessed<S>::translate_back(const std::set<VecSet<int> > &T) const{
+    return {sol_iterator<S>(T,trans_i2S),sol_iterator<S>()};
   };
 
   template<typename S>
@@ -612,7 +566,7 @@ namespace MinCoverage{
    * for (T,cost).
    */
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   min_coverage_impl(const std::set<VecSet<S> > &T,
                     const std::function<int(const S&)> &cost,
                     bool get_all){
@@ -654,20 +608,15 @@ namespace MinCoverage{
       }
     }
 
-    if(get_all){
-      return pp.translate_back(res);
-    }else{
-      return pp.translate_back_one(res);
-    }
+    return pp.translate_back(res);
   };
 
   template<typename S>
   VecSet<S>
   min_coverage(const std::set<VecSet<S> > &T,
                const std::function<int(const S&)> &cost){
-    std::set<VecSet<S> > mcs = min_coverage_impl(T,cost,false);
-    assert(mcs.size() == 1);
-    return *mcs.begin();
+    auto mcs = min_coverage_impl(T,cost,false);
+    return *mcs.first;
   };
 
   template<typename S>
@@ -679,14 +628,14 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   min_coverage_all(const std::set<VecSet<S> > &T,
                    const std::function<int(const S&)> &cost){
     return min_coverage_impl(T,cost,true);
   };
 
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   min_coverage_all(const std::set<VecSet<S> > &T){
     std::function<int(const S&)> unit_cost =
       [](const S&){ return 1; };
@@ -694,7 +643,7 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   subset_min_coverage_all(const std::set<VecSet<S> > &T){
 
     Preprocessed<S> pp(T,[](const S&){return 0;}); // Dummy cost

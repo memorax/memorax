@@ -42,6 +42,17 @@
 
 namespace MinCoverage {
 
+  /* A sol_iterator<S> i is a forward input iterator over min coverage
+   * solutions. The value of *i is a VecSet<S>. The iterator contains
+   * sufficient data to compute solutions on demand, without relying
+   * on an external solution set.
+   *
+   * A sol_iterator<S>, that is not an end iterator, also provides a
+   * size method, returning the total size of the set of solutions.
+   */
+  template<typename S>
+  class sol_iterator;
+
   /* Returns a min-coverage set for (T,cost). */
   template<typename S>
   VecSet<S>
@@ -56,21 +67,21 @@ namespace MinCoverage {
 
   /* Returns all min-coverage sets for (T,cost). */
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   min_coverage_all(const std::set<VecSet<S> > &T,
                    const std::function<int(const S&)> &cost);
 
   /* Returns all min-coverage sets for (T,unit), where unit assigns
    * the cost 1 to each element. */
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   min_coverage_all(const std::set<VecSet<S> > &T);
 
   /* Returns all coverage sets for (T,unit) which are minimal with
    * respect to set inclusion.
    */
   template<typename S>
-  std::set<VecSet<S> >
+  std::pair<sol_iterator<S>,sol_iterator<S> >
   subset_min_coverage_all(const std::set<VecSet<S> > &T);
 
   void test();

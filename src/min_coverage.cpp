@@ -33,6 +33,11 @@ namespace MinCoverage{
       id_cost =
       [](const int &i){ return i; };
 
+    std::function<std::set<VecSet<int> >(const std::pair<sol_iterator<int>,sol_iterator<int> > &)> setofpr =
+      [](const std::pair<sol_iterator<int>,sol_iterator<int> > &pr){
+      return std::set<VecSet<int> >(pr.first,pr.second);
+    };
+
     {
       std::vector<VecSet<int> > T(3);
       T[0].insert(1); T[0].insert(2); T[0].insert(3);
@@ -75,16 +80,16 @@ namespace MinCoverage{
 
         std::set<VecSet<int> > Tset(T.begin(),T.end());
         Test::inner_test("#1 Min coverage (unit)",res_unit.count(min_coverage<int>(Tset)));
-        Test::inner_test("#1 Min coverage all (unit)",res_unit == min_coverage_all<int>(Tset));
+        Test::inner_test("#1 Min coverage all (unit)",res_unit == setofpr(min_coverage_all<int>(Tset)));
 
         std::set<VecSet<int> > res_id;
         VecSet<int> res2; res2.insert(2); res2.insert(3);
         res_id.insert(res2);
         Test::inner_test("#1 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
-        Test::inner_test("#1 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+        Test::inner_test("#1 Min coverage all (id)",res_id == setofpr(min_coverage_all<int>(Tset,id_cost)));
         std::set<VecSet<int> > ss_res = {{2,3},{2,4}};
         Test::inner_test("#1 Min coverage subset all",
-                         subset_min_coverage_all<int>(Tset) == ss_res);
+                         setofpr(subset_min_coverage_all<int>(Tset)) == ss_res);
 
       }
     }
@@ -102,17 +107,17 @@ namespace MinCoverage{
 
       std::set<VecSet<int> > Tset(T.begin(),T.end());
       Test::inner_test("#2 Min coverage (unit)",res_unit.count(min_coverage<int>(Tset)));
-      Test::inner_test("#2 Min coverage all (unit)",res_unit == min_coverage_all<int>(Tset));
+      Test::inner_test("#2 Min coverage all (unit)",res_unit == setofpr(min_coverage_all<int>(Tset)));
 
       std::set<VecSet<int> > res_id;
       VecSet<int> res2; res2.insert(1); res2.insert(2); res2.insert(3);
       res_id.insert(res2);
 
       Test::inner_test("#2 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
-      Test::inner_test("#2 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+      Test::inner_test("#2 Min coverage all (id)",res_id == setofpr(min_coverage_all<int>(Tset,id_cost)));
       std::set<VecSet<int> > ss_res = {{5,2},{3,1,2},{5,6},{3,1,6},{4,1,2},{4,1,6}};
       Test::inner_test("#2 Min coverage subset all",
-                       subset_min_coverage_all<int>(Tset) == ss_res);
+                       setofpr(subset_min_coverage_all<int>(Tset)) == ss_res);
     }
 
     {
@@ -122,12 +127,12 @@ namespace MinCoverage{
       std::set<VecSet<int> > res;
       res.insert(VecSet<int>());
       Test::inner_test("#3 Min coverage (unit)",res.count(min_coverage<int>(Tset)));
-      Test::inner_test("#3 Min coverage all (unit)",res == min_coverage_all<int>(Tset));
+      Test::inner_test("#3 Min coverage all (unit)",res == setofpr(min_coverage_all<int>(Tset)));
 
       Test::inner_test("#3 Min coverage (id)",res.count(min_coverage<int>(Tset,id_cost)));
-      Test::inner_test("#3 Min coverage all (id)",res == min_coverage_all<int>(Tset,id_cost));
+      Test::inner_test("#3 Min coverage all (id)",res == setofpr(min_coverage_all<int>(Tset,id_cost)));
       Test::inner_test("#3 Min coverage subset all",
-                       subset_min_coverage_all<int>(Tset) == res);
+                       setofpr(subset_min_coverage_all<int>(Tset)) == res);
     }
 
     {
@@ -145,12 +150,12 @@ namespace MinCoverage{
       res_id.insert(res1);
 
       Test::inner_test("#4 Min coverage (unit)",res_unit.count(min_coverage<int>(Tset)));
-      Test::inner_test("#4 Min coverage all (unit)",res_unit == min_coverage_all<int>(Tset));
+      Test::inner_test("#4 Min coverage all (unit)",res_unit == setofpr(min_coverage_all<int>(Tset)));
 
       Test::inner_test("#4 Min coverage (id)",res_id.count(min_coverage<int>(Tset,id_cost)));
-      Test::inner_test("#4 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
+      Test::inner_test("#4 Min coverage all (id)",res_id == setofpr(min_coverage_all<int>(Tset,id_cost)));
       Test::inner_test("#4 Min coverage subset all",
-                       subset_min_coverage_all<int>(Tset) == res_unit);
+                       setofpr(subset_min_coverage_all<int>(Tset)) == res_unit);
     }
 
     /* Test sol_iterator */
