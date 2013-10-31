@@ -1,23 +1,46 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
+
+template<class T>
+template<typename ITER>
+VecSet<T>::VecSet(ITER begin, ITER end){
+  for(; begin != end; ++begin){
+    if(vec.size() && vec.back() < *begin){
+      vec.push_back(*begin);
+    }else{
+      insert(*begin);
+    }
+  }
+};
+
+template<class T>
+VecSet<T>::VecSet(std::initializer_list<T> il){
+  for(auto it = il.begin(); it != il.end(); ++it){
+    if(vec.size() && vec.back() < *it){
+      vec.push_back(*it);
+    }else{
+      insert(*it);
+    }
+  }
+};
 
 template<class T>
 int VecSet<T>::find_geq(const T &t) const{

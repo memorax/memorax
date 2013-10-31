@@ -68,8 +68,8 @@ namespace MinCoverage{
      * Pre: For all distinct 0 <= i,j < trans.size(), we have that
      * trans[i] is disjunct from trans[j].
      */
-    sol_iterator(const std::set<std::set<int> > &T,
-                 const std::vector<std::set<S> > &trans);
+    sol_iterator(const std::set<VecSet<int> > &T,
+                 const std::vector<VecSet<S> > &trans);
     sol_iterator(const sol_iterator&);
     ~sol_iterator();
     sol_iterator<S> &operator=(const sol_iterator&);
@@ -131,8 +131,8 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  sol_iterator<S>::sol_iterator(const std::set<std::set<int> > &T,
-                                const std::vector<std::set<S> > &trans){
+  sol_iterator<S>::sol_iterator(const std::set<VecSet<int> > &T,
+                                const std::vector<VecSet<S> > &trans){
     if(T.empty()){
       // End iterator, because the set is empty
       this->T = 0;
@@ -309,8 +309,8 @@ namespace MinCoverage{
   public:
     /* Constructs an empty candidate for (T,cost_fun)
      * cm should be a coverage map for T (See get_coverage_map below). */
-    CandSet(const std::vector<std::set<S> > &T,
-            const std::map<S,std::set<int> > &cm,
+    CandSet(const std::vector<VecSet<S> > &T,
+            const std::map<S,VecSet<int> > &cm,
             const std::function<int(const S&)> &cost_fun);
     CandSet(const CandSet&) = default;
     CandSet &operator=(const CandSet&);
@@ -326,7 +326,7 @@ namespace MinCoverage{
     /* Returns the cost of this candidate */
     int get_cost() const;
     /* Returns the candidate set */
-    const std::set<S> &get_set() const;
+    const VecSet<S> &get_set() const;
     /* A total order on candidate sets.
      * Compares lexicographically (cost,set). */
     bool operator<(const CandSet&) const;
@@ -336,7 +336,7 @@ namespace MinCoverage{
     std::string to_string() const;
   private:
     /* The set itself */
-    std::set<S> set;
+    VecSet<S> set;
     /* coverage[i] is true iff T[i] is covered by this set
      *
      * By "T[i] is covered" we mean that this->set contains some element
@@ -346,9 +346,9 @@ namespace MinCoverage{
     /* The total cost of this set. */
     int cost;
     /* The set of sets T */
-    const std::vector<std::set<S> > &T;
+    const std::vector<VecSet<S> > &T;
     /* coverage_map is get_coverage_map(T) */
-    const std::map<S,std::set<int> > &coverage_map;
+    const std::map<S,VecSet<int> > &coverage_map;
     /* The cost function */
     const std::function<int(const S&)> &cost_fun;
   };
@@ -383,13 +383,13 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  const std::set<S> &CandSet<S>::get_set() const{
+  const VecSet<S> &CandSet<S>::get_set() const{
     return set;
   };
 
   template<typename S>
-  CandSet<S>::CandSet(const std::vector<std::set<S> > &T,
-                      const std::map<S,std::set<int> > &cm,
+  CandSet<S>::CandSet(const std::vector<VecSet<S> > &T,
+                      const std::map<S,VecSet<int> > &cm,
                       const std::function<int(const S&)> &cost_fun)
     : T(T), coverage_map(cm), cost_fun(cost_fun){
     coverage.resize(T.size(),false);
@@ -431,7 +431,7 @@ namespace MinCoverage{
   template<typename S>
   void CandSet<S>::insert(const S &s){
     set.insert(s);
-    const std::set<int> &is = coverage_map.at(s);
+    const VecSet<int> &is = coverage_map.at(s);
     for(auto it = is.begin(); it != is.end(); ++it){
       coverage[*it] = true;
     }
@@ -442,9 +442,9 @@ namespace MinCoverage{
    * m[s] is the set of all indices i where s is in T[i].
    */
   template<typename S>
-  std::map<S,std::set<int> >
-  get_coverage_map(const std::vector<std::set<S> > &T){
-    std::map<S,std::set<int> > m;
+  std::map<S,VecSet<int> >
+  get_coverage_map(const std::vector<VecSet<S> > &T){
+    std::map<S,VecSet<int> > m;
     for(unsigned i = 0; i < T.size(); ++i){
       for(auto it = T[i].begin(); it != T[i].end(); ++it){
         m[*it].insert(i);
@@ -466,14 +466,14 @@ namespace MinCoverage{
   template<typename S>
   class Preprocessed{
   public:
-    Preprocessed(const std::set<std::set<S> > &T,
+    Preprocessed(const std::set<VecSet<S> > &T,
                  const std::function<int(const S&)> &cost);
     /* get_coverage_map(T') where T' is the preprocessed T. */
-    const std::map<int,std::set<int> > &get_coverage_map() const { return cov_map_i; };
+    const std::map<int,VecSet<int> > &get_coverage_map() const { return cov_map_i; };
     /* A vector v such that the elements in v are precisely the sets
      * in T', where T' is the preprocessed T.
      */
-    const std::vector<std::set<int> > &get_Tvec() const { return Tvec_i; };
+    const std::vector<VecSet<int> > &get_Tvec() const { return Tvec_i; };
     /* The cost function f such that f(i) = cost(s) where s is some
      * element in the equivalence class i, and cost is the original
      * cost function over S.
@@ -483,32 +483,32 @@ namespace MinCoverage{
      * T that can be translated to Ui by replacing each i in Ti by
      * some s which is in the equivalence class i.
      */
-    std::set<std::set<S> > translate_back(const std::set<std::set<int> > &T) const;
+    std::set<VecSet<S> > translate_back(const std::set<VecSet<int> > &T) const;
     /* Returns a singleton set {U} where U is a member of
      * translate_back(T), if T contains at least one
      * element. Otherwise returns the empty set. */
-    std::set<std::set<S> > translate_back_one(const std::set<std::set<int> > &T) const;
+    std::set<VecSet<S> > translate_back_one(const std::set<VecSet<int> > &T) const;
   private:
-    std::map<int,std::set<int> > cov_map_i;
-    std::vector<std::set<int> > Tvec_i;
+    std::map<int,VecSet<int> > cov_map_i;
+    std::vector<VecSet<int> > Tvec_i;
     /* trans_i2S[i] is the set of elements s in the equivalence class i. */
-    std::vector<std::set<S> > trans_i2S;
+    std::vector<VecSet<S> > trans_i2S;
     std::function<int(const int&)> cost_i;
 
-    void translate_back(const std::set<int> &T,
-                        std::set<std::set<S> > &TGT) const;
+    void translate_back(const VecSet<int> &T,
+                        std::set<VecSet<S> > &TGT) const;
   };
 
   template<typename S>
-  void Preprocessed<S>::translate_back(const std::set<int> &T,
-                                       std::set<std::set<S> > &TGT) const{
-    std::set<std::set<S> > *Ss = new std::set<std::set<S> >();
-    Ss->insert(std::set<S>());
+  void Preprocessed<S>::translate_back(const VecSet<int> &T,
+                                       std::set<VecSet<S> > &TGT) const{
+    std::set<VecSet<S> > *Ss = new std::set<VecSet<S> >();
+    Ss->insert(VecSet<S>());
 
     for(int i : T){
-      std::set<std::set<S> > *Ss2 = new std::set<std::set<S> >();
+      std::set<VecSet<S> > *Ss2 = new std::set<VecSet<S> >();
       for(auto it = trans_i2S[i].begin(); it != trans_i2S[i].end(); ++it){
-        for(std::set<S> S2 : *Ss){
+        for(VecSet<S> S2 : *Ss){
           S2.insert(*it);
           Ss2->insert(S2);
         }
@@ -522,8 +522,8 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  std::set<std::set<S> > Preprocessed<S>::translate_back(const std::set<std::set<int> > &T) const{
-    std::set<std::set<S> > T2;
+  std::set<VecSet<S> > Preprocessed<S>::translate_back(const std::set<VecSet<int> > &T) const{
+    std::set<VecSet<S> > T2;
     for(auto it = T.begin(); it != T.end(); ++it){
       translate_back(*it,T2);
     }
@@ -531,12 +531,12 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  std::set<std::set<S> > Preprocessed<S>::translate_back_one(const std::set<std::set<int> > &T) const{
+  std::set<VecSet<S> > Preprocessed<S>::translate_back_one(const std::set<VecSet<int> > &T) const{
     if(T.empty()){
       return {};
     }
 
-    std::set<S> U;
+    VecSet<S> U;
     for(int i : *T.begin()){
       assert(0 <= i && i < int(trans_i2S.size()));
       assert(trans_i2S[i].size());
@@ -546,7 +546,7 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  Preprocessed<S>::Preprocessed(const std::set<std::set<S> > &T,
+  Preprocessed<S>::Preprocessed(const std::set<VecSet<S> > &T,
                              const std::function<int(const S&)> &cost)
     : cost_i([](const int&){return 0;}) {
 
@@ -554,7 +554,7 @@ namespace MinCoverage{
      * of some S s: c is the cost of s, U is a set of integers
      * identifying which sets Ti in T contain s.
      */
-    typedef std::pair<int,std::set<int> > id_t;
+    typedef std::pair<int,VecSet<int> > id_t;
 
     std::map<S,id_t> s_ids;
     {
@@ -568,7 +568,7 @@ namespace MinCoverage{
       }
     }
 
-    std::map<id_t,std::set<S> > ids_s; // Inverse of s_ids
+    std::map<id_t,VecSet<S> > ids_s; // Inverse of s_ids
     for(auto it = s_ids.begin(); it != s_ids.end(); ++it){
       ids_s[it->second].insert(it->first);
     }
@@ -612,15 +612,15 @@ namespace MinCoverage{
    * for (T,cost).
    */
   template<typename S>
-  std::set<std::set<S> >
-  min_coverage_impl(const std::set<std::set<S> > &T,
+  std::set<VecSet<S> >
+  min_coverage_impl(const std::set<VecSet<S> > &T,
                     const std::function<int(const S&)> &cost,
                     bool get_all){
 
     Preprocessed<S> pp(T,cost);
 
-    const std::vector<std::set<int> > &Tvec = pp.get_Tvec();
-    const std::map<int,std::set<int> > &cov_map = pp.get_coverage_map();
+    const std::vector<VecSet<int> > &Tvec = pp.get_Tvec();
+    const std::map<int,VecSet<int> > &cov_map = pp.get_coverage_map();
 
     std::priority_queue<CandSet<int>,
                         std::vector<CandSet<int> >,
@@ -628,7 +628,7 @@ namespace MinCoverage{
 
     queue.push(CandSet<int>(Tvec,cov_map,pp.get_cost()));
 
-    std::set<std::set<int> > res;
+    std::set<VecSet<int> > res;
     bool found_first = false; // Have we found the first set?
     int cost_res = -1; // If found_first, then cost_res is the cost of each individual set in res
 
@@ -662,46 +662,46 @@ namespace MinCoverage{
   };
 
   template<typename S>
-  std::set<S>
-  min_coverage(const std::set<std::set<S> > &T,
+  VecSet<S>
+  min_coverage(const std::set<VecSet<S> > &T,
                const std::function<int(const S&)> &cost){
-    std::set<std::set<S> > mcs = min_coverage_impl(T,cost,false);
+    std::set<VecSet<S> > mcs = min_coverage_impl(T,cost,false);
     assert(mcs.size() == 1);
     return *mcs.begin();
   };
 
   template<typename S>
-  std::set<S>
-  min_coverage(const std::set<std::set<S> > &T){
+  VecSet<S>
+  min_coverage(const std::set<VecSet<S> > &T){
     std::function<int(const S&)> unit_cost =
       [](const S&){ return 1; };
     return min_coverage(T,unit_cost);
   };
 
   template<typename S>
-  std::set<std::set<S> >
-  min_coverage_all(const std::set<std::set<S> > &T,
+  std::set<VecSet<S> >
+  min_coverage_all(const std::set<VecSet<S> > &T,
                    const std::function<int(const S&)> &cost){
     return min_coverage_impl(T,cost,true);
   };
 
   template<typename S>
-  std::set<std::set<S> >
-  min_coverage_all(const std::set<std::set<S> > &T){
+  std::set<VecSet<S> >
+  min_coverage_all(const std::set<VecSet<S> > &T){
     std::function<int(const S&)> unit_cost =
       [](const S&){ return 1; };
     return min_coverage_all(T,unit_cost);
   };
 
   template<typename S>
-  std::set<std::set<S> >
-  subset_min_coverage_all(const std::set<std::set<S> > &T){
+  std::set<VecSet<S> >
+  subset_min_coverage_all(const std::set<VecSet<S> > &T){
 
     Preprocessed<S> pp(T,[](const S&){return 0;}); // Dummy cost
-    const std::vector<std::set<int> > Tvec = pp.get_Tvec();
-    const std::map<int,std::set<int> > &cov_map = pp.get_coverage_map();
+    const std::vector<VecSet<int> > Tvec = pp.get_Tvec();
+    const std::map<int,VecSet<int> > &cov_map = pp.get_coverage_map();
 
-    std::set<std::set<int> > mcs;
+    std::set<VecSet<int> > mcs;
 
     std::queue<CandSet<int> > candidates;
     candidates.push(CandSet<int>(Tvec,cov_map,
@@ -710,7 +710,7 @@ namespace MinCoverage{
     /* Check whether C is a superset of some set in mcs. */
     std::function<bool(const CandSet<int>&)> is_subsumed =
       [&mcs](const CandSet<int> &C){
-      const std::set<int> &cs = C.get_set();
+      const VecSet<int> &cs = C.get_set();
       for(auto it = mcs.begin(); it != mcs.end(); ++it){
         if(std::includes(cs.begin(),cs.end(),
                          it->begin(),it->end())){

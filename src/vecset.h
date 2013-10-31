@@ -23,6 +23,7 @@
 
 #include <cassert>
 #include <functional>
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,12 @@ public:
     : vec(v) {
     assert(check_invariant());
   };
+  /* A set consisting of the values of [begin,end). Each element is
+   * inserted using a separate call to insert.
+   */
+  template<typename ITER>
+  VecSet(ITER begin, ITER end);
+  VecSet(std::initializer_list<T> il);
   VecSet(const VecSet &) = default;
   VecSet &operator=(const VecSet&) = default;
   virtual ~VecSet() {};
@@ -80,6 +87,12 @@ public:
   const T &operator[](int i) const { return vec[i]; };
   class const_iterator{
   public:
+    typedef std::bidirectional_iterator_tag iterator_category;
+    typedef T value_type;
+    typedef T& reference;
+    typedef T* pointer;
+    typedef unsigned difference_type;
+
     /* An iterator into vec, pointing at position i if i < vec.size(),
      * and representing the end iterator if i == vec.size().
      *

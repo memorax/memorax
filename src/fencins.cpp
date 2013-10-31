@@ -27,6 +27,7 @@
 #include "sb_tso_bwd.h"        // for testing
 #include "test.h"              // for testing
 #include "tso_simple_fencer.h" // for testing
+#include "vecset.h"
 
 #include <algorithm>
 #include <sstream>
@@ -34,7 +35,7 @@
 
 namespace Fencins{
 
-  void add_disj_to_cnf(const std::set<Sync*> &disj, std::set<std::set<Sync*> > *cnf){
+  void add_disj_to_cnf(const VecSet<Sync*> &disj, std::set<VecSet<Sync*> > *cnf){
     for(auto it = cnf->begin(); it != cnf->end(); ){
       if(std::includes(it->begin(),it->end(),
                        disj.begin(),disj.end())){
@@ -51,6 +52,18 @@ namespace Fencins{
     return *a < *b;
   };
 
+  void deep_delete(const std::set<VecSet<Sync*> > &S){
+    std::set<Sync*> deleted;
+    for(auto it = S.begin(); it != S.end(); ++it){
+      for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+        if(deleted.count(*it2) == 0){
+          delete *it2;
+          deleted.insert(*it2);
+        }
+      }
+    }
+  };
+
   void deep_delete(const std::set<std::set<Sync*> > &S){
     std::set<Sync*> deleted;
     for(auto it = S.begin(); it != S.end(); ++it){
@@ -63,7 +76,7 @@ namespace Fencins{
     }
   };
 
-  void deep_delete(const std::set<Sync*> &S){
+  void deep_delete(const VecSet<Sync*> &S){
     for(auto it = S.begin(); it != S.end(); ++it){
       delete *it;
     }
@@ -82,7 +95,7 @@ namespace Fencins{
    *
    * SS' still shares pointers with SS.
    */
-  std::set<std::set<Sync*> > separate_pointers(const std::set<std::set<Sync*> > &SS){
+  std::set<std::set<Sync*> > separate_pointers(const std::set<VecSet<Sync*> > &SS){
     std::set<Sync*> seen_syncs;
     std::set<std::set<Sync*> > SS2;
 
@@ -104,7 +117,7 @@ namespace Fencins{
   };
 
   Machine *insert_syncs(const Machine &m,
-                        const std::set<Sync*> syncs,
+                        const VecSet<Sync*> syncs,
                         std::vector<const Sync::InsInfo*> *m_infos){
     assert(m_infos->empty());
 
@@ -136,12 +149,12 @@ namespace Fencins{
      * Sync::operator==), then they are the very same object (the
      * pointers are the same: s0 == s1).
      */
-    std::set<std::set<Sync *> > syncs;
+    std::set<VecSet<Sync *> > syncs;
     /* If mcs_up_to_date is set, then mcs is the min coverage sets of
      * syncs.
      */
     bool mcs_up_to_date = false;
-    std::set<std::set<Sync*> > mcs;
+    std::set<VecSet<Sync*> > mcs;
     /* Maps Sync objects o to a pointer p to a Sync object o' such
      * that o == o' and p is in some set in syncs.
      */
@@ -154,14 +167,14 @@ namespace Fencins{
      * same sets as fence_sets, but in fence_sets_uncloned all Sync
      * pointers are pointers into syncs.
      */
-    std::set<std::set<Sync*> > fence_sets;
-    std::set<std::set<Sync*> > fence_sets_uncloned;
+    std::set<VecSet<Sync*> > fence_sets;
+    std::set<VecSet<Sync*> > fence_sets_uncloned;
 
     Reachability::Result *prev_result = 0;
     bool done = false;
     do{
       assert(fence_sets.size() == fence_sets_uncloned.size());
-      std::set<Sync*> mc; // The next Sync set to check
+      VecSet<Sync*> mc; // The next Sync set to check
       std::vector<const Sync::InsInfo*> m_infos; // Log from inserting mc
       const Machine *m_synced = 0; // The machine with mc inserted
       // Find the next Sync set to check (mc)
@@ -249,7 +262,7 @@ namespace Fencins{
           done = true;
         }
         for(auto it = new_syncs.begin(); it != new_syncs.end(); ++it){
-          std::set<Sync*> disj;
+          VecSet<Sync*> disj;
           for(auto it2 = it->begin(); it2 != it->end(); ++it2){
             if(sync_ptr.count(*it2)){
               disj.insert(sync_ptr.at(*it2));
@@ -267,7 +280,7 @@ namespace Fencins{
         /* mc is a solution for m */
         /* Clone mc */
         Log::msg << "Synchronization set shown to be a solution.\n\n";
-        std::set<Sync*> fs;
+        VecSet<Sync*> fs;
         for(auto it = mc.begin(); it != mc.end(); ++it){
           fs.insert((*it)->clone());
         }

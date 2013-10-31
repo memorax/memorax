@@ -44,34 +44,34 @@ namespace MinCoverage {
 
   /* Returns a min-coverage set for (T,cost). */
   template<typename S>
-  std::set<S>
-  min_coverage(const std::set<std::set<S> > &T,
+  VecSet<S>
+  min_coverage(const std::set<VecSet<S> > &T,
                const std::function<int(const S&)> &cost);
 
   /* Returns a min-coverage set for (T,unit), where unit assigns the
    * cost 1 to each element. */
   template<typename S>
-  std::set<S>
-  min_coverage(const std::set<std::set<S> > &T);
+  VecSet<S>
+  min_coverage(const std::set<VecSet<S> > &T);
 
   /* Returns all min-coverage sets for (T,cost). */
   template<typename S>
-  std::set<std::set<S> >
-  min_coverage_all(const std::set<std::set<S> > &T,
+  std::set<VecSet<S> >
+  min_coverage_all(const std::set<VecSet<S> > &T,
                    const std::function<int(const S&)> &cost);
 
   /* Returns all min-coverage sets for (T,unit), where unit assigns
    * the cost 1 to each element. */
   template<typename S>
-  std::set<std::set<S> >
-  min_coverage_all(const std::set<std::set<S> > &T);
+  std::set<VecSet<S> >
+  min_coverage_all(const std::set<VecSet<S> > &T);
 
   /* Returns all coverage sets for (T,unit) which are minimal with
    * respect to set inclusion.
    */
   template<typename S>
-  std::set<std::set<S> >
-  subset_min_coverage_all(const std::set<std::set<S> > &T);
+  std::set<VecSet<S> >
+  subset_min_coverage_all(const std::set<VecSet<S> > &T);
 
   void test();
 };
