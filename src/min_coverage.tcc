@@ -20,12 +20,287 @@
 
 #include <algorithm>
 #include <cassert>
+#include <limits>
 #include <map>
 #include <queue>
 #include <vector>
 #include <sstream>
+#include <stdexcept>
 
 namespace MinCoverage{
+
+  /* A sol_iterator<S> i is a forward input iterator over min coverage
+   * solutions. The value of *i is a VecSet<S>. The iterator contains
+   * sufficient data to compute solutions on demand, without relying
+   * on an external solution set.
+   *
+   * Technically: A sol_iterator<S> i contains a complete set of
+   * solutions to the smaller min_coverage problem where only
+   * equivalence classes of S elements are considered, as opposed to
+   * considering each S element separately. The iterator translates
+   * such solutions of the smaller problem to solutions of the larger
+   * problem on demand. This has the benefit of not having to compute
+   * or keep in memory the entire set of solutions to the larger
+   * problem, which may be exponential in the size of the set of
+   * solutions to the smaller problem.
+   */
+  template<typename S>
+  class sol_iterator{
+  public:
+    typedef VecSet<S> value_type;
+    typedef std::input_iterator_tag iterator_category;
+    typedef void difference_type;
+    typedef VecSet<S>& reference;
+    typedef VecSet<S>* pointer;
+
+    /* An end iterator matching any other end iterator. */
+    sol_iterator();
+    /* An iterator to the beginning of the set of larger solutions,
+     * corresponding to the set of T smaller solutions.
+     *
+     * A larger solution s is said to correspond to a smaller solution
+     * t iff s == {f(e) | e in t} for some function f such that f(e)
+     * is in trans[e] for all e in t.
+     *
+     * Pre: For all Ti in T, and all i in Ti, trans[i] is defined and
+     * non-empty.
+     *
+     * Pre: For all distinct 0 <= i,j < trans.size(), we have that
+     * trans[i] is disjunct from trans[j].
+     */
+    sol_iterator(const std::set<std::set<int> > &T,
+                 const std::vector<std::set<S> > &trans);
+    sol_iterator(const sol_iterator&);
+    ~sol_iterator();
+    sol_iterator<S> &operator=(const sol_iterator&);
+    bool operator==(const sol_iterator&) const;
+    bool operator!=(const sol_iterator &it) const { return !(*this == it); };
+    const VecSet<S> &operator*() const;
+    const VecSet<S> *operator->() const;
+    sol_iterator<S> operator++(int); // postfix
+    sol_iterator<S> &operator++(); // prefix
+    /* Returns the number of elements in the larger set of
+     * solutions.
+     *
+     * Throws an std::exception* if the size of the larger set exceeds
+     * INT_MAX.
+     *
+     * Pre: this is not an end iterator.
+     */
+    typedef int size_type;
+    size_type size() const;
+  private:
+    /* A vector representation of the set of smaller solutions.
+     *
+     * Shared between copies of the iterator.
+     *
+     * T is null iff this is an end iterator.
+     */
+    std::vector<std::vector<int> > *T;
+    /* A vector representation of the possible translations from
+     * smaller solutions to larger.
+     *
+     * Shared between copies of the iterator.
+     *
+     * trans is null iff T is null.
+     */
+    std::vector<std::vector<S> > *trans;
+    /* Reference counter for T and itself. */
+    int *ref_count;
+    /* We are currently considering the smaller solution (*T)[T_i]. */
+    int T_i;
+    /* We are currently considering the tc:th translation of
+     * (*T)[T_i] */
+    typedef int tc_type;
+    tc_type tc;
+    /* The current solution. */
+    VecSet<S> v;
+    /* Is the current translation of (*T)[T_i] the last one?
+     * Updated by update_v. */
+    bool last_tc;
+
+    void release_T();
+    void update_v();
+  };
+
+  template<typename S>
+  sol_iterator<S>::sol_iterator(){
+    T = 0;
+    trans = 0;
+    ref_count = 0;
+  };
+
+  template<typename S>
+  sol_iterator<S>::sol_iterator(const std::set<std::set<int> > &T,
+                                const std::vector<std::set<S> > &trans){
+    if(T.empty()){
+      // End iterator, because the set is empty
+      this->T = 0;
+      this->trans = 0;
+      this->ref_count = 0;
+    }else{
+      this->T = new std::vector<std::vector<int> >(T.size());
+      {
+        int i = 0;
+        for(auto it = T.begin(); it != T.end(); ++it){
+          (*this->T)[i].insert((*this->T)[i].begin(),it->begin(),it->end());
+          ++i;
+        }
+      }
+      this->trans = new std::vector<std::vector<S> >(trans.size());
+      for(unsigned i = 0; i < trans.size(); ++i){
+        (*this->trans)[i].insert((*this->trans)[i].begin(),trans[i].begin(),trans[i].end());
+      }
+      ref_count = new int(1);
+      T_i = 0;
+      tc = 0;
+      update_v();
+    }
+  };
+
+  template<typename S>
+  sol_iterator<S>::sol_iterator(const sol_iterator<S> &it){
+    T = it.T;
+    trans = it.trans;
+    ref_count = it.ref_count;
+    if(T) ++*ref_count;
+    T_i = it.T_i;
+    tc = it.tc;
+    last_tc = it.last_tc;
+    v = it.v;
+  };
+
+  template<typename S>
+  void sol_iterator<S>::release_T(){
+    if(T){
+      --*ref_count;
+      if(*ref_count == 0){
+        delete T;
+        delete trans;
+        delete ref_count;
+      }
+    }
+  };
+
+  template<typename S>
+  sol_iterator<S>::~sol_iterator(){
+    release_T();
+  };
+
+  template<typename S>
+  sol_iterator<S> &sol_iterator<S>::operator=(const sol_iterator<S> &it){
+    if(this != &it){
+      if(it.ref_count) ++*it.ref_count;
+      release_T();
+      T = it.T;
+      trans = it.trans;
+      ref_count = it.ref_count;
+      T_i = it.T_i;
+      tc = it.tc;
+      last_tc = it.last_tc;
+      v = it.v;
+    }
+    return *this;
+  };
+
+  template<typename S>
+  bool sol_iterator<S>::operator==(const sol_iterator<S> &it) const{
+    if(T == 0) return it.T == 0;
+    if(it.T == 0) return false;
+    return T_i == it.T_i && tc == it.tc;
+  };
+
+  template<typename S>
+  void sol_iterator<S>::update_v(){
+    assert(T != 0);
+    v.clear();
+    int tc_rem = tc;
+    last_tc = true;
+    for(unsigned i = 0; i < (*T)[T_i].size(); ++i){
+      const std::vector<S> &tv = (*trans)[(*T)[T_i][i]];
+      assert(tv.size());
+      int tvi = tc_rem % tv.size();
+      if(tvi != int(tv.size())-1){
+        last_tc = false;
+      }
+      v.insert(tv[tvi]);
+      tc_rem /= tv.size();
+    }
+    assert(tc_rem == 0);
+  };
+
+  template<typename S>
+  const VecSet<S> &sol_iterator<S>::operator*() const{
+    return v;
+  };
+
+  template<typename S>
+  const VecSet<S> *sol_iterator<S>::operator->() const{
+    return &v;
+  };
+
+  template<typename S>
+  sol_iterator<S> sol_iterator<S>::operator++(int){
+    sol_iterator<S> oldz(*this);
+    ++*this;
+    return oldz;
+  };
+
+  template<typename S>
+  sol_iterator<S> &sol_iterator<S>::operator++(){
+    if(T){
+      if(last_tc){
+        /* Go to next element in T */
+        tc = 0;
+        ++T_i;
+        if(T_i >= int(T->size())){
+          /* Become end iterator */
+          assert(T_i == int(T->size()));
+          release_T();
+          T = 0;
+          trans = 0;
+          ref_count = 0;
+        }
+      }else{
+        /* Go to next translation of (*T)[T_i]. */
+        if(tc == std::numeric_limits<tc_type>::max()){
+          throw new std::logic_error("MinCoverage::sol_iterator: Unable to increase iterator due to numeric overflow.");
+        }
+        ++tc;
+      }
+      if(T){
+        update_v();
+      }
+    }
+    return *this;
+  };
+
+  template<typename S>
+  typename sol_iterator<S>::size_type sol_iterator<S>::size() const{
+    size_type siz = 0;
+    for(unsigned i = 0; i < T->size(); ++i){
+      size_type siz_i = 1;
+      for(unsigned j = 0; j < (*T)[i].size(); ++j){
+        int s = (*trans)[(*T)[i][j]].size();
+        /* siz_i *= k */
+        {
+          size_type tmp = 0;
+          for(unsigned k = 0; k < s; ++k){
+            if(std::numeric_limits<size_type>::max() - tmp < siz_i){
+              throw new std::logic_error("MinCoverage::sol_iterator: Unable to calculate size due to numeric overflow.");
+            }
+            tmp += siz_i;
+          }
+          siz_i = tmp;
+        }
+      }
+      if(std::numeric_limits<size_type>::max() - siz < siz_i){
+        throw new std::logic_error("MinCoverage::sol_iterator: Unable to calculate size due to numeric overflow.");
+      }
+      siz += siz_i;
+    }
+    return siz;
+  };
 
   /* A subset of S that is a candidate for being a coverage set.
    */

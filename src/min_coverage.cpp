@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -26,11 +26,11 @@ namespace MinCoverage{
   void test(){
 
     std::function<int(const int&)>
-      unit_cost = 
+      unit_cost =
       [](const int&){ return 1; };
 
     std::function<int(const int&)>
-      id_cost = 
+      id_cost =
       [](const int &i){ return i; };
 
     {
@@ -48,7 +48,7 @@ namespace MinCoverage{
           Test::inner_test("Initial get uncovered",sug == 0 || sug == 1 || sug == 2);
         }
         Test::inner_test("Initially not covered",!cs0.total_coverage());
-        
+
         cs0.insert(2);
 
         Test::inner_test("Single cost",cs0.get_cost() == 1);
@@ -151,6 +151,84 @@ namespace MinCoverage{
       Test::inner_test("#4 Min coverage all (id)",res_id == min_coverage_all<int>(Tset,id_cost));
       Test::inner_test("#4 Min coverage subset all",
                        subset_min_coverage_all<int>(Tset) == res_unit);
+    }
+
+    /* Test sol_iterator */
+    {
+      std::function<std::set<std::set<int> >(const sol_iterator<int> &)> setof =
+        [](const sol_iterator<int> &begin){
+        sol_iterator<int> end;
+        std::set<std::set<int> > res;
+        for(auto it = begin; it != end; ++it){
+          res.insert(std::set<int>(it->begin(),it->end()));
+        }
+        return res;
+      };
+
+      std::function<bool(const std::set<std::set<int> >&,const std::set<std::set<int> >&)> eq_sets =
+        [](const std::set<std::set<int> > &S,const std::set<std::set<int> > &T){
+        return S == T;
+      };
+
+      /* Test 1-10 */
+      {
+
+        Test::inner_test("sol_iterator #1",
+                         eq_sets(setof(sol_iterator<int>({{0,1},{0,2}},{{1,2},{3},{4,5}})),
+                                 {{1,3},{2,3},{1,4},{1,5},{2,4},{2,5}}));
+        Test::inner_test("sol_iterator #2",
+                         sol_iterator<int>({{0,1},{0,2}},{{1,2},{3},{4,5}}).size() == 6);
+
+        Test::inner_test("sol_iterator #3",
+                         eq_sets(setof(sol_iterator<int>({{0}},{{0}})),{{0}}));
+        Test::inner_test("sol_iterator #4",
+                         sol_iterator<int>({{0}},{{0}}).size() == 1);
+
+        Test::inner_test("sol_iterator #5",
+                         eq_sets(setof(sol_iterator<int>({{0}},{{0,1}})),{{0},{1}}));
+        Test::inner_test("sol_iterator #6",
+                         sol_iterator<int>({{0}},{{0,1}}).size() == 2);
+
+        try{
+          int b = std::numeric_limits<sol_iterator<int>::size_type>::digits;
+          std::set<int> s;
+          std::vector<std::set<int> > trans;
+          for(int i = 0; i < b; ++i){
+            s.insert(i);
+            trans.push_back({i*2,i*2+1});
+          }
+
+          sol_iterator<int>({s},trans).size();
+          Test::inner_test("sol_iterator #7 (overflow)",false);
+        }catch(std::exception *exc){
+          Test::inner_test("sol_iterator #7 (overflow)",true);
+          delete exc;
+        }
+
+        try{
+          int b = std::numeric_limits<sol_iterator<int>::size_type>::digits;
+          std::set<int> s;
+          std::vector<std::set<int> > trans;
+          for(int i = 0; i < b; ++i){
+            s.insert(i);
+            trans.push_back({i*2,i*2+1});
+          }
+          trans[trans.size()-1] = {b*2}; // only one alternative for the last set
+
+          sol_iterator<int>({s},trans).size();
+          Test::inner_test("sol_iterator #8 (huge, but no overflow)",true);
+        }catch(std::exception *exc){
+          Test::inner_test("sol_iterator #8 (huge, but no overflow)",false);
+          delete exc;
+        }
+
+        Test::inner_test("sol_iterator #9",
+                         eq_sets(setof(sol_iterator<int>({},{})),{}));
+
+        Test::inner_test("sol_iterator #10",
+                         eq_sets(setof(sol_iterator<int>({},{{1,2},{3,4}})),{}));
+
+      }
     }
 
   };

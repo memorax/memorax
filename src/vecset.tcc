@@ -142,44 +142,6 @@ bool VecSet<T>::check_invariant() const{
   return true;
 };
 
-inline void test_vecset_int(){
-  /* Test 1: insert(set): Empty */
-  {
-    VecSet<int> A;
-    VecSet<int> B;
-    VecSet<int> AB_target;
-    VecSet<int> AB = A;
-    AB.insert(B);
-    VecSet<int> BA = B;
-    BA.insert(A);
-    if(AB == AB_target && BA == AB_target){
-      std::cout << "Test1: Success!\n";
-    }else{
-      std::cout << "Test1: Failure\n";
-    }
-  }
-
-  /* Test 2: insert(set) */
-  {
-    VecSet<int> A;
-    A.insert(2); A.insert(5); A.insert(42); A.insert(113);
-    VecSet<int> B;
-    B.insert(2); B.insert(7); B.insert(79); B.insert(42);
-    VecSet<int> AB_target;
-    AB_target.insert(2); AB_target.insert(5); AB_target.insert(7); AB_target.insert(42);
-    AB_target.insert(79); AB_target.insert(113);
-    VecSet<int> AB = A;
-    AB.insert(B);
-    VecSet<int> BA = B;
-    BA.insert(A);
-    if(AB == AB_target && BA == AB_target){
-      std::cout << "Test2: Success!\n";
-    }else{
-      std::cout << "Test2: Failure\n";
-    }
-  }
-};
-
 template<class T>
 std::string VecSet<T>::to_string_one_line(std::function<std::string(const T&)> &f) const{
   std::string s = "{";
