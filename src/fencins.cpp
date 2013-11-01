@@ -205,10 +205,6 @@ namespace Fencins{
           tm.stop();
           Log::debug << "min_coverage time: " << tm.get_time() << " s.\n";
         }
-        if(mcs.first.size() == fence_sets.size()){
-          // All correct fence sets are already in fence_sets
-          break;
-        }
         // Otherwise find one which is not in fence_sets
         for(; mcs.first != mcs.second; ++mcs.first){
           if(fence_sets_uncloned.count(*mcs.first) == 0){
@@ -226,6 +222,11 @@ namespace Fencins{
             }
           }
         }
+        if(mcs.first == mcs.second){
+          /* There are no more fence sets. */
+          assert(fence_sets.size());
+          break;
+        }
       }
       assert(m_synced != 0);
 
@@ -238,6 +239,7 @@ namespace Fencins{
       }
       Log::msg << "\n";
 
+      Log::msg << "Current solution count: " << fence_sets.size() << "\n";
       Reachability::Arg *rarg = reach_arg_init(*m_synced,prev_result);
       Reachability::Result *res = r.reachability(rarg);
       if(prev_result) delete prev_result;

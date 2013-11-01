@@ -18,6 +18,8 @@
  *
  */
 
+#include "vqueue.h"
+
 #include <algorithm>
 #include <cassert>
 #include <limits>
@@ -28,6 +30,43 @@
 #include <stdexcept>
 
 namespace MinCoverage{
+
+  /* An IVSGenerator represents an indexed set of VecSet<int>. The
+   * elements may or may not be computed at demand.
+   */
+  class IVSGenerator {
+  public:
+    virtual ~IVSGenerator() {};
+    /* Returns the i:th VecSet<int> in the set.
+     *
+     * Pre: has_index(i)
+     */
+    virtual VecSet<int> operator[](int i) = 0;
+    /* Returns true iff i >= 0 and there exists at least i+1 elements
+     * in the set.
+     *
+     * A call to has_index(i) may trigger much
+     * computation. Particularly if i is an index which is much larger
+     * than any previously requested index.
+     */
+    virtual bool has_index(int i) = 0;
+    virtual bool empty() { return !has_index(0); };
+  };
+
+  /* A VecIVSGenerator is a simple IVSGenerator, where the set is kept
+   * as a precomputed vector.
+   */
+  class VecIVSGenerator : public IVSGenerator{
+  public:
+    /* Let the set be the one associated with the range [begin,end). */
+    template<typename ITER>
+    VecIVSGenerator(ITER begin, ITER end) : v(begin,end) {};
+    virtual ~VecIVSGenerator() {};
+    virtual VecSet<int> operator[](int i){ return v[i]; };
+    virtual bool has_index(int i) { return 0 <= i && i < int(v.size()); };
+  private:
+    std::vector<VecSet<int> > v;
+  };
 
   /* A sol_iterator<S> i is a forward input iterator over min coverage
    * solutions. The value of *i is a VecSet<S>. The iterator contains
@@ -70,6 +109,9 @@ namespace MinCoverage{
      */
     sol_iterator(const std::set<VecSet<int> > &T,
                  const std::vector<VecSet<S> > &trans);
+    /* (Takes ownership of T.) */
+    sol_iterator(IVSGenerator *T,
+                 const std::vector<VecSet<S> > &trans);
     sol_iterator(const sol_iterator&);
     ~sol_iterator();
     sol_iterator<S> &operator=(const sol_iterator&);
@@ -79,24 +121,14 @@ namespace MinCoverage{
     const VecSet<S> *operator->() const;
     sol_iterator<S> operator++(int); // postfix
     sol_iterator<S> &operator++(); // prefix
-    /* Returns the number of elements in the larger set of
-     * solutions.
-     *
-     * Throws an std::exception* if the size of the larger set exceeds
-     * INT_MAX.
-     *
-     * Pre: this is not an end iterator.
-     */
-    typedef int size_type;
-    size_type size() const;
   private:
-    /* A vector representation of the set of smaller solutions.
+    /* The set of smaller solutions.
      *
      * Shared between copies of the iterator.
      *
      * T is null iff this is an end iterator.
      */
-    std::vector<std::vector<int> > *T;
+    IVSGenerator *T;
     /* A vector representation of the possible translations from
      * smaller solutions to larger.
      *
@@ -139,14 +171,29 @@ namespace MinCoverage{
       this->trans = 0;
       this->ref_count = 0;
     }else{
-      this->T = new std::vector<std::vector<int> >(T.size());
-      {
-        int i = 0;
-        for(auto it = T.begin(); it != T.end(); ++it){
-          (*this->T)[i].insert((*this->T)[i].begin(),it->begin(),it->end());
-          ++i;
-        }
+      this->T = new VecIVSGenerator(T.begin(),T.end());
+      this->trans = new std::vector<std::vector<S> >(trans.size());
+      for(unsigned i = 0; i < trans.size(); ++i){
+        (*this->trans)[i].insert((*this->trans)[i].begin(),trans[i].begin(),trans[i].end());
       }
+      ref_count = new int(1);
+      T_i = 0;
+      tc = 0;
+      update_v();
+    }
+  };
+
+  template<typename S>
+  sol_iterator<S>::sol_iterator(IVSGenerator *T,
+                                const std::vector<VecSet<S> > &trans){
+    if(T->empty()){
+      // End iterator, because the set is empty
+      delete T;
+      this->T = 0;
+      this->trans = 0;
+      this->ref_count = 0;
+    }else{
+      this->T = T;
       this->trans = new std::vector<std::vector<S> >(trans.size());
       for(unsigned i = 0; i < trans.size(); ++i){
         (*this->trans)[i].insert((*this->trans)[i].begin(),trans[i].begin(),trans[i].end());
@@ -253,9 +300,9 @@ namespace MinCoverage{
         /* Go to next element in T */
         tc = 0;
         ++T_i;
-        if(T_i >= int(T->size())){
+        if(!T->has_index(T_i)){
           /* Become end iterator */
-          assert(T_i == int(T->size()));
+          assert(T->has_index(T_i-1));
           release_T();
           T = 0;
           trans = 0;
@@ -273,33 +320,6 @@ namespace MinCoverage{
       }
     }
     return *this;
-  };
-
-  template<typename S>
-  typename sol_iterator<S>::size_type sol_iterator<S>::size() const{
-    size_type siz = 0;
-    for(unsigned i = 0; i < T->size(); ++i){
-      size_type siz_i = 1;
-      for(unsigned j = 0; j < (*T)[i].size(); ++j){
-        int s = (*trans)[(*T)[i][j]].size();
-        /* siz_i *= k */
-        {
-          size_type tmp = 0;
-          for(unsigned k = 0; k < s; ++k){
-            if(std::numeric_limits<size_type>::max() - tmp < siz_i){
-              throw new std::logic_error("MinCoverage::sol_iterator: Unable to calculate size due to numeric overflow.");
-            }
-            tmp += siz_i;
-          }
-          siz_i = tmp;
-        }
-      }
-      if(std::numeric_limits<size_type>::max() - siz < siz_i){
-        throw new std::logic_error("MinCoverage::sol_iterator: Unable to calculate size due to numeric overflow.");
-      }
-      siz += siz_i;
-    }
-    return siz;
   };
 
   /* A subset of S that is a candidate for being a coverage set.
@@ -485,6 +505,7 @@ namespace MinCoverage{
      */
     std::pair<sol_iterator<S>,sol_iterator<S> >
     translate_back(const std::set<VecSet<int> > &T) const;
+    const std::vector<VecSet<S> > &get_trans_i2S() const { return trans_i2S; };
   private:
     std::map<int,VecSet<int> > cov_map_i;
     std::vector<VecSet<int> > Tvec_i;
@@ -642,23 +663,29 @@ namespace MinCoverage{
     return min_coverage_all(T,unit_cost);
   };
 
-  template<typename S>
-  std::pair<sol_iterator<S>,sol_iterator<S> >
-  subset_min_coverage_all(const std::set<VecSet<S> > &T){
-
-    Preprocessed<S> pp(T,[](const S&){return 0;}); // Dummy cost
-    const std::vector<VecSet<int> > Tvec = pp.get_Tvec();
-    const std::map<int,VecSet<int> > &cov_map = pp.get_coverage_map();
-
-    std::set<VecSet<int> > mcs;
-
-    std::queue<CandSet<int> > candidates;
-    candidates.push(CandSet<int>(Tvec,cov_map,
-                                 [](const int&){return 0;})); // Dummy cost
-
+  class SubsetIVSGenerator : public IVSGenerator{
+  public:
+    SubsetIVSGenerator(const std::vector<VecSet<int> > &Tvec,
+                       const std::map<int,VecSet<int> > &cov_map);
+    virtual ~SubsetIVSGenerator() {};
+    SubsetIVSGenerator(const SubsetIVSGenerator&) = delete;
+    SubsetIVSGenerator &operator=(const SubsetIVSGenerator&) = delete;
+    virtual VecSet<int> operator[](int i){
+      generate(i);
+      return mcs[i];
+    };
+    virtual bool has_index(int i){
+      return generate(i);
+    };
+  private:
+    bool generate(int i);
+    std::vector<VecSet<int> > mcs;
+    vqueue<CandSet<int> > candidates;
+    std::vector<VecSet<int> > Tvec;
+    std::map<int,VecSet<int> > cov_map;
+    std::function<int(const int&)> dummy_cost;
     /* Check whether C is a superset of some set in mcs. */
-    std::function<bool(const CandSet<int>&)> is_subsumed =
-      [&mcs](const CandSet<int> &C){
+    bool is_subsumed(const CandSet<int> &C){
       const VecSet<int> &cs = C.get_set();
       for(auto it = mcs.begin(); it != mcs.end(); ++it){
         if(std::includes(cs.begin(),cs.end(),
@@ -668,26 +695,20 @@ namespace MinCoverage{
       }
       return false;
     };
+  };
 
-    while(!candidates.empty()){
-      const CandSet<int> &C = candidates.front();
-      if(!is_subsumed(C)){
-        int i = C.get_uncovered_Ti();
-        if(i == -1){
-          // C is a subset minimal coverage set
-          mcs.insert(C.get_set());
-        }else{
-          for(auto it = Tvec[i].begin(); it != Tvec[i].end(); ++it){
-            CandSet<int> C2(C);
-            C2.insert(*it);
-            candidates.push(C2);
-          }
-        }
-      }
-      candidates.pop();
-    }
+  template<typename S>
+  std::pair<sol_iterator<S>,sol_iterator<S> >
+  subset_min_coverage_all(const std::set<VecSet<S> > &T){
 
-    return pp.translate_back(mcs);
+    Preprocessed<S> pp(T,[](const S&){return 0;}); // Dummy cost
+
+    SubsetIVSGenerator *G =
+      new SubsetIVSGenerator(pp.get_Tvec(),
+                             pp.get_coverage_map());
+
+    return {sol_iterator<S>(G,pp.get_trans_i2S()),
+        sol_iterator<S>()};
   };
 
 };

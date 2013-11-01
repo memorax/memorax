@@ -46,9 +46,6 @@ namespace MinCoverage {
    * solutions. The value of *i is a VecSet<S>. The iterator contains
    * sufficient data to compute solutions on demand, without relying
    * on an external solution set.
-   *
-   * A sol_iterator<S>, that is not an end iterator, also provides a
-   * size method, returning the total size of the set of solutions.
    */
   template<typename S>
   class sol_iterator;

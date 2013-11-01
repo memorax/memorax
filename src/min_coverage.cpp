@@ -23,6 +23,33 @@
 
 namespace MinCoverage{
 
+  SubsetIVSGenerator::SubsetIVSGenerator(const std::vector<VecSet<int> > &T,
+                                         const std::map<int,VecSet<int> > &cmap)
+    : Tvec(T), cov_map(cmap), dummy_cost([](const int&){ return 0; }) {
+    candidates.push(CandSet<int>(Tvec,cov_map,dummy_cost));
+  };
+
+  bool SubsetIVSGenerator::generate(int i){
+    while(int(mcs.size()) <= i && !candidates.empty()){
+      CandSet<int> C = candidates.front();
+      if(!is_subsumed(C)){
+        int i = C.get_uncovered_Ti();
+        if(i == -1){
+          // C is a subset minimal coverage set
+          mcs.push_back(C.get_set());
+        }else{
+          for(auto it = Tvec[i].begin(); it != Tvec[i].end(); ++it){
+            CandSet<int> C2(C);
+            C2.insert(*it);
+            candidates.push(C2);
+          }
+        }
+      }
+      candidates.pop();
+    }
+    return int(mcs.size()) > i;
+  };
+
   void test(){
 
     std::function<int(const int&)>
@@ -178,61 +205,23 @@ namespace MinCoverage{
       /* Test 1-10 */
       {
 
+        typedef std::set<VecSet<int> > vs;
+
         Test::inner_test("sol_iterator #1",
                          eq_sets(setof(sol_iterator<int>({{0,1},{0,2}},{{1,2},{3},{4,5}})),
                                  {{1,3},{2,3},{1,4},{1,5},{2,4},{2,5}}));
+
         Test::inner_test("sol_iterator #2",
-                         sol_iterator<int>({{0,1},{0,2}},{{1,2},{3},{4,5}}).size() == 6);
+                         eq_sets(setof(sol_iterator<int>(vs({{0}}),{{0}})),{{0}}));
 
         Test::inner_test("sol_iterator #3",
-                         eq_sets(setof(sol_iterator<int>({{0}},{{0}})),{{0}}));
+                         eq_sets(setof(sol_iterator<int>(vs({{0}}),{{0,1}})),{{0},{1}}));
+
         Test::inner_test("sol_iterator #4",
-                         sol_iterator<int>({{0}},{{0}}).size() == 1);
+                         eq_sets(setof(sol_iterator<int>(vs({}),{})),{}));
 
         Test::inner_test("sol_iterator #5",
-                         eq_sets(setof(sol_iterator<int>({{0}},{{0,1}})),{{0},{1}}));
-        Test::inner_test("sol_iterator #6",
-                         sol_iterator<int>({{0}},{{0,1}}).size() == 2);
-
-        try{
-          int b = std::numeric_limits<sol_iterator<int>::size_type>::digits;
-          VecSet<int> s;
-          std::vector<VecSet<int> > trans;
-          for(int i = 0; i < b; ++i){
-            s.insert(i);
-            trans.push_back({i*2,i*2+1});
-          }
-
-          sol_iterator<int>({s},trans).size();
-          Test::inner_test("sol_iterator #7 (overflow)",false);
-        }catch(std::exception *exc){
-          Test::inner_test("sol_iterator #7 (overflow)",true);
-          delete exc;
-        }
-
-        try{
-          int b = std::numeric_limits<sol_iterator<int>::size_type>::digits;
-          VecSet<int> s;
-          std::vector<VecSet<int> > trans;
-          for(int i = 0; i < b; ++i){
-            s.insert(i);
-            trans.push_back({i*2,i*2+1});
-          }
-          trans[trans.size()-1] = {b*2}; // only one alternative for the last set
-
-          sol_iterator<int>({s},trans).size();
-          Test::inner_test("sol_iterator #8 (huge, but no overflow)",true);
-        }catch(std::exception *exc){
-          Test::inner_test("sol_iterator #8 (huge, but no overflow)",false);
-          delete exc;
-        }
-
-        Test::inner_test("sol_iterator #9",
-                         eq_sets(setof(sol_iterator<int>({},{})),{}));
-
-        Test::inner_test("sol_iterator #10",
-                         eq_sets(setof(sol_iterator<int>({},{{1,2},{3,4}})),{}));
-
+                         eq_sets(setof(sol_iterator<int>(vs({}),{{1,2},{3,4}})),{}));
       }
     }
 
