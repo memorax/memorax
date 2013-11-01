@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -60,9 +60,10 @@ namespace Fencins{
    * synchronization sufficient to make the forbidden states in m
    * unreachable. Each Z is minimal with respect to Sigma_{z in
    * Z}(cost(z)). If no synchronization insertion can make the
-   * forbidden states in m unreachable then S is empty. Otherwise if
-   * only_one is set, then S is a singleton. Otherwise if only_one is
-   * unset, then S contains all minimal, sufficient sets Z.
+   * forbidden states in m unreachable then S is empty. Otherwise, S
+   * is a set of minimal and sufficient sets Z. If max_solutions == 0,
+   * then S contains all such sets Z. If max_solutions > 0, then the
+   * number of sets Z in S is max_solutions.
    *
    * For each reachability analysis an argument
    * reach_arg_init(m',prev_result) will be used. The machine m' will
@@ -70,6 +71,8 @@ namespace Fencins{
    * prev_result will be the previous result produced by the
    * reachability analysis, or 0 if there has been no previous
    * reachability analysis.
+   *
+   * Pre: max_solutions >= 0.
    */
   typedef std::function<Reachability::Arg*(const Machine&,const Reachability::Result*)> reach_arg_init_t;
   std::set<std::set<Sync*> > fencins(const Machine &m,
@@ -77,7 +80,7 @@ namespace Fencins{
                                      reach_arg_init_t reach_arg_init,
                                      TraceFencer &tf,
                                      min_aspect_t ma,
-                                     bool only_one = true,
+                                     int max_solutions = 0,
                                      cost_fn_t cost = [](const Sync*){return 1;});
 
   void test();

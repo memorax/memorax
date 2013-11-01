@@ -138,7 +138,7 @@ namespace Fencins{
                                      reach_arg_init_t reach_arg_init,
                                      TraceFencer &tf,
                                      min_aspect_t ma,
-                                     bool only_one,
+                                     int max_solutions,
                                      cost_fn_t cost){
 
     /* Each set S in syncs is such that some synchronization in S is
@@ -288,7 +288,8 @@ namespace Fencins{
         }
         fence_sets.insert(fs);
         fence_sets_uncloned.insert(mc);
-        if(only_one){
+        assert(max_solutions == 0 || int(fence_sets.size()) <= max_solutions);
+        if(int(fence_sets.size()) == max_solutions){
           done = true;
         }
       }else{
@@ -342,7 +343,7 @@ namespace Fencins{
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
       std::set<std::set<Sync*> > fence_sets =
-      fencins(*m,reach,arg_init,fencer,COST,true);
+      fencins(*m,reach,arg_init,fencer,COST,1);
         Log::set_primary_loglevel(ll);
 
       if(fence_sets.empty()){
@@ -417,9 +418,9 @@ namespace Fencins{
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
       if(cost){
-        fence_sets = fencins(*m,reach,arg_init,fencer,COST,false,*cost);
+        fence_sets = fencins(*m,reach,arg_init,fencer,COST,0,*cost);
       }else{
-        fence_sets = fencins(*m,reach,arg_init,fencer,ma,false);
+        fence_sets = fencins(*m,reach,arg_init,fencer,ma,0);
       }
       Log::set_primary_loglevel(ll);
 
