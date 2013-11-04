@@ -263,7 +263,7 @@ namespace MinCoverage{
     v.clear();
     int tc_rem = tc;
     last_tc = true;
-    for(unsigned i = 0; i < (*T)[T_i].size(); ++i){
+    for(int i = 0; i < (*T)[T_i].size(); ++i){
       const std::vector<S> &tv = (*trans)[(*T)[T_i][i]];
       assert(tv.size());
       int tvi = tc_rem % tv.size();

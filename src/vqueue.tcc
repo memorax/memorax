@@ -37,7 +37,7 @@ template<typename T>
 void vqueue<T>::push(const T &t){
   if(v.size() == 0){
     v.resize(2,t);
-  }else if((end+1)%v.size() == start){
+  }else if((end+1)%int(v.size()) == start){
     /* Reallocate */
     int old_sz = v.size();
     v.resize(2*old_sz,t);
