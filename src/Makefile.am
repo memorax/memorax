@@ -53,6 +53,7 @@ vips_bit_reachability.h vips_bit_reachability.cpp \
 vips_fence_sync.h vips_fence_sync.cpp \
 vips_simple_fencer.h vips_simple_fencer.cpp \
 vips_syncwr_sync.h vips_syncwr_sync.cpp \
+vqueue.h vqueue.tcc \
 zstar.h zstar.tcc
 memorax_gui_SOURCES = gui.py
 

@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -109,7 +109,7 @@ std::string VipsSyncwrSync::to_string(const Machine &m) const{
   return to_string_aux(m.reg_pretty_vts(w.pid),m.ml_pretty_vts(w.pid));
 };
 
-std::string VipsSyncwrSync::to_string_aux(const std::function<std::string(const int&)> &regts, 
+std::string VipsSyncwrSync::to_string_aux(const std::function<std::string(const int&)> &regts,
                                           const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const{
   return "Make write into syncwr: "+w.to_string(regts,mlts)+"\n";
 };
@@ -153,7 +153,7 @@ std::set<Sync*> VipsSyncwrSync::get_all_possible(const Machine &m){
 };
 
 void VipsSyncwrSync::test(){
-  std::function<Machine*(std::string)> get_machine = 
+  std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
     std::stringstream ss(rmm);
     PPLexer pp(ss);
@@ -167,7 +167,7 @@ void VipsSyncwrSync::test(){
    * The global memory locations in m should be u,v,w,x,y,z in that
    * order. instr may only access global memory locations.
    */
-  std::function<Machine::PTransition(const Machine*,int,std::string,std::string,std::string)> trans = 
+  std::function<Machine::PTransition(const Machine*,int,std::string,std::string,std::string)> trans =
     [&get_machine](const Machine *m,int pid,std::string src_lbl,std::string instr, std::string tgt_lbl){
     Machine *m2 = get_machine
     ("forbidden *\n"
@@ -355,7 +355,7 @@ void VipsSyncwrSync::test(){
          "L5: nop\n"
          );
 
-      std::function<FenceSync::TSet(const Machine *,int,std::string)> get_trans_set = 
+      std::function<FenceSync::TSet(const Machine *,int,std::string)> get_trans_set =
         [&trans](const Machine *m,int pid,std::string T_s){
         FenceSync::TSet tset;
 
@@ -396,7 +396,7 @@ void VipsSyncwrSync::test(){
           /* Extract instr */
           assert(k < l);
           std::string instr = s.substr(k,l-k+1);
-          
+
           tset.insert(trans(m,pid,src_lbl,instr,tgt_lbl));
 
           if(j == std::string::npos){
@@ -409,11 +409,11 @@ void VipsSyncwrSync::test(){
         return tset;
       };
 
-      std::function<VipsFenceSync*(const Machine*,int,std::string,std::string,std::string)> get_vfs = 
+      std::function<VipsFenceSync*(const Machine*,int,std::string,std::string,std::string)> get_vfs =
         [&get_trans_set,&cs](const Machine *m,int pid, std::string q_lbl,std::string IN_s, std::string OUT_s){
-        return new VipsFenceSync(pid,cs(m,pid,q_lbl),
-                                 get_trans_set(m,pid,IN_s),
-                                 get_trans_set(m,pid,OUT_s));
+        return new VipsFullFenceSync(pid,cs(m,pid,q_lbl),
+                                     get_trans_set(m,pid,IN_s),
+                                     get_trans_set(m,pid,OUT_s));
       };
 
       VipsFenceSync *vfs = get_vfs(m,0,"L2",

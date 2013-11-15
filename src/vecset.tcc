@@ -1,23 +1,46 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  */
 
+
+template<class T>
+template<typename ITER>
+VecSet<T>::VecSet(ITER begin, ITER end){
+  for(; begin != end; ++begin){
+    if(vec.size() && vec.back() < *begin){
+      vec.push_back(*begin);
+    }else{
+      insert(*begin);
+    }
+  }
+};
+
+template<class T>
+VecSet<T>::VecSet(std::initializer_list<T> il){
+  for(auto it = il.begin(); it != il.end(); ++it){
+    if(vec.size() && vec.back() < *it){
+      vec.push_back(*it);
+    }else{
+      insert(*it);
+    }
+  }
+};
 
 template<class T>
 int VecSet<T>::find_geq(const T &t) const{
@@ -140,44 +163,6 @@ bool VecSet<T>::check_invariant() const{
     }
   }
   return true;
-};
-
-inline void test_vecset_int(){
-  /* Test 1: insert(set): Empty */
-  {
-    VecSet<int> A;
-    VecSet<int> B;
-    VecSet<int> AB_target;
-    VecSet<int> AB = A;
-    AB.insert(B);
-    VecSet<int> BA = B;
-    BA.insert(A);
-    if(AB == AB_target && BA == AB_target){
-      std::cout << "Test1: Success!\n";
-    }else{
-      std::cout << "Test1: Failure\n";
-    }
-  }
-
-  /* Test 2: insert(set) */
-  {
-    VecSet<int> A;
-    A.insert(2); A.insert(5); A.insert(42); A.insert(113);
-    VecSet<int> B;
-    B.insert(2); B.insert(7); B.insert(79); B.insert(42);
-    VecSet<int> AB_target;
-    AB_target.insert(2); AB_target.insert(5); AB_target.insert(7); AB_target.insert(42);
-    AB_target.insert(79); AB_target.insert(113);
-    VecSet<int> AB = A;
-    AB.insert(B);
-    VecSet<int> BA = B;
-    BA.insert(A);
-    if(AB == AB_target && BA == AB_target){
-      std::cout << "Test2: Success!\n";
-    }else{
-      std::cout << "Test2: Failure\n";
-    }
-  }
 };
 
 template<class T>

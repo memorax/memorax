@@ -920,7 +920,7 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                 if self.cegar_check.get() and self.wg_cegar_check["state"] == Tkinter.NORMAL:
                     cmd += " --cegar"
                 if self.only_one_check.get():
-                    cmd += " --only-one"
+                    cmd += " --max-solutions 1"
                 self.run_and_output(cmd,input=rmm_code)
             elif self.commands[self.command_sel.get()] == "dotify":
                 output = self.wg_dotify_output.get()

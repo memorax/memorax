@@ -1,18 +1,18 @@
 /*
- * Copyright (C) 2012 Carl Leonardsson
- * 
+ * Copyright (C) 2012, 2013 Carl Leonardsson
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -21,6 +21,10 @@
 #ifndef __VECSET_H__
 #define __VECSET_H__
 
+#include <cassert>
+#include <functional>
+#include <initializer_list>
+#include <string>
 #include <vector>
 
 /* A set, implemented as a sorted vector */
@@ -36,6 +40,12 @@ public:
     : vec(v) {
     assert(check_invariant());
   };
+  /* A set consisting of the values of [begin,end). Each element is
+   * inserted using a separate call to insert.
+   */
+  template<typename ITER>
+  VecSet(ITER begin, ITER end);
+  VecSet(std::initializer_list<T> il);
   VecSet(const VecSet &) = default;
   VecSet &operator=(const VecSet&) = default;
   virtual ~VecSet() {};
@@ -77,6 +87,12 @@ public:
   const T &operator[](int i) const { return vec[i]; };
   class const_iterator{
   public:
+    typedef std::bidirectional_iterator_tag iterator_category;
+    typedef T value_type;
+    typedef T& reference;
+    typedef T* pointer;
+    typedef unsigned difference_type;
+
     /* An iterator into vec, pointing at position i if i < vec.size(),
      * and representing the end iterator if i == vec.size().
      *
@@ -94,7 +110,7 @@ public:
     bool operator<=(const const_iterator &it) const { return i <= it.i; };
     bool operator!=(const const_iterator &it) const { return i != it.i; };
     bool operator>=(const const_iterator &it) const { return i >= it.i; };
-    const_iterator operator++(int) { 
+    const_iterator operator++(int) {
       const_iterator it = *this;
       if(i < int(vec.size())) i++;
       return it;
@@ -103,7 +119,7 @@ public:
       if(i < int(vec.size())) i++;
       return *this;
     };
-    const_iterator operator--(int) { 
+    const_iterator operator--(int) {
       const_iterator it = *this;
       if(i > 0) i--;
       return it;

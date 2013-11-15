@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -27,6 +27,7 @@
 #include "sb_tso_bwd.h"        // for testing
 #include "test.h"              // for testing
 #include "tso_simple_fencer.h" // for testing
+#include "vecset.h"
 
 #include <algorithm>
 #include <sstream>
@@ -34,7 +35,7 @@
 
 namespace Fencins{
 
-  void add_disj_to_cnf(const std::set<Sync*> &disj, std::set<std::set<Sync*> > *cnf){
+  void add_disj_to_cnf(const VecSet<Sync*> &disj, std::set<VecSet<Sync*> > *cnf){
     for(auto it = cnf->begin(); it != cnf->end(); ){
       if(std::includes(it->begin(),it->end(),
                        disj.begin(),disj.end())){
@@ -51,6 +52,18 @@ namespace Fencins{
     return *a < *b;
   };
 
+  void deep_delete(const std::set<VecSet<Sync*> > &S){
+    std::set<Sync*> deleted;
+    for(auto it = S.begin(); it != S.end(); ++it){
+      for(auto it2 = it->begin(); it2 != it->end(); ++it2){
+        if(deleted.count(*it2) == 0){
+          delete *it2;
+          deleted.insert(*it2);
+        }
+      }
+    }
+  };
+
   void deep_delete(const std::set<std::set<Sync*> > &S){
     std::set<Sync*> deleted;
     for(auto it = S.begin(); it != S.end(); ++it){
@@ -63,7 +76,7 @@ namespace Fencins{
     }
   };
 
-  void deep_delete(const std::set<Sync*> &S){
+  void deep_delete(const VecSet<Sync*> &S){
     for(auto it = S.begin(); it != S.end(); ++it){
       delete *it;
     }
@@ -82,7 +95,7 @@ namespace Fencins{
    *
    * SS' still shares pointers with SS.
    */
-  std::set<std::set<Sync*> > separate_pointers(const std::set<std::set<Sync*> > &SS){
+  std::set<std::set<Sync*> > separate_pointers(const std::set<VecSet<Sync*> > &SS){
     std::set<Sync*> seen_syncs;
     std::set<std::set<Sync*> > SS2;
 
@@ -104,7 +117,7 @@ namespace Fencins{
   };
 
   Machine *insert_syncs(const Machine &m,
-                        const std::set<Sync*> syncs,
+                        const VecSet<Sync*> syncs,
                         std::vector<const Sync::InsInfo*> *m_infos){
     assert(m_infos->empty());
 
@@ -125,7 +138,7 @@ namespace Fencins{
                                      reach_arg_init_t reach_arg_init,
                                      TraceFencer &tf,
                                      min_aspect_t ma,
-                                     bool only_one,
+                                     int max_solutions,
                                      cost_fn_t cost){
 
     /* Each set S in syncs is such that some synchronization in S is
@@ -136,12 +149,13 @@ namespace Fencins{
      * Sync::operator==), then they are the very same object (the
      * pointers are the same: s0 == s1).
      */
-    std::set<std::set<Sync *> > syncs;
+    std::set<VecSet<Sync *> > syncs;
     /* If mcs_up_to_date is set, then mcs is the min coverage sets of
      * syncs.
      */
     bool mcs_up_to_date = false;
-    std::set<std::set<Sync*> > mcs;
+    std::pair<MinCoverage::sol_iterator<Sync*>,
+              MinCoverage::sol_iterator<Sync*> > mcs;
     /* Maps Sync objects o to a pointer p to a Sync object o' such
      * that o == o' and p is in some set in syncs.
      */
@@ -154,14 +168,14 @@ namespace Fencins{
      * same sets as fence_sets, but in fence_sets_uncloned all Sync
      * pointers are pointers into syncs.
      */
-    std::set<std::set<Sync*> > fence_sets;
-    std::set<std::set<Sync*> > fence_sets_uncloned;
+    std::set<VecSet<Sync*> > fence_sets;
+    std::set<VecSet<Sync*> > fence_sets_uncloned;
 
     Reachability::Result *prev_result = 0;
     bool done = false;
     do{
       assert(fence_sets.size() == fence_sets_uncloned.size());
-      std::set<Sync*> mc; // The next Sync set to check
+      VecSet<Sync*> mc; // The next Sync set to check
       std::vector<const Sync::InsInfo*> m_infos; // Log from inserting mc
       const Machine *m_synced = 0; // The machine with mc inserted
       // Find the next Sync set to check (mc)
@@ -191,17 +205,13 @@ namespace Fencins{
           tm.stop();
           Log::debug << "min_coverage time: " << tm.get_time() << " s.\n";
         }
-        assert(std::includes(mcs.begin(),mcs.end(),fence_sets_uncloned.begin(),fence_sets_uncloned.end()));
-        if(mcs.size() == fence_sets.size()){
-          // All correct fence sets are already in fence_sets
-          break;
-        }
         // Otherwise find one which is not in fence_sets
-        for(auto it = mcs.begin(); it != mcs.end(); ++it){
-          if(fence_sets_uncloned.count(*it) == 0){
+        for(; mcs.first != mcs.second; ++mcs.first){
+          if(fence_sets_uncloned.count(*mcs.first) == 0){
             // Try this one
             try{
-              mc = *it;
+              mc = *mcs.first;
+              m_infos.clear();
               m_synced = insert_syncs(m,mc,&m_infos);
               break;
             }catch(Sync::Incompatible *exc){
@@ -211,6 +221,11 @@ namespace Fencins{
               delete exc;
             }
           }
+        }
+        if(mcs.first == mcs.second){
+          /* There are no more fence sets. */
+          assert(fence_sets.size());
+          break;
         }
       }
       assert(m_synced != 0);
@@ -224,6 +239,7 @@ namespace Fencins{
       }
       Log::msg << "\n";
 
+      Log::msg << "Current solution count: " << fence_sets.size() << "\n";
       Reachability::Arg *rarg = reach_arg_init(*m_synced,prev_result);
       Reachability::Result *res = r.reachability(rarg);
       if(prev_result) delete prev_result;
@@ -248,7 +264,7 @@ namespace Fencins{
           done = true;
         }
         for(auto it = new_syncs.begin(); it != new_syncs.end(); ++it){
-          std::set<Sync*> disj;
+          VecSet<Sync*> disj;
           for(auto it2 = it->begin(); it2 != it->end(); ++it2){
             if(sync_ptr.count(*it2)){
               disj.insert(sync_ptr.at(*it2));
@@ -266,13 +282,14 @@ namespace Fencins{
         /* mc is a solution for m */
         /* Clone mc */
         Log::msg << "Synchronization set shown to be a solution.\n\n";
-        std::set<Sync*> fs;
+        VecSet<Sync*> fs;
         for(auto it = mc.begin(); it != mc.end(); ++it){
           fs.insert((*it)->clone());
         }
         fence_sets.insert(fs);
         fence_sets_uncloned.insert(mc);
-        if(only_one){
+        assert(max_solutions == 0 || int(fence_sets.size()) <= max_solutions);
+        if(int(fence_sets.size()) == max_solutions){
           done = true;
         }
       }else{
@@ -308,12 +325,12 @@ namespace Fencins{
       return new Machine(Parser::p_test(lex));
     };
 
-    std::function<int(const Machine&,int,std::string)> cs = 
+    std::function<int(const Machine&,int,std::string)> cs =
       [](const Machine &m, int pid, std::string lbl){
       return m.automata[pid].state_index_of_label(lbl);
     };
 
-    std::function<bool(std::string,std::string)> test_sb_only_one = 
+    std::function<bool(std::string,std::string)> test_sb_only_one =
       [&get_machine,&cs](std::string rmm, std::string fence_poses){
       Machine *m = get_machine(rmm);
       SbTsoBwd reach;
@@ -325,8 +342,8 @@ namespace Fencins{
       TsoSimpleFencer fencer(*m,TsoSimpleFencer::FENCE);
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
-      std::set<std::set<Sync*> > fence_sets = 
-      fencins(*m,reach,arg_init,fencer,COST,true);
+      std::set<std::set<Sync*> > fence_sets =
+      fencins(*m,reach,arg_init,fencer,COST,1);
         Log::set_primary_loglevel(ll);
 
       if(fence_sets.empty()){
@@ -385,7 +402,7 @@ namespace Fencins{
 
     std::function<bool(std::string,std::string,
                        min_aspect_t,
-                       std::function<int(const Sync*)>*)> test_sb_all = 
+                       std::function<int(const Sync*)>*)> test_sb_all =
       [&get_machine,&cs](std::string rmm, std::string fence_poses,
                          min_aspect_t ma,
                          std::function<int(const Sync*)> *cost){
@@ -401,9 +418,9 @@ namespace Fencins{
       Log::loglevel_t ll = Log::get_primary_loglevel();
       Log::set_primary_loglevel(Log::loglevel_t(std::max(0,int(ll) - 1)));
       if(cost){
-        fence_sets = fencins(*m,reach,arg_init,fencer,COST,false,*cost);
+        fence_sets = fencins(*m,reach,arg_init,fencer,COST,0,*cost);
       }else{
-        fence_sets = fencins(*m,reach,arg_init,fencer,ma,false);
+        fence_sets = fencins(*m,reach,arg_init,fencer,ma,0);
       }
       Log::set_primary_loglevel(ll);
 
@@ -467,7 +484,7 @@ namespace Fencins{
 
     /* Test 1 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -489,7 +506,7 @@ namespace Fencins{
 
     /* Test 2 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -513,7 +530,7 @@ namespace Fencins{
 
     /* Test 3 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -581,7 +598,7 @@ namespace Fencins{
 
     /* Test 5 */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -605,7 +622,7 @@ namespace Fencins{
 
     /* Test 6,7: empty set is solution */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x = 0 : [0:1]\n"
@@ -630,7 +647,7 @@ namespace Fencins{
 
     /* Test 8,9: disjunct solutions */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x0 = 0 : [0:1]\n"
@@ -663,7 +680,7 @@ namespace Fencins{
 
     /* Test 10,11,12: disjunct solutions with different costs */
     {
-      std::string rmm = 
+      std::string rmm =
         "forbidden CS CS\n"
         "data\n"
         "  x0 = 0 : [0:1]\n"
@@ -701,7 +718,7 @@ namespace Fencins{
        *
        * Next we increase the price of L1 so we get both sets.
        */
-      std::function<int(const Sync*)> expensive_L1 = 
+      std::function<int(const Sync*)> expensive_L1 =
         [](const Sync *s){
         const FenceSync *p = dynamic_cast<const FenceSync*>(s);
         if(p->get_q() == 1){
@@ -711,14 +728,14 @@ namespace Fencins{
         }
       };
       Test::inner_test("fencins all #11",
-                       test_sb_all(rmm, 
+                       test_sb_all(rmm,
                                    "L1 | L1\n"
                                    "L21 L22 | L21 L22",
                                    COST,
                                    &expensive_L1));
 
       Test::inner_test("fencins all #12",
-                       test_sb_all(rmm, 
+                       test_sb_all(rmm,
                                    "L1 | L1\n"
                                    "L21 L22 | L21 L22",
                                    SUBSET,
