@@ -36,8 +36,12 @@ public:
 
   virtual Machine *insert(const Machine &m, m_infos_t m_infos, Sync::InsInfo **info) const;
 
-  /* Returns all VipsFenceSyncs that can be inserted into m. */
-  static std::set<Sync*> get_all_possible(const Machine &m);
+  /* Returns all VipsFenceSyncs that can be inserted into m.
+   *
+   * If full_branch_only is set then only VipsFenceSyncs
+   * (f,pid,q,IN,OUT) where IN and OUT are maximal are returned.
+   */
+  static std::set<Sync*> get_all_possible(const Machine &m,bool full_branch_only);
 
   static void test();
 protected:

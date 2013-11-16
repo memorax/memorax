@@ -176,6 +176,9 @@ protected:
    * can be inserted into m, the object fsinit(f,pid,q,IN,OUT) is in
    * S.
    *
+   * If full_branch_only is set then only FenceSyncs (f,pid,q,IN,OUT)
+   * where IN and OUT are maximal are considered.
+   *
    * Hint: Use from deriving concrete class FS as follows:
    * get_all_possible(m,fs,[](f,pid,q,IN,OUT){ return new FS(f,pid,q,IN,OUT); })
    */
@@ -184,7 +187,8 @@ protected:
                               TSet OUT)> fs_init_t;
   static std::set<Sync*> get_all_possible(const Machine &m,
                                           const std::set<Lang::Stmt<int> > &fs,
-                                          const fs_init_t &fsinit);
+                                          const fs_init_t &fsinit,
+                                          bool full_branch_only);
 
   virtual int compare(const Sync &s) const;
 

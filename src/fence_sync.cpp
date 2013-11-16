@@ -524,7 +524,8 @@ bool FenceSync::compatible(const FenceSync &fs) const{
 
 std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
                                             const std::set<Lang::Stmt<int> > &fs,
-                                            const fs_init_t &fsinit){
+                                            const fs_init_t &fsinit,
+                                            bool full_fence_only){
   std::set<Sync*> ss;
   for(unsigned p = 0; p < m.automata.size(); ++p){
     const std::vector<Automaton::State> &states = m.automata[p].get_states();
@@ -537,8 +538,15 @@ std::set<Sync*> FenceSync::get_all_possible(const Machine &m,
         OUT.insert(**it);
       }
       if(IN.size() && OUT.size()){
-        std::set<TSet> INS = powerset(IN);
-        std::set<TSet> OUTS = powerset(OUT);
+        std::set<TSet> INS;
+        std::set<TSet> OUTS;
+        if(full_fence_only){
+          INS = {IN};
+          OUTS = {OUT};
+        }else{
+          INS = powerset(IN);
+          OUTS = powerset(OUT);
+        }
         for(auto init = INS.begin(); init != INS.end(); ++init){
           /* Skip empty set and the complete set */
           if(init->empty() || init->size() == IN.size()) continue;
@@ -898,7 +906,7 @@ void FenceSync::test(){
          "text\n"
          "  nop"
          );
-      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit);
+      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit,false);
       Test::inner_test("get_all #1",s.empty());
 
       delete m;
@@ -918,7 +926,7 @@ void FenceSync::test(){
          "  $r0 := 1"
          );
 
-      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit);
+      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit,false);
       Test::inner_test("get_all #2",tst(m,s,"0{$r0 := 0}to{$r0 := 1}"));
 
       for(auto it = s.begin(); it != s.end(); ++it){
@@ -948,7 +956,7 @@ void FenceSync::test(){
          "  $r0 := 1"
          );
 
-      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit);
+      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit,false);
       Test::inner_test("get_all #3",tst(m,s,
                                         "0{$r0 := 0}to{$r0 := 1}\n"
                                         "1{$r0 := 0}to{$r0 := 1}"));
@@ -997,7 +1005,7 @@ void FenceSync::test(){
        *     .--'
        */
 
-      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit);
+      std::set<Sync*> s = get_all_possible(*m,fs0,fsinit,false);
       Test::inner_test("get_all #4",tst(m,s,
                                         "0{$r0:=0}to{$r0:=1}\n"
                                         "0{$r0:=0}to{$r0:=2}\n"

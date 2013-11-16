@@ -25,13 +25,13 @@
 
 #include <cassert>
 
-VipsSimpleFencer::VipsSimpleFencer(const Machine &m) : TraceFencer(m) {
+VipsSimpleFencer::VipsSimpleFencer(const Machine &m,bool full_branch_only) : TraceFencer(m) {
   {
     for(unsigned p = 0; p < m.automata.size(); ++p){
       fences_by_pq.push_back(std::vector<std::set<VipsFenceSync*> >(m.automata[p].get_states().size()));
       syncwrs_by_pq.push_back(std::vector<std::set<VipsSyncwrSync*> >(m.automata[p].get_states().size()));
     }
-    auto FS = VipsFenceSync::get_all_possible(m);
+    auto FS = VipsFenceSync::get_all_possible(m,full_branch_only);
     for(auto s : FS){
       assert(dynamic_cast<VipsFenceSync*>(s));
       VipsFenceSync *vfs = static_cast<VipsFenceSync*>(s);
@@ -1191,7 +1191,7 @@ P0 wrllc x
 P0 evict x
 )");
 
-      VipsSimpleFencer vsf(*m);
+      VipsSimpleFencer vsf(*m,false);
       std::set<std::set<Sync*> > syncs = vsf.fence(*t,{});
 
       Test::inner_test("fence #1",tst_fence(m,syncs,{{"fence:L1","ssfence:L1"},{}}));
@@ -1246,7 +1246,7 @@ P0 wrllc y
   P1 L1 END read: x = 0
 )");
 
-      VipsSimpleFencer vsf(*m);
+      VipsSimpleFencer vsf(*m,false);
       auto syncs = vsf.fence(*t,{});
 
       Test::inner_test("fence #2",tst_fence(m,syncs,{{"fence:L1","ssfence:L1","syncwr:L0"},{}}));
@@ -1303,7 +1303,7 @@ P0 L2 CS read: y = 0
   P1 L2 CS read: x = 0
 )");
 
-      VipsSimpleFencer vsf(*m);
+      VipsSimpleFencer vsf(*m,false);
       std::set<std::set<Sync*> > syncs = vsf.fence(*t,{});
 
       Test::inner_test("fence #3",tst_fence(m,syncs,{{"fence:L1","fence:L2","llfence:L2"},{}}));
@@ -1397,7 +1397,7 @@ text
           P1 read: x = 0
        */
 
-      VipsSimpleFencer vsf(*m);
+      VipsSimpleFencer vsf(*m,false);
 
       std::set<std::set<Sync*> > syncs = vsf.fence(*t,m_infos);
 
@@ -1467,7 +1467,7 @@ P0 L3 L4 read: u = 1
   P1 L4 L5 read: u = 0
 )");
 
-      VipsSimpleFencer vsf(*m);
+      VipsSimpleFencer vsf(*m,false);
 
       std::set<std::set<Sync*> > syncs = vsf.fence(*t,{});
 

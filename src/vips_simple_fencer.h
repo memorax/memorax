@@ -33,7 +33,7 @@
  */
 class VipsSimpleFencer : public TraceFencer{
 public:
-  VipsSimpleFencer(const Machine &m);
+  VipsSimpleFencer(const Machine &m, bool full_branch_only);
   VipsSimpleFencer(const VipsSimpleFencer&) = default;
   VipsSimpleFencer &operator=(const VipsSimpleFencer&) = default;
   ~VipsSimpleFencer();

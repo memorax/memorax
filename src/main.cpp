@@ -148,8 +148,10 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
 };
 
 int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  std::string used_flags[] = {"a","k","cegar","max-refinements","max-solutions","rff","fmin","fence-cost"};
-  inform_ignore(used_flags,used_flags+8,flags);
+  std::set<std::string> used_flags =
+    {"a","k","cegar","max-refinements","max-solutions","rff","fmin","fence-cost",
+     "full-branch-only"};
+  inform_ignore(used_flags.begin(),used_flags.end(),flags);
   std::unique_ptr<Machine> machine(get_machine(flags,input_stream));
   int max_refinements = -1;
   if(flags.count("max-refinements")){
@@ -372,7 +374,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       [](const Machine &m,const Reachability::Result*)->Reachability::Arg*{
       return new Reachability::Arg(m);
     };
-    VipsSimpleFencer fencer(*machine);
+    VipsSimpleFencer fencer(*machine,flags.count("full-branch-only"));
     auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,min_aspect,max_solutions,cost);
     print_sync_sets(*machine,sync_sets);
     for(auto ss : sync_sets){
@@ -560,6 +562,9 @@ void print_help(int argc, char *argv[]){
             << "        Instead of counting all kinds of fences as equally expensive,\n"
             << "        use cost <int:a> for full fences, <int:b> for ssfences,\n"
             << "        <int:c> for llfences, and <int:d> for syncwrs.\n"
+            << "    --full-branch-only\n"
+            << "        In fence insertion, only consider fences between all incoming\n"
+            << "        and all outgoing transitions for a given control location.\n"
             << "    --max-refinements <int>\n"
             << "        Perform at most <int> many refinements. (Used only in cegar.)\n"
             << "    --max-solutions <int>\n"
@@ -651,6 +656,8 @@ int main(int argc, char *argv[]){
         }
       }else if(argv[i] == std::string("--cegar")){
         flags["cegar"] = Flag("cegar",argv[i],true);
+      }else if(argv[i] == std::string("--full-branch-only")){
+        flags["full-branch-only"] = Flag("full-branch-only",argv[i],true);
       }else if(argv[i] == std::string("--max-solutions")){
         if(flags.count("max-solutions")){
           Log::warning << "Flag --max-solutions specified twice.\n";

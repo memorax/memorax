@@ -31,7 +31,7 @@ VipsFenceSync::VipsFenceSync(Lang::Stmt<int> f, int pid, int q, TSet IN, TSet OU
 
 VipsFenceSync::~VipsFenceSync(){};
 
-std::set<Sync*> VipsFenceSync::get_all_possible(const Machine &m){
+std::set<Sync*> VipsFenceSync::get_all_possible(const Machine &m,bool full_branch_only){
   std::set<Lang::Stmt<int> > fs;
   fs.insert(Lang::Stmt<int>::nop()); // Does not matter since fsinit will provide the right fence instruction
   FenceSync::fs_init_t fsinit_full =
@@ -47,9 +47,9 @@ std::set<Sync*> VipsFenceSync::get_all_possible(const Machine &m){
     return new VipsLLFenceSync(pid,q,IN,OUT);
   };
   std::set<Sync*> S, S_ss, S_ll;
-  S = FenceSync::get_all_possible(m,fs,fsinit_full);
-  S_ss = FenceSync::get_all_possible(m,fs,fsinit_ss);
-  S_ll = FenceSync::get_all_possible(m,fs,fsinit_ll);
+  S = FenceSync::get_all_possible(m,fs,fsinit_full,full_branch_only);
+  S_ss = FenceSync::get_all_possible(m,fs,fsinit_ss,full_branch_only);
+  S_ll = FenceSync::get_all_possible(m,fs,fsinit_ll,full_branch_only);
   S.insert(S_ss.begin(),S_ss.end());
   S.insert(S_ll.begin(),S_ll.end());
   return S;
