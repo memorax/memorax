@@ -25,7 +25,8 @@
 
 #include <cassert>
 
-VipsSimpleFencer::VipsSimpleFencer(const Machine &m) : TraceFencer(m) {
+VipsSimpleFencer::VipsSimpleFencer(const Machine &m,std::function<bool(const Sync*)> accept)
+  : TraceFencer(m) {
   {
     for(unsigned p = 0; p < m.automata.size(); ++p){
       fences_by_pq.push_back(std::vector<std::set<VipsFenceSync*> >(m.automata[p].get_states().size()));
@@ -33,17 +34,25 @@ VipsSimpleFencer::VipsSimpleFencer(const Machine &m) : TraceFencer(m) {
     }
     auto FS = VipsFenceSync::get_all_possible(m);
     for(auto s : FS){
-      assert(dynamic_cast<VipsFenceSync*>(s));
-      VipsFenceSync *vfs = static_cast<VipsFenceSync*>(s);
-      all_fences.insert(vfs);
-      fences_by_pq[vfs->get_pid()][vfs->get_q()].insert(vfs);
+      if(accept(s)){
+        assert(dynamic_cast<VipsFenceSync*>(s));
+        VipsFenceSync *vfs = static_cast<VipsFenceSync*>(s);
+        all_fences.insert(vfs);
+        fences_by_pq[vfs->get_pid()][vfs->get_q()].insert(vfs);
+      }else{
+        delete s;
+      }
     }
     auto SWS = VipsSyncwrSync::get_all_possible(m);
     for(auto s : SWS){
-      assert(dynamic_cast<VipsSyncwrSync*>(s));
-      VipsSyncwrSync *vss = static_cast<VipsSyncwrSync*>(s);
-      all_syncwrs.insert(vss);
-      syncwrs_by_pq[vss->get_pid()][vss->get_write().source].insert(vss);
+      if(accept(s)){
+        assert(dynamic_cast<VipsSyncwrSync*>(s));
+        VipsSyncwrSync *vss = static_cast<VipsSyncwrSync*>(s);
+        all_syncwrs.insert(vss);
+        syncwrs_by_pq[vss->get_pid()][vss->get_write().source].insert(vss);
+      }else{
+        delete s;
+      }
     }
   }
 };

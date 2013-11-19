@@ -33,7 +33,13 @@
  */
 class VipsSimpleFencer : public TraceFencer{
 public:
-  VipsSimpleFencer(const Machine &m);
+  /* VipsSimpleFencer will ignore all synchronizations s, such that
+   * !accept(s). Such fences will never be suggested by
+   * VipsSimpleFencer::fence.
+   */
+  VipsSimpleFencer(const Machine &m,
+                   std::function<bool(const Sync*)> accept =
+                   [](const Sync*){ return true; });
   VipsSimpleFencer(const VipsSimpleFencer&) = default;
   VipsSimpleFencer &operator=(const VipsSimpleFencer&) = default;
   ~VipsSimpleFencer();

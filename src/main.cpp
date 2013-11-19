@@ -55,6 +55,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <regex>
 #include <set>
 #include <stdexcept>
 #include <unistd.h>
@@ -121,8 +122,10 @@ void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceS
 };
 
 int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  std::string used_flags[] = {"a","k","cegar","max-refinements","max-solutions","rff","fmin","fence-cost"};
-  inform_ignore(used_flags,used_flags+8,flags);
+  std::set<std::string> used_flags =
+    {"a","k","cegar","max-refinements","max-solutions","rff","fmin","fence-cost",
+     "dismiss-fence"};
+  inform_ignore(used_flags.begin(),used_flags.end(),flags);
   std::unique_ptr<Machine> machine(get_machine(flags,input_stream));
   int max_refinements = -1;
   if(flags.count("max-refinements")){
@@ -345,7 +348,21 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       [](const Machine &m,const Reachability::Result*)->Reachability::Arg*{
       return new Reachability::Arg(m);
     };
-    VipsSimpleFencer fencer(*machine);
+    std::function<bool(const Sync*)> accept =
+      [](const Sync*){ return true; };
+    try{
+      if(flags.count("dismiss-fence")){
+        std::regex dismiss_regex(flags.at("dismiss-fence").argument);
+        const Machine *m = machine.get();
+        accept = [m,dismiss_regex](const Sync *s){
+          return !std::regex_match(s->to_string(*m),dismiss_regex);
+        };
+      }
+    }catch(std::regex_error err){
+      Log::warning << "Regexp error in argument to --dismiss-fence.\n";
+      return 1;
+    }
+    VipsSimpleFencer fencer(*machine,accept);
     auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,min_aspect,max_solutions,cost);
     SyncSetPrinter::print(sync_sets,*machine,Log::result,Log::json);
     for(auto ss : sync_sets){
@@ -528,6 +545,9 @@ void print_help(int argc, char *argv[]){
             << "        Use k as buffer bound. (Used only for abstraction pb.)\n"
             << "    --cegar\n"
             << "        Use CEGAR refinement in reachability analysis.\n"
+            << "    --dismiss-fence <regex>\n"
+            << "        For fence insertion, ignore all synchronizations that\n"
+            << "        match <regex>. Uses ECMAScript regex syntax.\n"
             << "    --fence-cost <int:a> <int:b> <int:c> <int:d>\n"
             << "        (only vips, minimality criterion cost)\n"
             << "        Instead of counting all kinds of fences as equally expensive,\n"
@@ -624,6 +644,19 @@ int main(int argc, char *argv[]){
         }
       }else if(argv[i] == std::string("--cegar")){
         flags["cegar"] = Flag("cegar",argv[i],true);
+      }else if(argv[i] == std::string("--dismiss-fence")){
+        if(flags.count("dismiss-fence")){
+          Log::warning << "Flag --dismiss-fence specified twice.\n";
+          print_help(argc,argv);
+          return 1;
+        }else if(i < argc-1){
+          flags["dismiss-fence"] = Flag("dismiss-fence",argv[i],true,argv[i+1]);
+          i++; // Do not account for the next argv twice.
+        }else{
+          Log::warning << "--dismiss-fence must have an argument.\n";
+          print_help(argc,argv);
+          return 1;
+        }
       }else if(argv[i] == std::string("--max-solutions")){
         if(flags.count("max-solutions")){
           Log::warning << "Flag --max-solutions specified twice.\n";
