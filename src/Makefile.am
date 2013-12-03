@@ -34,6 +34,7 @@ shared.h \
 sharinglist.tcc sharinglist.h \
 shellcmd.cpp shellcmd.h \
 sync.h sync.cpp \
+sync_set_printer.h sync_set_printer.cpp \
 syntax_string.tcc syntax_string.h \
 test.h test.cpp \
 ticket_queue.h \

@@ -34,6 +34,7 @@
 #include "sb_container.h"
 #include "sb_tso_bwd.h"
 #include "shellcmd.h"
+#include "sync_set_printer.h"
 #include "test.h"
 #include "timer.h"
 #include "tso_fence_sync.h"
@@ -104,41 +105,13 @@ Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input
   }
 };
 
-void print_sync_sets(const Machine &m, const std::set<std::set<Sync*> > &sync_sets){
-  Log::result << "Found " << sync_sets.size() << " synchronization set";
-  if(sync_sets.size() == 0){
-    Log::result << "s.\n";
-    Log::result << "\nNOTICE: This means that the program is unsafe regardless of fences!\n\n";
-  }else{
-    if(sync_sets.size() == 1){
-      Log::result << ":\n";
-    }else{
-      Log::result << "s:\n";
-    }
-    int ctr = 0;
-    for(auto ss : sync_sets){
-      Log::result << "Sync set #" << ctr << ":\n";
-      if(ss.empty()){
-        Log::result << "  (No synchronizations)\n";
-        Log::result << "  (This means that the program is safe without any additional fences.)\n\n";
-      }else{
-        for(auto s : ss){
-          s->print(m,Log::result,Log::json);
-        }
-        Log::result << "\n";
-      }
-      ++ctr;
-    }
-  }
-};
-
 void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceSet> &fence_sets){
   std::set<std::set<Sync*> > sync_sets;
   for(auto it = fence_sets.begin(); it != fence_sets.end(); ++it){
     sync_sets.insert(it->to_sync_set());
   }
 
-  print_sync_sets(machine,sync_sets);
+  SyncSetPrinter::print(sync_sets,machine,Log::result,Log::json);
 
   for(auto it = sync_sets.begin(); it != sync_sets.end(); ++it){
     for(auto s : *it){
@@ -264,7 +237,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       }
       TsoSimpleFencer fencer(*machine,TsoSimpleFencer::LOCKED);
       auto sync_sets = Fencins::fencins(*machine,*reach,*arg_init,fencer,min_aspect,max_solutions);
-      print_sync_sets(*machine,sync_sets);
+      SyncSetPrinter::print(sync_sets,*machine,Log::result,Log::json);
       for(auto ss : sync_sets){
         for(auto s : ss){
           delete s;
@@ -312,7 +285,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       }
       TsoSimpleFencer fencer(*machine,TsoSimpleFencer::LOCKED);
       auto sync_sets = Fencins::fencins(*machine,reach,arg_init,fencer,min_aspect,max_solutions);
-      print_sync_sets(*machine,sync_sets);
+      SyncSetPrinter::print(sync_sets,*machine,Log::result,Log::json);
       for(auto ss : sync_sets){
         for(auto s : ss){
           delete s;
@@ -374,7 +347,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     };
     VipsSimpleFencer fencer(*machine);
     auto sync_sets = Fencins::fencins(*machine,reach,reach_arg_init,fencer,min_aspect,max_solutions,cost);
-    print_sync_sets(*machine,sync_sets);
+    SyncSetPrinter::print(sync_sets,*machine,Log::result,Log::json);
     for(auto ss : sync_sets){
       for(auto s : ss){
         delete s;
