@@ -646,5 +646,474 @@ void VipsBitReachability::test(){
     delete res;
     delete m;
   }
-  
+
+  /* Test 13: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+text
+  syncwr: x := 1;
+  syncrd: y = 0;
+CS: nop
+
+process
+text
+  syncwr: y := 1;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#13 Syncrd",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 14: Syncrd (dekker variation) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+text
+  syncwr: x := 1;
+  syncrd: y = 1;
+CS: nop
+
+process
+text
+  syncwr: y := 1;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#14 Syncrd",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 15: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  syncwr: x := 1;
+  syncrd: $r0 := y;
+  assume: $r0 = 0;
+CS: nop
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  syncwr: y := 1;
+  syncrd: $r0 := x;
+  assume: $r0 = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#15 Syncrd",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 16: Syncrd (dekker variation) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  syncwr: x := 1;
+  syncrd: $r0 := y;
+  assume: $r0 = 0;
+CS: nop
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  syncwr: y := 1;
+  syncrd: $r0 := x;
+  assume: $r0 = 1;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#16 Syncrd",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 17: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+text
+  write: x := 1;
+  syncrd: x = 1;
+  syncrd: y = 0;
+CS: nop
+
+process
+text
+  write: y := 1;
+  syncrd: y = 1;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#17 Syncrd (rowe)",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 18: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  write: x := 1;
+  syncrd: $r0 := x;
+  syncrd: y = 0;
+CS: nop
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  write: y := 1;
+  syncrd: $r0 := y;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#18 Syncrd (rowe)",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 19: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+
+process
+text
+  write: x := 1;
+  syncrd: x = 0;
+  syncrd: y = 0;
+CS: nop
+
+process
+text
+  write: y := 1;
+  syncrd: y = 1;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#19 Syncrd (rowe)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 20: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  L0 CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+  z = 0 : [0:1]
+
+process
+text
+  L0: write: z := 0;
+  goto L0
+
+process
+text
+  write: x := 1;
+  write: z := 1;
+  syncrd: z = 0;
+  syncrd: y = 0;
+CS: nop
+
+process
+text
+  write: y := 1;
+  write: z := 1;
+  syncrd: z = 0;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#20 Syncrd (rowe)",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 21: Syncrd (dekker) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  L0 CS CS
+
+data
+  x = 0 : [0:1]
+  y = 0 : [0:1]
+  z = 0 : [0:1]
+
+process
+text
+  L0: write: z := 0;
+  goto L0
+
+process
+text
+  write: x := 1;
+  write: z := 1;
+  syncrd: z = 1;
+  syncrd: y = 0;
+CS: nop
+
+process
+text
+  write: y := 1;
+  write: z := 1;
+  syncrd: z = 0;
+  syncrd: x = 0;
+CS: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#21 Syncrd (rowe)",res->result == REACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 22: Syncrd (coherence) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  END END
+
+data
+  x = 0 : [0:1]
+
+process
+text
+  write: x := 1;
+END: nop
+
+process
+text
+  syncrd: x = 1;
+  read: x = 0;
+END: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#22 Syncrd (coherence)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 23: Syncrd (coherence) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  END END
+
+data
+  x = 0 : [0:1]
+
+process
+text
+  write: x := 1;
+END: nop
+
+process
+text
+  syncrd: x = 1;
+  syncrd: x = 0;
+END: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#23 Syncrd (coherence)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 24: Syncrd (coherence) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  END END
+
+data
+  x = 0 : [0:1]
+
+process
+text
+  write: x := 1;
+END: nop
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  syncrd: $r0 := x;
+  assume: $r0 = 1;
+  read: x = 0;
+END: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#24 Syncrd (coherence)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
+  /* Test 25: Syncrd (coherence) */
+  {
+    Machine *m = get_machine(R"(
+forbidden
+  END END
+
+data
+  x = 0 : [0:1]
+
+process
+text
+  write: x := 1;
+END: nop
+
+process
+registers
+  $r0 = 0 : [0:1]
+text
+  syncrd: $r0 := x;
+  assume: $r0 = 1;
+  syncrd: x = 0;
+END: nop
+)");
+
+    VipsBitReachability reach;
+
+    Arg arg(*m);
+    Result *res = reach.reachability(&arg);
+    Test::inner_test("#25 Syncrd (coherence)",res->result == UNREACHABLE);
+
+    delete res;
+    delete m;
+  }
+
 };

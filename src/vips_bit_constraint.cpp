@@ -393,6 +393,53 @@ VipsBitConstraint *VipsBitConstraint::post(Common &c,
         return 0;
       }
     }
+  case Lang::SYNCRDASSERT:
+    {
+      RegVal regval(pid,c,bits);
+      int e_val = s.get_expr().eval<RegVal,int*>(regval,0);
+      int v_val;
+
+      if(c.l1val_is_dirty(c.bfget(bits,c.l1(pid,s.get_memloc())))){
+        /* Dirty: Read own dirty value */
+        v_val = c.l1val_valof(c.bfget(bits,c.l1(pid,s.get_memloc())));
+      }else{
+        /* Clean: Implicit evict, read llc, implicit fetch */
+        v_val = c.bfget(bits,c.mem(Lang::NML(s.get_memloc(),pid)));
+        c.bfset(&vbc->bits,c.l1(pid,s.get_memloc()),c.l1val_clean(v_val));
+      }
+
+      if(e_val == v_val){
+        return vbc;
+      }else{
+        /* Read the wrong value */
+        c.dealloc(vbc);
+        return 0;
+      }
+    }
+  case Lang::SYNCRDASSIGN:
+    {
+      RegVal regval(pid,c,bits);
+      int v_val;
+
+      if(c.l1val_is_dirty(c.bfget(bits,c.l1(pid,s.get_memloc())))){
+        /* Dirty: Read own dirty value */
+        v_val = c.l1val_valof(c.bfget(bits,c.l1(pid,s.get_memloc())));
+      }else{
+        /* Clean: Implicit evict, read llc, implicit fetch */
+        v_val = c.bfget(bits,c.mem(Lang::NML(s.get_memloc(),pid)));
+        c.bfset(&vbc->bits,c.l1(pid,s.get_memloc()),c.l1val_clean(v_val));
+      }
+
+      if(c.machine.regs[pid][s.get_reg()].domain.member(v_val)){
+        c.bfset(&vbc->bits,c.reg(pid,s.get_reg()),v_val);
+        return vbc;
+      }else{
+        /* The read value is not in the register domain. */
+        /* Cannot proceed with the read */
+        c.dealloc(vbc);
+        return 0;
+      }
+    }
   case Lang::SYNCWR:
     {
       if(c.l1val_is_dirty(c.bfget(bits,c.l1(pid,s.get_memloc())))){
@@ -953,6 +1000,22 @@ Trace *VipsBitConstraint::explicit_vips_trace(const Trace &vbctrace){
               Lang::MemLoc<int> ml = it->localize(pid);
               vips_trace->push_back(Machine::PTransition(tgt,Lang::Stmt<int>::fetch(ml),tgt,pid),0);
             }
+          }
+          break;
+        }
+      case Lang::SYNCRDASSERT: case Lang::SYNCRDASSIGN:
+        {
+          int src = vbctrace.transition(i)->source;
+          int tgt = vbctrace.transition(i)->target;
+          Lang::MemLoc<int> ml = s.get_memloc();
+          if(clean_entry.at({pid,Lang::NML(ml,pid)})){
+            /* Insert evict and fetch around the synchronized read. */
+            vips_trace->push_back(Machine::PTransition(src,Lang::Stmt<int>::evict(ml),src,pid),0);
+            vips_trace->push_back(*vbctrace.transition(i),0);
+            vips_trace->push_back(Machine::PTransition(tgt,Lang::Stmt<int>::fetch(ml),tgt,pid),0);
+          }else{
+            /* Read own dirty value, no need to evict/fetch. */
+            vips_trace->push_back(*vbctrace.transition(i),0);
           }
           break;
         }

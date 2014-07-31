@@ -263,11 +263,6 @@ PbConstraint::Predicate PbCegar::interpolate(const Trace &trace,
     /* Start interpolation */
     Machine::PTransition trans = *trace[trace_pos];
     std::list<Constraint*> rs = trace.constraint(trace_pos)->range(trans);
-    if(!rs.size() == 1){
-      std::cout << "Range of wrong cardinality: " << rs.size() << "\n";
-      std::cout << "Transition: " << trans.to_string(c->common.machine) << "\n";
-      std::cout << "Constraint:\n" << trace.constraint(trace_pos)->to_string() << "\n";
-    }
     assert(rs.size() == 1);
     PbConstraint *exact_range = static_cast<PbConstraint*>(rs.front());
     Predicate pred = Predicate::tt();

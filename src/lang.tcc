@@ -381,6 +381,32 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::read_assign(RegId reg, MemLoc<RegId> ml,
 };
 
 template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::syncrd_assert(MemLoc<RegId> ml, const Expr<RegId> &e,
+                                                   const Lexer::TokenPos &p,
+                                                   std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s;
+  s.type = SYNCRDASSERT;
+  s.reads.insert(ml);
+  s.e0 = new Expr<RegId>(e);
+  s.pos = p;
+  s.lex_symbols = symbs;
+  return s;
+};
+
+template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::syncrd_assign(RegId reg, MemLoc<RegId> ml,
+                                                   const Lexer::TokenPos &p,
+                                                   std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s;
+  s.type = SYNCRDASSIGN;
+  s.reg = reg;
+  s.reads.insert(ml);
+  s.pos = p;
+  s.lex_symbols = symbs;
+  return s;
+};
+
+template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::write(MemLoc<RegId> ml, const Expr<RegId> &e,
                                            const Lexer::TokenPos &p,
                                            std::vector<Lexer::Token> symbs){
@@ -655,6 +681,8 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
   case ASSUME: return indlbl+"assume: "+b->to_string(regts);
   case READASSERT: return indlbl+"read: "+mlts(reads[0])+" = "+e0->to_string(regts);
   case READASSIGN: return indlbl+"read: "+regts(reg)+" := "+mlts(reads[0]);
+  case SYNCRDASSERT: return indlbl+"syncrd: "+mlts(reads[0])+" = "+e0->to_string(regts);
+  case SYNCRDASSIGN: return indlbl+"syncrd: "+regts(reg)+" := "+mlts(reads[0]);
   case WRITE:
     return indlbl+"write: "+mlts(writes[0])+" := "+e0->to_string(regts);
   case SYNCWR:
@@ -785,7 +813,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
         return e0->compare(*stmt.e0);
       }
     case ASSUME: return b->compare(*stmt.b);
-    case READASSERT:
+    case READASSERT: case SYNCRDASSERT:
       if(reads[0] < stmt.reads[0]){
         return -1;
       }else if(stmt.reads[0] < reads[0]){
@@ -793,7 +821,7 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
       }else{
         return e0->compare(*stmt.e0);
       }
-    case READASSIGN:
+    case READASSIGN: case SYNCRDASSIGN:
       if(reg < stmt.reg){
         return -1;
       }else if(reg > stmt.reg){
@@ -933,7 +961,7 @@ template<class RegId> int Lang::Stmt<RegId>::labeled_stmt_t::compare(const label
 template<class RegId> bool Lang::Stmt<RegId>::check_locked_invariant(const Stmt &stmt, std::string *comment){
   switch(stmt.get_type()){
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case LOCKED:
-  case FENCE: case SSFENCE: case LLFENCE: case SYNCWR:
+  case FENCE: case SSFENCE: case LLFENCE: case SYNCWR: case SYNCRDASSERT: case SYNCRDASSIGN:
     return true;
   case SEQUENCE:
     {
@@ -986,7 +1014,8 @@ template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(co
     switch(type){
     case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN:
     case WRITE: case GOTO: case UPDATE: case SYNCWR: case FENCE: case SSFENCE:
-    case LLFENCE: case FETCH: case EVICT: case WRLLC:
+    case LLFENCE: case FETCH: case EVICT: case WRLLC: case SYNCRDASSERT:
+    case SYNCRDASSIGN:
       return false;
     case LOCKED: case IF: case WHILE: case EITHER: case SEQUENCE:
       {
@@ -1005,7 +1034,7 @@ template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(co
 
 template<class RegId> Lang::MemLoc<RegId> Lang::Stmt<RegId>::get_memloc() const{
   switch(type){
-  case READASSERT: case READASSIGN:
+  case READASSERT: case READASSIGN: case SYNCRDASSERT: case SYNCRDASSIGN:
     return reads[0];
   case WRITE: case UPDATE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
     return writes[0];
@@ -1037,9 +1066,9 @@ template<class RegId> std::set<RegId> Lang::Stmt<RegId>::get_registers() const{
     return set;
   case ASSUME:
     return b->get_registers();
-  case READASSERT:
+  case READASSERT: case SYNCRDASSERT:
     return e0->get_registers();
-  case READASSIGN:
+  case READASSIGN: case SYNCRDASSIGN:
     set.insert(reg);
     return set;
   case WRITE: case SYNCWR:
@@ -1067,7 +1096,8 @@ VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const 
   VecSet<VecSet<MemLoc<RegId> > > no_writes = VecSet<VecSet<MemLoc<RegId> > >::singleton(VecSet<MemLoc<RegId> >());
   switch(type){
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case GOTO:
-  case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT:
+  case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT: case SYNCRDASSERT:
+  case SYNCRDASSIGN:
     return no_writes;
   case WRITE: case UPDATE: case SYNCWR: case WRLLC:
     return VecSet<VecSet<MemLoc<RegId> > >::singleton(writes);
@@ -1132,6 +1162,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::flatten() const{
     }
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
   case SYNCWR: case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT: case WRLLC:
+  case SYNCRDASSERT: case SYNCRDASSIGN:
     return *this;
   case IF: case WHILE: case EITHER: case SEQUENCE: case GOTO:
   default:
@@ -1173,6 +1204,7 @@ std::vector<std::vector<Lang::Stmt<RegId> > > Lang::Stmt<RegId>::flatten_aux() c
     }
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
   case FENCE: case SSFENCE: case LLFENCE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
+  case SYNCRDASSERT: case SYNCRDASSIGN:
     {
       res.insert(std::vector<Stmt>(1,*this));
       break;

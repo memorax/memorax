@@ -327,6 +327,29 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
       }
       break;
     }
+  case Lexer::SYNCRD:
+    {
+      ppush(&mytoks,tok);
+      force_toks(lex,Lexer::COLON,&mytoks);
+      lex >> tok1;
+      if(tok1.type == Lexer::REG){
+        ppush(&mytoks,tok1);
+        force_toks(lex,Lexer::ASSIGNMENT,&mytoks);
+        memloc_or_pointer_t ml = p_memloc_toks(lex,ctx,&mytoks);
+        res_stmt = resolve_pointer(ml,[&tok1,&tok](const memloc_t &ml){
+            return stmt_t::syncrd_assign(tok1.value,ml,tok.pos);
+          },ctx,mytoks);
+      }else{
+        lex.putback(tok1);
+        Parser::memloc_or_pointer_t ml = p_memloc_toks(lex,ctx,&mytoks);
+        force_toks(lex,Lexer::EQ,&mytoks);
+        expr_t e = p_expr_toks(lex,&mytoks);
+        res_stmt = resolve_pointer(ml,[&e,&tok](const memloc_t &ml){
+            return stmt_t::syncrd_assert(ml,e,tok.pos);
+          },ctx,mytoks);
+      }
+      break;
+    }
   case Lexer::WRITE:
     {
       ppush(&mytoks,tok);

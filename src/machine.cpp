@@ -453,6 +453,14 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
       }
       break;
     }
+  case Lang::SYNCRDASSERT:
+    {
+      int val = stmt.get_expr().eval<std::vector<int>,int*>(v,0);
+      if(get_var_decl(Lang::NML(stmt.get_memloc(),pid)).domain.member(val)){
+        s.insert(pr_t(Lang::Stmt<int>::syncrd_assert(stmt.get_memloc(),Lang::Expr<int>::integer(val),pos),v));
+      }
+      break;
+    }
   case Lang::READASSIGN:
     {
       const Lang::VarDecl &vd = get_var_decl(Lang::NML(stmt.get_memloc(),pid));
@@ -461,6 +469,18 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
           std::vector<int> v2 = v;
           v2[stmt.get_reg()] = *dit;
           s.insert(pr_t(Lang::Stmt<int>::read_assert(stmt.get_memloc(),Lang::Expr<int>::integer(*dit),pos),v2));
+        }
+      }
+      break;
+    }
+  case Lang::SYNCRDASSIGN:
+    {
+      const Lang::VarDecl &vd = get_var_decl(Lang::NML(stmt.get_memloc(),pid));
+      for(auto dit = regs[pid][stmt.get_reg()].domain.begin(); dit != regs[pid][stmt.get_reg()].domain.end(); ++dit){
+        if(vd.domain.member(*dit)){
+          std::vector<int> v2 = v;
+          v2[stmt.get_reg()] = *dit;
+          s.insert(pr_t(Lang::Stmt<int>::syncrd_assert(stmt.get_memloc(),Lang::Expr<int>::integer(*dit),pos),v2));
         }
       }
       break;
@@ -570,10 +590,10 @@ void Machine::get_reg_relevant_aux(int reg, const Lang::Stmt<int> &stmt,
   case Lang::ASSUME:
     *may_read = stmt.get_condition().get_registers().count(reg);
     break;
-  case Lang::READASSERT:
+  case Lang::READASSERT: case Lang::SYNCRDASSERT:
     *may_read = stmt.get_expr().get_registers().count(reg);
     break;
-  case Lang::READASSIGN:
+  case Lang::READASSIGN: case Lang::SYNCRDASSIGN:
     *overwrites = (stmt.get_reg() == reg);
     break;
   case Lang::WRITE:
@@ -731,12 +751,13 @@ Machine *Machine::remove_superfluous_nops_one_pass() const{
     for(unsigned i = 0; i < new_states.size(); ++i){
       /* Copy all transitions except for those that originate in or
        * transitions to a removed state, and those that are
-       * self-looping read-asserts.
+       * self-looping (synchronized) read-asserts.
        */
       if(removed_states.count(i) == 0){
         for(auto it = new_states[i].fwd_transitions.begin(); it != new_states[i].fwd_transitions.end(); ++it){
           if(removed_states.count((*it)->target) == 0 &&
-             !((*it)->target == (*it)->source && (*it)->instruction.get_type() == Lang::READASSERT)){
+             !((*it)->target == (*it)->source &&
+               ((*it)->instruction.get_type() == Lang::READASSERT || (*it)->instruction.get_type() == Lang::SYNCRDASSERT))){
             Automaton::Transition t = **it;
             t.source = old_cs_to_new_cs[t.source];
             t.target = old_cs_to_new_cs[t.target];
@@ -997,6 +1018,7 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
   case Lang::NOP: case Lang::ASSUME: case Lang::READASSERT:
   case Lang::FENCE: case Lang::SSFENCE: case Lang::LLFENCE:
   case Lang::FETCH: case Lang::EVICT: case Lang::WRLLC:
+  case Lang::SYNCRDASSERT:
     ss.push_back(s);
     break;
   case Lang::WRITE:
@@ -1030,7 +1052,7 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
       ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
       break;
     }
-  case Lang::READASSIGN:
+  case Lang::READASSIGN: case Lang::SYNCRDASSIGN:
     {
       std::vector<Lang::Stmt<int>::labeled_stmt_t> lv;
       Lang::VarDecl::Domain dom = get_declaration(s.get_reg(),pid).domain;

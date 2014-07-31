@@ -329,7 +329,7 @@ std::map<int,int> VipsSimpleFencer::get_sync_points(const Trace &t){
         sps[i] = j;
         break;
       }
-    case Lang::SYNCWR: case Lang::LOCKED:
+    case Lang::SYNCWR: case Lang::LOCKED: case Lang::SYNCRDASSERT: case Lang::SYNCRDASSIGN:
       assert(t[i]->instruction.get_type() != Lang::LOCKED ||
              is_cas(t[i]->instruction));
       sps[i] = i;
@@ -498,8 +498,10 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
     return q;
   };
 
+
   /* Eliminate unnecessary fetch/evict transitions */
-  {
+  std::function<void(void)> remove_fetch_evict =
+    [&remove_pts,&ptv](){
     std::set<int> remove;
     // last_fetch[{pid,ml}] is the last seen fetch of ml by pid
     // only memory locations that are currently in L1 are in last_fetch
@@ -546,6 +548,9 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
         case Lang::FETCH: case Lang::LOCKED: case Lang::SYNCWR:
           need_evicted.insert({pid,ptv[i].instruction.get_writes()[0]});
           break;
+        case Lang::SYNCRDASSERT: case Lang::SYNCRDASSIGN:
+          need_evicted.insert({pid,ptv[i].instruction.get_reads()[0]});
+          break;
         case Lang::FENCE: case Lang::LLFENCE:
           p_has_fenced.insert(pid);
           break;
@@ -566,7 +571,8 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
 
     // Remove
     remove_pts(remove);
-  }
+  };
+  remove_fetch_evict();
 
   /* Delay fetches as much as possible */
   {
@@ -644,14 +650,18 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
                    (ptv[j].instruction.get_type() == Lang::WRLLC ||
                     ptv[j].instruction.get_type() == Lang::FETCH ||
                     ptv[j].instruction.get_type() == Lang::LOCKED ||
-                    ptv[j].instruction.get_type() == Lang::SYNCWR)){
+                    ptv[j].instruction.get_type() == Lang::SYNCWR ||
+                    ptv[j].instruction.get_type() == Lang::SYNCRDASSERT ||
+                    ptv[j].instruction.get_type() == Lang::SYNCRDASSIGN)){
             ptv[i].source = ptv[i].target = src_pc(pid,j+1);
             move_before(i,j+1);
             break;
           }else if(j_pid == pid &&
-                   ptv[j].instruction.get_type() == Lang::LLFENCE){
-            /* Move past the llfence, but now we need to insert evict
-             * nml, fetch nml surrounding the llfence. */
+                   (ptv[j].instruction.get_type() == Lang::LLFENCE ||
+                    ptv[j].instruction.get_type() == Lang::SYNCRDASSERT ||
+                    ptv[j].instruction.get_type() == Lang::SYNCRDASSIGN)){
+            /* Move past the llfence or sync read, but now we need to
+             * insert evict nml, fetch nml surrounding the instruction. */
             int q_src = ptv[j].source;
             int q_tgt = ptv[j].target;
             ptv.push_back({q_src,Lang::Stmt<int>::evict(nml.localize(pid)),q_src,pid});
@@ -668,6 +678,11 @@ Trace *VipsSimpleFencer::decrease_reorderings(const Trace &t){
       }
     }
   }
+
+  /* New superfluous fetches and evicts may have been inserted due to
+   * other transformations. Remove them.
+   */
+  remove_fetch_evict();
 
   Trace *t2 = new Trace(0);
   for(unsigned i = 0; i < ptv.size(); ++i){
@@ -1741,6 +1756,114 @@ P0 L2 L3 read: x = 1
 
       delete m;
     }
+
+    {
+      Machine *m = get_machine(R"(
+forbidden L0 L0 L0
+data
+  u = *
+  v = *
+  w = *
+  x = *
+  y = *
+  z = *
+process
+text
+  L0: write: x := 1;
+  L1: syncrd: x = 1;
+  L2: syncrd: y = 0;
+  L3: nop
+process
+text
+L0: syncrd: x = 0;
+L1: nop
+process
+text
+  L0: cas(x,0,1);
+  L1: syncrd: x = 1;
+  L2: nop
+)");
+
+      Test::inner_test("decrease_reorderings #8",
+                       tst_dec_reord(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 L1 L2 syncrd: x = 1
+P0 wrllc x
+P0 evict x
+)",R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 syncrd: x = 1
+)"));
+
+      Test::inner_test("decrease_reorderings #9",
+                       tst_dec_reord(m,R"(
+P1 fetch x
+P1 evict x
+P1 L0 L1 syncrd: x = 0
+P1 fetch x
+P1 evict x
+)",R"(
+P1 L0 L1 syncrd: x = 0
+)"));
+
+      Test::inner_test("decrease_reorderings #10",
+                       tst_dec_reord(m,R"(
+P2 fetch x
+P2 evict x
+P2 L0 L1 cas(x,0,1)
+P2 fetch x
+P2 evict x
+P2 L1 L2 syncrd: x = 1
+P2 fetch x
+)",R"(
+P2 L0 L1 cas(x,0,1)
+P2 L1 L2 syncrd: x = 1
+)"));
+
+      Test::inner_test("decrease_reorderings #11",
+                       tst_dec_reord(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+  P2 fetch x
+  P2 evict x
+  P2 L0 L1 cas(x,0,1)
+  P2 fetch x
+  P2 evict x
+  P2 L1 L2 syncrd: x = 1
+P0 L1 L2 syncrd: x = 1
+P0 wrllc x
+)",R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+  P2 L0 L1 cas(x,0,1)
+  P2 L1 L2 syncrd: x = 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 syncrd: x = 1
+)"));
+
+      Test::inner_test("decrease_reorderings #12",
+                       tst_dec_reord(m,R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 syncrd: x = 1
+)",R"(
+P0 fetch x
+P0 L0 L1 write: x := 1
+P0 wrllc x
+P0 evict x
+P0 L1 L2 syncrd: x = 1
+)"));
+
+      delete m;
+    }
+
   }
 
 };

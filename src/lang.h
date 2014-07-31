@@ -460,6 +460,12 @@ namespace Lang {
     READASSERT,
     /* Assigning read: read: reg := reads[0] */
     READASSIGN,
+    /* Synchronized blocking read: syncrd: reads[0] = e0
+     * Used in VIPS-M. */
+    SYNCRDASSERT,
+    /* Synchronized assigning read: syncrd: reg := reads[0]
+     * Used in VIPS-M. */
+    SYNCRDASSIGN,
     /* Write: write: writes[0] := e0 */
     WRITE,
     /* Synchronized Write: syncwr: writes[0] := e0
@@ -563,6 +569,14 @@ namespace Lang {
     static Stmt<RegId> read_assign(RegId reg, MemLoc<RegId> ml,
                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                                    std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Synchronized blocking read: syncrd: ml = e */
+    static Stmt<RegId> syncrd_assert(MemLoc<RegId> ml, const Expr<RegId> &e,
+                                     const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                     std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Synchronized assigning read: syncrd: reg := ml */
+    static Stmt<RegId> syncrd_assign(RegId reg, MemLoc<RegId> ml,
+                                     const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                     std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Non-locked write: write: ml := e */
     static Stmt<RegId> write(MemLoc<RegId> ml, const Expr<RegId> &e,
                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),

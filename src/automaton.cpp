@@ -107,6 +107,7 @@ void Automaton::construct_from_ast(const Lang::Stmt<int> &ast,unsat_goto_t &unsa
   case Lang::NOP: case Lang::ASSIGNMENT: case Lang::ASSUME:
   case Lang::READASSERT: case Lang::READASSIGN: case Lang::WRITE:
   case Lang::LOCKED: case Lang::SYNCWR: case Lang::FENCE:
+  case Lang::SYNCRDASSERT: case Lang::SYNCRDASSIGN:
   case Lang::SSFENCE: case Lang::LLFENCE:
     /* Ordinary instructions */
     {

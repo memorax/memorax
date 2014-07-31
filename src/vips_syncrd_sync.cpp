@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013, 2014 Carl Leonardsson
+ * Copyright (C) 2014 Carl Leonardsson
  *
  * This file is part of Memorax.
  *
@@ -21,37 +21,37 @@
 #include "preprocessor.h"
 #include "test.h"
 #include "vips_fence_sync.h"
-#include "vips_syncwr_sync.h"
 #include "vips_syncrd_sync.h"
+#include "vips_syncwr_sync.h"
 
 #include <cassert>
 #include <cctype>
 #include <set>
 
-VipsSyncwrSync::VipsSyncwrSync(const Machine::PTransition &w) : w(w) {};
+VipsSyncrdSync::VipsSyncrdSync(const Machine::PTransition &r) : r(r) {};
 
-VipsSyncwrSync::InsInfo::InsInfo(const VipsSyncwrSync *creator_copy) : Sync::InsInfo(creator_copy) {};
+VipsSyncrdSync::InsInfo::InsInfo(const VipsSyncrdSync *creator_copy) : Sync::InsInfo(creator_copy) {};
 
-void VipsSyncwrSync::InsInfo::bind(const Machine::PTransition &a,const Machine::PTransition &b){
+void VipsSyncrdSync::InsInfo::bind(const Machine::PTransition &a,const Machine::PTransition &b){
   auto res = tchanges.insert(std::pair<Machine::PTransition,Machine::PTransition>(a,b));
   if(!res.second){
     tchanges.at(a) = b;
   }
 };
 
-const Machine::PTransition &VipsSyncwrSync::InsInfo::operator[](const Machine::PTransition &t) const{
+const Machine::PTransition &VipsSyncrdSync::InsInfo::operator[](const Machine::PTransition &t) const{
   return tchanges.at(t);
 };
 
-Machine::PTransition VipsSyncwrSync::InsInfo::all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
+Machine::PTransition VipsSyncrdSync::InsInfo::all_tchanges(const std::vector<const Sync::InsInfo*> &ivec,
                                                            const Machine::PTransition &t){
   Machine::PTransition t2 = t;
   for(unsigned i = 0; i < ivec.size(); ++i){
     if(dynamic_cast<const InsInfo*>(ivec[i])){
       const InsInfo *ii = static_cast<const InsInfo*>(ivec[i]);
       t2 = ii->tchanges.at(t2);
-    }else if(dynamic_cast<const VipsSyncrdSync::InsInfo*>(ivec[i])){
-      const VipsSyncrdSync::InsInfo *ii = static_cast<const VipsSyncrdSync::InsInfo*>(ivec[i]);
+    }else if(dynamic_cast<const VipsSyncwrSync::InsInfo*>(ivec[i])){
+      const VipsSyncwrSync::InsInfo *ii = static_cast<const VipsSyncwrSync::InsInfo*>(ivec[i]);
       t2 = ii->tchanges.at(t2);
     }else{
       assert(dynamic_cast<const FenceSync::InsInfo*>(ivec[i]));
@@ -62,31 +62,43 @@ Machine::PTransition VipsSyncwrSync::InsInfo::all_tchanges(const std::vector<con
   return t2;
 };
 
-Machine *VipsSyncwrSync::insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const{
-  Machine::PTransition w2 = InsInfo::all_tchanges(m_infos,w);
-  assert(w2.pid == w.pid);
-  assert(w2.instruction.get_type() == Lang::WRITE);
+Machine *VipsSyncrdSync::insert(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos, Sync::InsInfo **info) const{
+  Machine::PTransition r2 = InsInfo::all_tchanges(m_infos,r);
+  assert(r2.pid == r.pid);
+  assert(r2.instruction.get_type() == r.instruction.get_type());
 
   Machine *m2 = new Machine(m);
 
-  Automaton::Transition tw(0,Lang::Stmt<int>::nop(),0);
+  Automaton::Transition tr(0,Lang::Stmt<int>::nop(),0);
 
-  const Automaton::State &state = m2->automata[w2.pid].get_states()[w2.source];
+  const Automaton::State &state = m2->automata[r2.pid].get_states()[r2.source];
   for(auto it = state.fwd_transitions.begin(); it != state.fwd_transitions.end(); ++it){
-    if((*it)->compare(w2,false) == 0){
-      tw = **it;
+    if((*it)->compare(r2,false) == 0){
+      tr = **it;
       break;
     }
   }
 
-  Lang::Stmt<int> sw = Lang::Stmt<int>::syncwr(tw.instruction.get_memloc(),
-                                               tw.instruction.get_expr(),
-                                               tw.instruction.get_pos());
+  Lang::Stmt<int> sr = Lang::Stmt<int>::nop();
+  switch(r.instruction.get_type()){
+  case Lang::READASSERT:
+    sr = Lang::Stmt<int>::syncrd_assert(tr.instruction.get_memloc(),
+                                        tr.instruction.get_expr(),
+                                        tr.instruction.get_pos());
+    break;
+  case Lang::READASSIGN:
+    sr = Lang::Stmt<int>::syncrd_assign(tr.instruction.get_reg(),
+                                        tr.instruction.get_memloc(),
+                                        tr.instruction.get_pos());
+    break;
+  default:
+    throw new std::logic_error("VipsSyncrdSync::insert: Instruction is not a read.");
+  }
 
-  m2->automata[w2.pid].del_transition(tw);
-  m2->automata[w2.pid].add_transition(Automaton::Transition(tw.source,sw,tw.target));
+  m2->automata[r2.pid].del_transition(tr);
+  m2->automata[r2.pid].add_transition(Automaton::Transition(tr.source,sr,tr.target));
 
-  InsInfo *my_info = new InsInfo(static_cast<VipsSyncwrSync*>(clone()));
+  InsInfo *my_info = new InsInfo(static_cast<VipsSyncrdSync*>(clone()));
   *info = my_info;
   for(unsigned p = 0; p < m.automata.size(); ++p){
     const std::vector<Automaton::State> &states = m.automata[p].get_states();
@@ -96,58 +108,59 @@ Machine *VipsSyncwrSync::insert(const Machine &m, const std::vector<const Sync::
       }
     }
   }
-  my_info->bind(w2,Machine::PTransition(tw.source,sw,tw.target,w2.pid));
+  my_info->bind(r2,Machine::PTransition(tr.source,sr,tr.target,r2.pid));
 
   return m2;
 };
 
-Sync *VipsSyncwrSync::clone() const{
-  return new VipsSyncwrSync(w);
+Sync *VipsSyncrdSync::clone() const{
+  return new VipsSyncrdSync(r);
 };
 
-std::string VipsSyncwrSync::to_raw_string() const{
+std::string VipsSyncrdSync::to_raw_string() const{
   return to_string_aux(Lang::int_reg_to_string(),Lang::int_memloc_to_string());
 };
 
-std::string VipsSyncwrSync::to_string(const Machine &m) const{
-  return to_string_aux(m.reg_pretty_vts(w.pid),m.ml_pretty_vts(w.pid));
+std::string VipsSyncrdSync::to_string(const Machine &m) const{
+  return to_string_aux(m.reg_pretty_vts(r.pid),m.ml_pretty_vts(r.pid));
 };
 
-std::string VipsSyncwrSync::to_string_aux(const std::function<std::string(const int&)> &regts,
+std::string VipsSyncrdSync::to_string_aux(const std::function<std::string(const int&)> &regts,
                                           const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const{
-  return "Make write into syncwr: "+w.to_string(regts,mlts)+"\n";
+  return "Make read into syncrd: "+r.to_string(regts,mlts)+"\n";
 };
 
-void VipsSyncwrSync::print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const{
+void VipsSyncrdSync::print_raw(Log::redirection_stream &os, Log::redirection_stream &json_os) const{
   os << to_raw_string() << "\n";
-  if(*os.os && w.instruction.get_pos().get_line_no() >= 0){
-    json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << w.instruction.get_pos().to_json() << "}\n";
+  if(*os.os && r.instruction.get_pos().get_line_no() >= 0){
+    json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << r.instruction.get_pos().to_json() << "}\n";
   }
 };
 
-void VipsSyncwrSync::print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const{
+void VipsSyncrdSync::print(const Machine &m, Log::redirection_stream &os, Log::redirection_stream &json_os) const{
   os << to_string(m);
-  if(*os.os && w.instruction.get_pos().get_line_no() >= 0){
-    json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << w.instruction.get_pos().to_json() << "}\n";
+  if(*os.os && r.instruction.get_pos().get_line_no() >= 0){
+    json_os << "json: {\"action\":\"Link Fence\", \"pos\":" << r.instruction.get_pos().to_json() << "}\n";
   }
 };
 
-int VipsSyncwrSync::compare(const Sync &s) const{
-  assert(dynamic_cast<const VipsSyncwrSync*>(&s));
-  const VipsSyncwrSync *ls = static_cast<const VipsSyncwrSync*>(&s);
+int VipsSyncrdSync::compare(const Sync &s) const{
+  assert(dynamic_cast<const VipsSyncrdSync*>(&s));
+  const VipsSyncrdSync *ls = static_cast<const VipsSyncrdSync*>(&s);
 
-  return w.compare(ls->w,false);
+  return r.compare(ls->r,false);
 };
 
-std::set<Sync*> VipsSyncwrSync::get_all_possible(const Machine &m){
+std::set<Sync*> VipsSyncrdSync::get_all_possible(const Machine &m){
   std::set<Sync*> S;
 
   for(unsigned p = 0; p < m.automata.size(); ++p){
     const std::vector<Automaton::State> &states = m.automata[p].get_states();
     for(unsigned i = 0; i < states.size(); ++i){
       for(auto it = states[i].fwd_transitions.begin(); it != states[i].fwd_transitions.end(); ++it){
-        if((*it)->instruction.get_type() == Lang::WRITE){
-          S.insert(new VipsSyncwrSync(Machine::PTransition(**it,p)));
+        if((*it)->instruction.get_type() == Lang::READASSERT ||
+           (*it)->instruction.get_type() == Lang::READASSIGN){
+          S.insert(new VipsSyncrdSync(Machine::PTransition(**it,p)));
         }
       }
     }
@@ -156,7 +169,7 @@ std::set<Sync*> VipsSyncwrSync::get_all_possible(const Machine &m){
   return S;
 };
 
-void VipsSyncwrSync::test(){
+void VipsSyncrdSync::test(){
   std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
     std::stringstream ss(rmm);
@@ -180,6 +193,10 @@ void VipsSyncwrSync::test(){
      "  y = *\n"
      "  z = *\n"
      "process\n"
+     "registers\n"
+     "  $r0 = *\n"
+     "  $r1 = *\n"
+     "  $r2 = *\n"
      "text\n"+instr);
     Lang::Stmt<int> stmt = (*m2->automata[0].get_states()[0].fwd_transitions.begin())->instruction;
     delete m2;
@@ -192,7 +209,7 @@ void VipsSyncwrSync::test(){
         return Machine::PTransition(**it,pid);
       }
     }
-    throw new std::logic_error("TsoSimpleFencer::test::trans: No such transition.");
+    throw new std::logic_error("trans: No such transition.");
   };
 
   std::function<int(const Machine*,int,std::string)> cs =
@@ -213,15 +230,15 @@ void VipsSyncwrSync::test(){
          "  z = *\n"
          "process\n"
          "text\n"
-         "  L0: write: x := 1;"
+         "  L0: read: x = 0;\n"
          "  L1: nop\n"
          "process\n"
          "text\n"
-         "  L0: syncwr: x := 1;"
+         "  L0: syncrd: x = 0;"
          "  L1: nop\n"
          );
 
-      VipsSyncwrSync vss(trans(m,0,"L0","write: x := 1","L1"));
+      VipsSyncrdSync vss(trans(m,0,"L0","read: x = 0","L1"));
 
       Sync::InsInfo *info;
       Machine *m2 = vss.insert(*m,std::vector<const Sync::InsInfo*>(),&info); delete info;
@@ -236,46 +253,26 @@ void VipsSyncwrSync::test(){
     /* Test 2 */
     {
       Machine *m = get_machine
-        ("forbidden * *\n"
-         "data\n"
-         "  x = *\n"
-         "  y = *\n"
-         "  z = *\n"
-         "process\n"
-         "text\n"
-         "either{\n"
-         "  nop;\n"
-         "  write: x := 1\n"
-         "or\n"
-         "  nop;\n"
-         "  write: y := 1\n"
-         "};\n"
-         "L0: either{\n"
-         "  write: x := 1;\n"
-         "  L1: nop\n"
-         "or\n"
-         "  write: x := 1;\n"
-         "  nop"
-         "}"
-         "process\n"
-         "text\n"
-         "either{\n"
-         "  nop;\n"
-         "  write: x := 1\n"
-         "or\n"
-         "  nop;\n"
-         "  write: y := 1\n"
-         "};\n"
-         "L0: either{\n"
-         "  syncwr: x := 1;\n"
-         "  L1: nop\n"
-         "or\n"
-         "  write: x := 1;\n"
-         "  nop"
-         "}"
-         );
+        (R"(
+forbidden * *
+data
+  x = *
+  y = *
+  z = *
+process
+registers
+  $r0 = *
+text
+  L0: read: $r0 := x;
+  L1: nop
+process
+registers
+  $r0 = *
+text
+  L0: syncrd: $r0 := x;
+  L1: nop)");
 
-      VipsSyncwrSync vss(trans(m,0,"L0","write: x := 1","L1"));
+      VipsSyncrdSync vss(trans(m,0,"L0","read: $r0 := x","L1"));
 
       Sync::InsInfo *info;
       Machine *m2 = vss.insert(*m,std::vector<const Sync::InsInfo*>(),&info); delete info;
@@ -287,7 +284,61 @@ void VipsSyncwrSync::test(){
       delete m2;
     }
 
-    /* Test 3,4,5: compatibility with VipsFenceSync */
+    /* Test 3 */
+    {
+      Machine *m = get_machine
+        ("forbidden * *\n"
+         "data\n"
+         "  x = *\n"
+         "  y = *\n"
+         "  z = *\n"
+         "process\n"
+         "text\n"
+         "either{\n"
+         "  nop;\n"
+         "  read: x = 1\n"
+         "or\n"
+         "  nop;\n"
+         "  read: y = 1\n"
+         "};\n"
+         "L0: either{\n"
+         "  read: x = 1;\n"
+         "  L1: nop\n"
+         "or\n"
+         "  read: x = 1;\n"
+         "  nop"
+         "}"
+         "process\n"
+         "text\n"
+         "either{\n"
+         "  nop;\n"
+         "  read: x = 1\n"
+         "or\n"
+         "  nop;\n"
+         "  read: y = 1\n"
+         "};\n"
+         "L0: either{\n"
+         "  syncrd: x = 1;\n"
+         "  L1: nop\n"
+         "or\n"
+         "  read: x = 1;\n"
+         "  nop"
+         "}"
+         );
+
+      VipsSyncrdSync vss(trans(m,0,"L0","read: x = 1","L1"));
+
+      Sync::InsInfo *info;
+      Machine *m2 = vss.insert(*m,std::vector<const Sync::InsInfo*>(),&info); delete info;
+
+      Test::inner_test("insert #3",
+                       m->automata[1].same_automaton(m2->automata[0],false));
+
+      delete m;
+      delete m2;
+    }
+
+    /* Test 4,5,6: compatibility with VipsFenceSync */
     {
       Machine *m = get_machine
         ("forbidden *\n"
@@ -299,16 +350,16 @@ void VipsSyncwrSync::test(){
          "text\n"
          "either{\n"
          "  nop;\n"
-         "  L0: write: x := 1\n"
+         "  L0: read: x = 1\n"
          "or\n"
          "  nop;\n"
-         "  L1: write: y := 1\n"
+         "  L1: read: y = 1\n"
          "};\n"
          "L2: either{\n"
-         "  write: x := 1;\n"
+         "  read: x = 1;\n"
          "  L3: nop\n"
          "or\n"
-         "  write: x := 1;\n"
+         "  read: x = 1;\n"
          "  L4: nop\n"
          "};\n"
          "L5: nop"
@@ -324,17 +375,17 @@ void VipsSyncwrSync::test(){
          "text\n"
          "either{\n"
          "  nop;\n"
-         "  L0: write: x := 1\n"
+         "  L0: read: x = 1\n"
          "or\n"
          "  nop;\n"
-         "  L1: write: y := 1\n"
+         "  L1: read: y = 1\n"
          "};\n"
          "fence;\n"
          "L2: either{\n"
-         "  syncwr: x := 1;\n"
+         "  syncrd: x = 1;\n"
          "  L3: nop\n"
          "or\n"
-         "  write: x := 1;\n"
+         "  read: x = 1;\n"
          "  L4: nop\n"
          "};\n"
          "L5: nop\n"
@@ -342,18 +393,18 @@ void VipsSyncwrSync::test(){
          "text\n"
          "either{\n"
          "  nop;\n"
-         "  L0: write: x := 1\n"
+         "  L0: read: x = 1\n"
          "or\n"
          "  nop;\n"
-         "  L1: write: y := 1\n"
+         "  L1: read: y = 1\n"
          "};\n"
          "fence;\n"
          "L2: either{\n"
-         "  syncwr: x := 1;\n"
+         "  syncrd: x = 1;\n"
          "  fence;\n"
          "  L3: nop\n"
          "or\n"
-         "  write: x := 1;\n"
+         "  read: x = 1;\n"
          "  L4: nop\n"
          "};\n"
          "L5: nop\n"
@@ -421,14 +472,14 @@ void VipsSyncwrSync::test(){
       };
 
       VipsFenceSync *vfs = get_vfs(m,0,"L2",
-                                   "(L0,write: x := 1,L2)\n(L1,write: y := 1,L2)",
-                                   "(L2,write: x := 1,L3)\n(L2,write: x := 1,L4)");
+                                   "(L0,read: x = 1,L2)\n(L1,read: y = 1,L2)",
+                                   "(L2,read: x = 1,L3)\n(L2,read: x = 1,L4)");
 
       VipsFenceSync *vfs2 = get_vfs(m,0,"L3",
-                                    "(L2,write: x := 1,L3)",
+                                    "(L2,read: x = 1,L3)",
                                     "(L3,nop,L5)");
 
-      VipsSyncwrSync vss(trans(m,0,"L2","write: x := 1","L3"));
+      VipsSyncrdSync vss(trans(m,0,"L2","read: x = 1","L3"));
 
       Sync::InsInfo *info;
       Machine *m3 = vfs->insert(*m,std::vector<const Sync::InsInfo*>(),&info);
@@ -436,7 +487,7 @@ void VipsSyncwrSync::test(){
 
       Machine *m4 = vss.insert(*m3,m_infos,&info); delete info;
 
-      Test::inner_test("insert #3",
+      Test::inner_test("insert #4",
                        m2->automata[0].same_automaton(m4->automata[0],false));
       for(unsigned i = 0; i < m_infos.size(); ++i){
         delete m_infos[i];
@@ -449,7 +500,7 @@ void VipsSyncwrSync::test(){
       m3 = vss.insert(*m,std::vector<const Sync::InsInfo*>(),&info);
       m_infos.push_back(info);
       m4 = vfs->insert(*m3,m_infos,&info); delete info;
-      Test::inner_test("insert #4",
+      Test::inner_test("insert #5",
                        m2->automata[0].same_automaton(m4->automata[0],false));
       for(unsigned i = 0; i < m_infos.size(); ++i){
         delete m_infos[i];
@@ -464,7 +515,7 @@ void VipsSyncwrSync::test(){
       m4 = vfs2->insert(*m3,m_infos,&info);
       m_infos.push_back(info);
       Machine *m5 = vss.insert(*m4,m_infos,&info); delete info;
-      Test::inner_test("insert #5",
+      Test::inner_test("insert #6",
                        m2->automata[1].same_automaton(m5->automata[0],false));
       for(unsigned i = 0; i < m_infos.size(); ++i){
         delete m_infos[i];
