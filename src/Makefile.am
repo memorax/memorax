@@ -37,6 +37,7 @@ sync.h sync.cpp \
 sync_set_printer.h sync_set_printer.cpp \
 syntax_string.tcc syntax_string.h \
 test.h test.cpp \
+test_vips_fencins.h test_vips_fencins.cpp \
 ticket_queue.h \
 timer.h timer.cpp \
 trace.cpp trace.h \

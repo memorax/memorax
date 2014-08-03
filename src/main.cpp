@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Carl Leonardsson
+ * Copyright (C) 2012, 2014 Carl Leonardsson
  *
  * This file is part of Memorax.
  *
@@ -36,6 +36,7 @@
 #include "shellcmd.h"
 #include "sync_set_printer.h"
 #include "test.h"
+#include "test_vips_fencins.h"
 #include "timer.h"
 #include "tso_fence_sync.h"
 #include "tso_fencins.h"
@@ -45,6 +46,7 @@
 #include "vips_bit_reachability.h"
 #include "vips_simple_fencer.h"
 #include "vips_syncwr_sync.h"
+#include "vips_syncrd_sync.h"
 #include "zstar.h"
 
 #include <cerrno>
@@ -306,23 +308,25 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       return 1;
     };
     if(flags.count("fence-cost")){
-      int full, ss, ll, syncwr;
+      int full, ss, ll, syncwr, syncrd;
       std::stringstream fcss(flags.find("fence-cost")->second.argument);
-      if(!(fcss >> full >> ss >> ll >> syncwr) || !fcss.eof() ||
-         full < 0 || ss < 0 || ll < 0 || syncwr < 0){
+      if(!(fcss >> full >> ss >> ll >> syncwr >> syncrd) || !fcss.eof() ||
+         full < 0 || ss < 0 || ll < 0 || syncwr < 0 || syncrd < 0){
         Log::warning << "Invalid cost specification given with flag --fence-cost.\n";
         return 1;
       }
-      cost = [full,ss,ll,syncwr](const Sync *s){
+      cost = [full,ss,ll,syncwr,syncrd](const Sync *s){
         if(dynamic_cast<const VipsFullFenceSync*>(s)){
           return full;
         }else if(dynamic_cast<const VipsSSFenceSync*>(s)){
           return ss;
         }else if(dynamic_cast<const VipsLLFenceSync*>(s)){
           return ll;
-        }else{
-          assert(dynamic_cast<const VipsSyncwrSync*>(s));
+        }else if(dynamic_cast<const VipsSyncwrSync*>(s)){
           return syncwr;
+        }else{
+          assert(dynamic_cast<const VipsSyncrdSync*>(s));
+          return syncrd;
         }
       };
     }
@@ -548,11 +552,11 @@ void print_help(int argc, char *argv[]){
             << "    --dismiss-fence <regex>\n"
             << "        For fence insertion, ignore all synchronizations that\n"
             << "        match <regex>. Uses ECMAScript regex syntax.\n"
-            << "    --fence-cost <int:a> <int:b> <int:c> <int:d>\n"
+            << "    --fence-cost <int:a> <int:b> <int:c> <int:d> <int:e>\n"
             << "        (only vips, minimality criterion cost)\n"
             << "        Instead of counting all kinds of fences as equally expensive,\n"
             << "        use cost <int:a> for full fences, <int:b> for ssfences,\n"
-            << "        <int:c> for llfences, and <int:d> for syncwrs.\n"
+            << "        <int:c> for llfences, <int:d> for syncwrs, and <int:e> for syncrds.\n"
             << "    --max-refinements <int>\n"
             << "        Perform at most <int> many refinements. (Used only in cegar.)\n"
             << "    --max-solutions <int>\n"
@@ -675,14 +679,14 @@ int main(int argc, char *argv[]){
           Log::warning << "Flag --fence-cost specified twice.\n";
           print_help(argc,argv);
           return 1;
-        }else if(i < argc-4){
+        }else if(i < argc-5){
           std::string args =
             std::string(argv[i+1])+" "+argv[i+2]+" "+
-            argv[i+3]+" "+argv[i+4];
+            argv[i+3]+" "+argv[i+4]+" "+argv[i+5];
           flags["fence-cost"] = Flag("fence-cost",argv[i],true,args);
-          i+=4; // Do not account for the next 4 argvs twice.
+          i+=5; // Do not account for the next 5 argvs twice.
         }else{
-          Log::warning << "--fence-cost must have 4 arguments.\n";
+          Log::warning << "--fence-cost must have 5 arguments.\n";
           print_help(argc,argv);
           return 1;
         }
@@ -833,6 +837,7 @@ int main(int argc, char *argv[]){
       Test::add_test("MinCoverage",MinCoverage::test);
       Test::add_test("SbTsoBwd",SbTsoBwd::test);
       Test::add_test("Test",Test::test_testing);
+      Test::add_test("TestVipsFencins",TestVipsFencins::test);
       Test::add_test("TsoFenceSync",TsoFenceSync::test);
       Test::add_test("TsoLockSync",TsoLockSync::test);
       Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
@@ -840,6 +845,7 @@ int main(int argc, char *argv[]){
       Test::add_test("VIPS-M Bit Reachability",VipsBitReachability::test);
       Test::add_test("VipsFenceSync",VipsFenceSync::test);
       Test::add_test("VipsSimpleFencer",VipsSimpleFencer::test);
+      Test::add_test("VipsSyncrdSync",VipsSyncwrSync::test);
       Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
       Test::add_test("ZStar",ZStar<int>::test);
       retval = Test::run_tests();

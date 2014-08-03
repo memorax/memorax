@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Carl Leonardsson
+ * Copyright (C) 2013, 2014 Carl Leonardsson
  *
  * This file is part of Memorax.
  *
@@ -24,6 +24,7 @@
 #include "trace_fencer.h"
 #include "vips_fence_sync.h"
 #include "vips_syncwr_sync.h"
+#include "vips_syncrd_sync.h"
 
 #include <map>
 
@@ -57,6 +58,7 @@ public:
 private:
   std::set<VipsFenceSync*> all_fences;
   std::set<VipsSyncwrSync*> all_syncwrs;
+  std::set<VipsSyncrdSync*> all_syncrds;
 
   /* For each process p with a control state q, fences_by_pq[p][q] is
    * the subset of all_fences corresponding to that process and
@@ -72,6 +74,13 @@ private:
    * The pointers point to the same objects as those in all_syncwrs.
    */
   std::vector<std::vector<std::set<VipsSyncwrSync*> > > syncwrs_by_pq;
+  /* For each process p with a control state q, syncrds_by_pq[p][q] is
+   * the subset of all_syncrds corresponding to that process and a
+   * write with source control state q.
+   *
+   * The pointers point to the same objects as those in all_syncrds.
+   */
+  std::vector<std::vector<std::set<VipsSyncrdSync*> > > syncrds_by_pq;
 
   /* Returns a map m such that for each transition index i into t,
    * m[i] is the synchronization point of t[i] in t.
@@ -145,6 +154,12 @@ private:
    * All returned syncs are pointers into all_syncwrs.
    */
   std::set<Sync*> fence_syncwr(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
+  /* Helper for fence(t,m_infos). Returns the syncs of
+   * fence(t,m_infos) that are VipsSyncrdSyncs.
+   *
+   * All returned syncs are pointers into all_syncrds.
+   */
+  std::set<Sync*> fence_syncrd(const Trace &t, const std::vector<const Sync::InsInfo*> &m_infos) const;
 
   /* Return a trace following the same path as t, but with all
    * synchronization described in m_infos removed.
