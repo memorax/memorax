@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2013 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -33,7 +33,7 @@ TsoFenceSync::InsInfo::~InsInfo() {};
 
 TsoFenceSync::TsoFenceSync(int pid, int q, TSet IN, TSet OUT)
   : FenceSync(Lang::Stmt<int>::nop(),pid,q,IN,OUT)
-{ 
+{
 };
 
 TsoFenceSync::~TsoFenceSync(){
@@ -53,7 +53,7 @@ Machine *TsoFenceSync::insert(const Machine &m, const std::vector<const Sync::In
    * temporary TsoFenceSync. */
   TsoFenceSync tfs(pid,q,IN,OUT);
   assert(m2->get_var_decl(nml).domain.is_finite());
-  assert(m2->get_var_decl(nml).domain.get_lower_bound() == 
+  assert(m2->get_var_decl(nml).domain.get_lower_bound() ==
          m2->get_var_decl(nml).domain.get_upper_bound());
   int val = m2->get_var_decl(nml).domain.get_lower_bound();
   tfs.f = Lang::Stmt<int>::locked_write(nml.localize(pid),
@@ -80,7 +80,7 @@ std::string TsoFenceSync::to_string(const Machine &m) const{
   return to_string_aux(m.reg_pretty_vts(pid),m.ml_pretty_vts(pid));
 };
 
-std::string TsoFenceSync::to_string_aux(const std::function<std::string(const int&)> &regts, 
+std::string TsoFenceSync::to_string_aux(const std::function<std::string(const int&)> &regts,
                                         const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const{
   std::stringstream ss;
   ss << "TsoFenceSync(P" << pid << ",Q" << q << ")\n";
@@ -104,7 +104,7 @@ void TsoFenceSync::print(const Machine &m, Log::redirection_stream &os, Log::red
             os,json_os);
 };
 
-void TsoFenceSync::print_aux(const std::function<std::string(const int&)> &regts, 
+void TsoFenceSync::print_aux(const std::function<std::string(const int&)> &regts,
                              const std::function<std::string(const Lang::MemLoc<int> &)> &mlts,
                              Log::redirection_stream &os, Log::redirection_stream &json_os) const{
   os << "TsoFenceSync(P" << pid << ",Q" << q << ")\n";
@@ -125,11 +125,11 @@ void TsoFenceSync::print_aux(const std::function<std::string(const int&)> &regts
 std::set<Sync*> TsoFenceSync::get_all_possible(const Machine &m){
   std::set<Lang::Stmt<int> > fs;
   fs.insert(Lang::Stmt<int>::nop()); // Does not matter
-  FenceSync::fs_init_t fsinit = 
+  FenceSync::fs_init_t fsinit =
     [](Lang::Stmt<int> f, int pid, int q, TSet IN, TSet OUT){
     return new TsoFenceSync(pid,q,IN,OUT);
   };
-  return FenceSync::get_all_possible(m,fs,fsinit);
+  return FenceSync::get_all_possible(m,fs,fsinit,false);
 };
 
 std::pair<Machine*,Lang::NML> TsoFenceSync::get_dummy_nml(const Machine &m, const std::vector<const Sync::InsInfo*> &m_infos){
@@ -137,7 +137,7 @@ std::pair<Machine*,Lang::NML> TsoFenceSync::get_dummy_nml(const Machine &m, cons
 
   /* Check m_infos */
   for(unsigned i = 0; i < m_infos.size(); ++i){
-    const TsoFenceSync::InsInfo *info = 
+    const TsoFenceSync::InsInfo *info =
       dynamic_cast<const TsoFenceSync::InsInfo*>(m_infos[i]);
     if(info){
       return std::pair<Machine*,Lang::NML>(m2,info->fence_nml);
@@ -173,7 +173,7 @@ std::pair<Machine*,Lang::NML> TsoFenceSync::get_dummy_nml(const Machine &m, cons
 
 void TsoFenceSync::test(){
 
-  std::function<Machine*(std::string)> get_machine = 
+  std::function<Machine*(std::string)> get_machine =
     [](std::string rmm){
     std::stringstream ss(rmm);
     PPLexer pp(ss);

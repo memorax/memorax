@@ -39,6 +39,7 @@ public:
    * VipsSimpleFencer::fence.
    */
   VipsSimpleFencer(const Machine &m,
+                   bool full_branch_only = false,
                    std::function<bool(const Sync*)> accept =
                    [](const Sync*){ return true; });
   VipsSimpleFencer(const VipsSimpleFencer&) = default;
