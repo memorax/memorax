@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -32,19 +32,20 @@ public:
   virtual ~Lexer();
 
   enum TokenType {
-    UNDEF, 
-    TOKEOF, 
+    UNDEF,
+    TOKEOF,
     ID,
     REG,
     NAT,
-    
+
     IF, THEN, ELSE, WHILE, DO, READ, WRITE, LOCKED, CAS, GOTO,
     TRUE, FALSE, MY, ME, OTHER, PROCESS, NOT, NOP, TEXT, DATA,
-    EITHER, EITHER_OR /* 'or' in an either clause */, 
-    ASSUME, FORBIDDEN, PREDICATES, REGISTERS,
+    EITHER, EITHER_OR /* 'or' in an either clause */,
+    ASSUME, FORBIDDEN, PREDICATES, REGISTERS, SYNCWR, FENCE,
+    SSFENCE, LLFENCE, SYNCRD,
 
     EQ, LPAREN, RPAREN, COMMA, MINUS, STAR, SEMICOLON, COLON,
-    ASSIGNMENT, LCURL, RCURL, OR, AND, NEQ, LT, GT, LEQ, GEQ, 
+    ASSIGNMENT, LCURL, RCURL, OR, AND, NEQ, LT, GT, LEQ, GEQ,
     PLUS, LBRAK, RBRAK, AT
   };
 
@@ -80,11 +81,11 @@ public:
     std::string to_short_line_string() const;
     std::string to_long_string() const;
     std::string to_json() const;
-    int get_line_no() const { 
+    int get_line_no() const {
       if(pos.size()) return pos[0].lineno;
       return -1;
     };
-    int get_char_no() const { 
+    int get_char_no() const {
       if(pos.size()) return pos[0].charno;
       return -1;
     };

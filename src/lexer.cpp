@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -71,6 +71,11 @@ Lexer::Lexer(std::istream &i) : is(i), eof(false) {
   reserved_names["do"] = DO;
   reserved_names["read"] = READ;
   reserved_names["write"] = WRITE;
+  reserved_names["syncwr"] = SYNCWR;
+  reserved_names["syncrd"] = SYNCRD;
+  reserved_names["fence"] = FENCE;
+  reserved_names["ssfence"] = SSFENCE;
+  reserved_names["llfence"] = LLFENCE;
   reserved_names["locked"] = LOCKED;
   reserved_names["cas"] = CAS;
   reserved_names["goto"] = GOTO;
@@ -163,6 +168,11 @@ std::string Lexer::token_type_to_string(TokenType typ){
   case DO: return "do";
   case READ: return "read";
   case WRITE: return "write";
+  case SYNCWR: return "syncwr";
+  case SYNCRD: return "syncrd";
+  case FENCE: return "fence";
+  case SSFENCE: return "ssfence";
+  case LLFENCE: return "llfence";
   case LOCKED: return "locked";
   case CAS: return "cas";
   case GOTO: return "goto";
@@ -211,9 +221,9 @@ std::string Lexer::token_type_to_string(TokenType typ){
 
 std::string Lexer::Token::to_string() const{
   switch(type){
-  case ID: 
-  case REG: 
-  case NAT: 
+  case ID:
+  case REG:
+  case NAT:
     return token_type_to_string(type)+"("+value+") @"+pos.to_short_string();
   default: return token_type_to_string(type)+" @"+pos.to_short_string();
   }
@@ -288,15 +298,15 @@ Lexer::Token Lexer::read_name(){
   std::string s = "";
   TokenPos p = is.pos();
   char c = is.get();
-  
+
   while((isalnum(c) || c == '_') && is.good()){
     s += c;
     c = is.get();
   }
-  
+
   if(is.good() && s.length() > 0)
     is.putback(c);
-  
+
   if(s.length() == 0){
     if(is.good()){
       throw new BadToken(std::string(1,c),p);
@@ -318,7 +328,7 @@ Lexer::Token Lexer::read_name(){
 Lexer::Token Lexer::read_reg(){
   TokenPos p = is.pos();
   char c = is.get();
-  
+
   if(is.good() && c == '$'){
     Token tok = read_name();
     tok.type = REG;
@@ -354,7 +364,7 @@ Lexer::Token Lexer::read_op(){
   TokenPos p = is.pos();
   char c = '='; // '=' used as dummy operator character
 
-  int match_len = -1;  
+  int match_len = -1;
   while(s.length() < op_max_len && is.good() && !isalnum(c) && !isspace(c) && c != '_'){
     c = is.get();
     if(is.good())

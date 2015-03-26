@@ -1,19 +1,19 @@
 #! %%PYTHON%%
 
-## Copyright (C) 2012 Carl Leonardsson
-## 
+## Copyright (C) 2012, 2013 Carl Leonardsson
+##
 ## This file is part of Memorax.
 ##
 ## Memorax is free software: you can redistribute it and/or modify it
 ## under the terms of the GNU General Public License as published by
 ## the Free Software Foundation, either version 3 of the License, or
 ## (at your option) any later version.
-## 
+##
 ## Memorax is distributed in the hope that it will be useful, but WITHOUT
 ## ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 ## or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
 ## License for more details.
-## 
+##
 ## You should have received a copy of the GNU General Public License
 ## along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -27,7 +27,7 @@ import thread
 import json
 import os
 
-class MainWindow:        
+class MainWindow:
 
     class Conf:
         # The configuration file
@@ -285,12 +285,12 @@ CS:\n\
         self.wg_command_bottom_frame.pack(side=Tkinter.BOTTOM)
         self.verbosity_sel = Tkinter.StringVar()
         self.verbosity_sel.set("Messages")
-        self.wg_verbosity_frame = Tkinter.Frame(self.wg_command_bottom_frame,bg=self.bg_colour)
+        self.wg_verbosity_frame = Tkinter.LabelFrame(self.wg_command_bottom_frame,bg=self.bg_colour,
+                                                     text="Verbosity level")
         self.wg_verbosity_frame.pack(side=Tkinter.LEFT)
-        Tkinter.Label(self.wg_verbosity_frame,text="Verbosity level:",bg=self.bg_colour).pack(side=Tkinter.TOP)
         self.wg_verbosity_sel = Tkinter.OptionMenu(self.wg_verbosity_frame,self.verbosity_sel,
                                                    "Only Results","Messages","Debug","Extreme")
-        self.wg_verbosity_sel.pack(side=Tkinter.BOTTOM)
+        self.wg_verbosity_sel.pack(side=Tkinter.BOTTOM,fill=Tkinter.X)
         self.set_hint(self.wg_verbosity_sel,
                       "Specify the level of verbosity of the output.")
         self.wg_interrupt_btn = Tkinter.Button(self.wg_command_bottom_frame,text="Break",
@@ -305,6 +305,10 @@ CS:\n\
         self.abs_sel.set("sb")
         self.cegar_check = Tkinter.IntVar() # Checks whether or not to use CEGAR
         self.cegar_check.set(True)
+        self.only_one_check = Tkinter.IntVar() # Checks whether or not to send --only-one flag to fencins
+        self.only_one_check.set(False)
+        self.fmin_sel = Tkinter.StringVar() # Fencins minimality criterion
+        self.fmin_sel.set("cost")
         self.rff_check = Tkinter.IntVar() # Checks whether or not to use register free form
         self.rff_check.set(True)
 
@@ -380,7 +384,6 @@ CS:\n\
                 self.pwarning("Ignoring command line arguments:\n")
                 for a in sys.argv[2:]:
                     self.pwarning("  {0}\n".format(a))
-            
 
     def code_event(self,evt):
         self.show_filename()
@@ -467,7 +470,7 @@ CS:\n\
 
     def poutput_version(self):
         v = """%%GUI_STRING%%
-Copyright (C) 2012 Carl Leonardsson
+Copyright (C) 2012, 2013 Carl Leonardsson
 This program comes with ABSOLUTELY NO WARRANTY. This is free software and you
 are welcome to redistribute it under certain conditions. See the full text of
 the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
@@ -489,9 +492,6 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
 
     def get_code_filename(self):
         return self.code_filename
-
-    def shortcut(self,evt):
-        print "shortcut \\o/"
 
     def quit(self):
         self.cleanup()
@@ -606,6 +606,12 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
             self.set_hint(self.wg_abs_sel_sb,
                           "Abstraction SB:\nExact analysis using the WQO framework over the SB semantic.\n"+
                           "Memory model: TSO (SB)\nIntegers: Bounded")
+            self.wg_abs_sel_vips = Tkinter.Radiobutton(self.wg_abs_sel_frame,text="VIPS-M",variable=self.abs_sel,value="vips",
+                                                       bg=self.bg_colour,command=self.select_abstraction_from_wg)
+            self.wg_abs_sel_vips.pack(side=Tkinter.LEFT)
+            self.set_hint(self.wg_abs_sel_vips,
+                          "Abstraction VIPS-M:\nExplicit state forward analysis. Sound and complete.\n"+
+                          "Memory model: VIPS-M\nIntegers: Bounded")
             self.wg_rff_check = Tkinter.Checkbutton(self.wg_command_inner_frame,text="Register Free Form",variable=self.rff_check,
                                                     bg=self.bg_colour)
             self.set_hint(self.wg_rff_check,
@@ -620,8 +626,23 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
             self.set_hint(self.wg_cegar_check,
                           "Use CEGAR for predicate abstraction?\nOtherwise find predicates in RMM code branch conditions.")
             self.wg_cegar_check.pack(side=Tkinter.RIGHT)
-            self.command_sel_widgets = [self.wg_abs_sel_frame, self.wg_abs_sel_pb, self.wg_abs_sel_sb,
+            self.command_sel_widgets = [self.wg_abs_sel_frame, self.wg_abs_sel_pb, self.wg_abs_sel_sb, self.wg_abs_sel_vips,
                                         self.wg_command_inner_frame,self.wg_cegar_check,self.wg_rff_check]
+            if cmd == "fencins":
+                self.wg_only_one_check = Tkinter.Checkbutton(self.wg_command_inner_frame,text="Only One",variable=self.only_one_check,
+                                                             bg=self.bg_colour)
+                self.set_hint(self.wg_only_one_check,
+                              "Stop fence set search when the first satisfactory set is discovered.")
+                self.wg_only_one_check.pack(side=Tkinter.RIGHT)
+                self.command_sel_widgets.append(self.wg_only_one_check)
+                self.wg_fmin_frame = Tkinter.LabelFrame(self.wg_command_inner_frame,bg=self.bg_colour,
+                                                        text="Minimality Criterion")
+                self.wg_fmin_frame.pack(side=Tkinter.RIGHT)
+                self.wg_fmin_sel = Tkinter.OptionMenu(self.wg_fmin_frame,self.fmin_sel,
+                                                      "subset","cost","cheap")
+                self.command_sel_widgets.append(self.wg_fmin_sel)
+                self.update_fmin_sel()
+                self.command_sel_widgets.append(self.wg_fmin_frame)
         elif cmd == "dotify":
             self.wg_dotify_frame = Tkinter.Frame(self.wg_command_mid_frame,bg=self.bg_colour)
             self.wg_dotify_frame.pack()
@@ -687,11 +708,47 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
     def abstraction_has_cegar(self,abs):
         return (abs == "pb")
 
+    def abstraction_fmins(self,abs):
+        if abs == "sb" or abs == "pb":
+            return ["subset","cost","cheap"]
+        else:
+            return ["subset","cost"]
+
+    def abstraction_default_fmin(self,abs):
+        return "cost"
+
     def select_abstraction_from_wg(self):
         if self.abstraction_has_cegar(self.abs_sel.get()):
             self.wg_cegar_check.config(state=Tkinter.NORMAL)
         else:
             self.wg_cegar_check.config(state=Tkinter.DISABLED)
+        self.update_fmin_sel()
+
+    def fmin_sel_hint(self,fmins):
+        hint = "Minimality Criterion for Fence Sets"
+        hs = {
+            'subset':"Subset: Sets should be subset minimal.",
+            'cost':"Cost: Sets should have minimal cardinality.",
+            'cheap':"Cheap: Cheaper fencins which may give suboptimal fence sets, but usually gives subset minimal sets."
+            }
+        for m in fmins:
+            if m in hs.keys():
+                hint+="\n"+hs[m]
+            else:
+                hint+="\n"+m
+        return hint
+
+    def update_fmin_sel(self):
+        if hasattr(self,'wg_fmin_sel') and (self.wg_fmin_sel in self.command_sel_widgets):
+            self.command_sel_widgets.remove(self.wg_fmin_sel)
+            self.wg_fmin_sel.destroy()
+            fmins = self.abstraction_fmins(self.abs_sel.get())
+            if not(self.fmin_sel.get() in fmins):
+                self.fmin_sel.set(self.abstraction_default_fmin(self.abs_sel.get()))
+            self.wg_fmin_sel = Tkinter.OptionMenu(self.wg_fmin_frame,self.fmin_sel,*fmins)
+            self.wg_fmin_sel.pack(side=Tkinter.BOTTOM,fill=Tkinter.X)
+            self.set_hint(self.wg_fmin_sel,self.fmin_sel_hint(fmins))
+            self.command_sel_widgets.append(self.wg_fmin_sel)
 
     def async_output(self,prog,on_done=None):
         self.inc_subthread_count()
@@ -859,8 +916,11 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                 self.run_and_output(cmd,input=rmm_code)
             elif self.commands[self.command_sel.get()] == "fencins":
                 cmd = self.conf.binary+" fencins --json"+verb+rff+" --abstraction "+self.abs_sel.get()
+                cmd += " --fencins-minimality "+self.fmin_sel.get()
                 if self.cegar_check.get() and self.wg_cegar_check["state"] == Tkinter.NORMAL:
                     cmd += " --cegar"
+                if self.only_one_check.get():
+                    cmd += " --max-solutions 1"
                 self.run_and_output(cmd,input=rmm_code)
             elif self.commands[self.command_sel.get()] == "dotify":
                 output = self.wg_dotify_output.get()
@@ -899,7 +959,7 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         for t in self.wg_code.tag_names():
             if t.startswith("error_tag"):
                 self.wg_code.tag_delete(t)
- 
+
     def link_fence(self,pos,line,do_update):
         self.fence_links.append({'pos':pos,
                                  'output_line':line
@@ -935,6 +995,14 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         while(s[c] == ' '):
             c = c + 1
         ln = "L{0}".format(pos['lineno'])
+        # Try to find the next occurence of ln in s
+        d = c
+        while(d < len(s) and not(s.startswith(ln,d))):
+            d = d + 1
+        if d < len(s):
+            # There was a next occurence, then skip until that occurence.
+            # Otherwise start from the first non-space character.
+            c = d
         pos0 = "{0}.{1}".format(lnk['output_line'],c)
         try:
             if(s[c:c+len(ln)] == ln):

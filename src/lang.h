@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -460,9 +460,24 @@ namespace Lang {
     READASSERT,
     /* Assigning read: read: reg := reads[0] */
     READASSIGN,
+    /* Synchronized blocking read: syncrd: reads[0] = e0
+     * Used in VIPS-M. */
+    SYNCRDASSERT,
+    /* Synchronized assigning read: syncrd: reg := reads[0]
+     * Used in VIPS-M. */
+    SYNCRDASSIGN,
     /* Write: write: writes[0] := e0 */
     WRITE,
-    /* Locked block: 
+    /* Synchronized Write: syncwr: writes[0] := e0
+     * Used in VIPS-M. */
+    SYNCWR,
+    /* Fence: A full memory fence. Used in particular in VIPS-M. */
+    FENCE,
+    /* SSFence: A memory fence that enforces W->W order. */
+    SSFENCE,
+    /* LLFence: A memory fence that enforces R->R order. */
+    LLFENCE,
+    /* Locked block:
      * locked {
      *   stmts[0]
      * or
@@ -470,7 +485,7 @@ namespace Lang {
      * or
      *   stmts[stmt_count-1]
      * }
-     * Invariant: 
+     * Invariant:
      *   No labels occur in stmts.
      *   The only kinds statements which may occur in stmts are
      *   nop, assignment, assume, readassert, readassign, write, locked, sequence
@@ -481,6 +496,21 @@ namespace Lang {
     /* Update: An update concerning memory location writes[0], and a
      * write performed by process writer. */
     UPDATE,
+    /* Fetch: The value of memory location writes[0] is fetched from
+     * memory to local storage. For VIPS-M, the data is fetched into
+     * L1.
+     */
+    FETCH,
+    /* Evict: The locally stored value of memory location writes[0] is
+     * removed from local storage. For VIPS-M, the data is removed
+     * from L1.
+     */
+    EVICT,
+    /* WrLLC: The memory is updated with the locally stored value of
+     * memory location writes[0]. For VIPS-M, the dirty value of
+     * writes[0] in L1 is written to memory.
+     */
+    WRLLC,
     /* If statement:
      * If stmt_count == 1 then: if b then stmts[0]
      * If stmt_count == 2 then: if b then stmts[0] else stmts[1]
@@ -488,10 +518,10 @@ namespace Lang {
     IF,
     /* While statement: while b do stmts[0] */
     WHILE,
-    /* Either statement: 
+    /* Either statement:
      * either{
      *   stmts[0]
-     * or 
+     * or
      *   ...
      * or
      *   stmts[stmt_count-1]
@@ -521,23 +551,50 @@ namespace Lang {
     Stmt &operator=(const Stmt&); // Deep copy
     virtual ~Stmt() throw();
     /* Nop */
-    static Stmt<RegId> nop(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    static Stmt<RegId> nop(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                           std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Assignment: reg := e */
     static Stmt<RegId> assignment(RegId reg, const Expr<RegId> &e,
-                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Assume: assume: b */
     static Stmt<RegId> assume(const BExpr<RegId> &b,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Blocking read: read: ml = e */
     static Stmt<RegId> read_assert(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                   std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Assigning read: read: reg := ml */
     static Stmt<RegId> read_assign(RegId reg, MemLoc<RegId> ml,
-                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                   std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Synchronized blocking read: syncrd: ml = e */
+    static Stmt<RegId> syncrd_assert(MemLoc<RegId> ml, const Expr<RegId> &e,
+                                     const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                     std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Synchronized assigning read: syncrd: reg := ml */
+    static Stmt<RegId> syncrd_assign(RegId reg, MemLoc<RegId> ml,
+                                     const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                     std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Non-locked write: write: ml := e */
     static Stmt<RegId> write(MemLoc<RegId> ml, const Expr<RegId> &e,
-                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
-    /* Locked block: 
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Synchronized write: syncwr: ml := e */
+    static Stmt<RegId> syncwr(MemLoc<RegId> ml, const Expr<RegId> &e,
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Full memory fence */
+    static Stmt<RegId> full_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Memory fence enforcing W->W order. */
+    static Stmt<RegId> ss_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Memory fence enforcing R->R order. */
+    static Stmt<RegId> ll_fence(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Locked block:
      * locked{
      *   ss[0]
      * or
@@ -552,19 +609,23 @@ namespace Lang {
      * ss.size() > 0
      */
     static Stmt<RegId> locked_block(const std::vector<Stmt> &ss,
-                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                    std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Locked write: locked write: ml := e */
     static Stmt<RegId> locked_write(MemLoc<RegId> ml, const Expr<RegId> &e,
-                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                    std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Cas: cas(ml,e0,e1) */
     static Stmt<RegId> cas(MemLoc<RegId> ml, const Expr<RegId> &e0, const Expr<RegId> &e1,
-                           const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                           const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                           std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Goto: goto lbl */
     static Stmt<RegId> goto_stmt(label_t lbl,
-                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                 std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Update: An update concerning memory locations mls, and a
-     * write performed by process writer. 
-     * 
+     * write performed by process writer.
+     *
      * Memory locations in mls should be from the perspective of the
      * owner of the update, not from the process writer (unless the
      * owner and the writer are the same).
@@ -575,7 +636,20 @@ namespace Lang {
      * SB.
      */
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* A fetch concerning the memory location ml. */
+    static Stmt<RegId> fetch(MemLoc<RegId> ml,
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* An evict concerning the memory location ml. */
+    static Stmt<RegId> evict(MemLoc<RegId> ml,
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* The local value of ml (in L1) is written to memory. */
+    static Stmt<RegId> wrllc(MemLoc<RegId> ml,
+                             const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                             std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Type of a labeled statement. */
     struct labeled_stmt_t{
       labeled_stmt_t() : lbl(""), stmt() {};
@@ -584,26 +658,32 @@ namespace Lang {
       label_t lbl; // lbl == "" represents an unlabeled statement
       Stmt<RegId> stmt;
       /* Defines a total order over labeled statements.
-       * 
+       *
        * Returns 0 if *this is equal to lstmt, -1 if *this is smaller
        * than lstmt and 1 if *this is greater than lstmt.
+       *
+       * If cmp_pos, then the source code position of the statements are
+       * compared as well, otherwise the position is ignored.
        */
-      int compare(const labeled_stmt_t &lstmt) const throw();
+      int compare(const labeled_stmt_t &lstmt,bool cmp_pos) const throw();
     };
     /* If statement: if b then s */
     static Stmt<RegId> if_stmt(const BExpr<RegId> &b,
                                const labeled_stmt_t &s,
-                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* If statement: if b then s0 else s1 */
     static Stmt<RegId> if_stmt(const BExpr<RegId> &b,
                                const labeled_stmt_t &s0,
                                const labeled_stmt_t &s1,
-                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* While statement: while b do s */
     static Stmt<RegId> while_stmt(const BExpr<RegId> &b,
                                   const labeled_stmt_t &s,
-                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
-    /* Either statement: 
+                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                  std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Either statement:
      * either{
      *   ss[0]
      * or
@@ -611,14 +691,16 @@ namespace Lang {
      * or
      *   ss[ss.size()-1]
      * }
-     * 
+     *
      * Pre: ss.size() > 0
      */
     static Stmt<RegId> either(const std::vector<Stmt> &ss,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Sequence statement: { ss[0], ..., ss[ss.size()-1] } */
     static Stmt<RegId> sequence(const std::vector<labeled_stmt_t> &ss,
-                                const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+                                const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                                std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
 
     /**********************************
      *          Getters               *
@@ -690,7 +772,7 @@ namespace Lang {
      * been replaced by the register rc(r) and the memory location
      * mlc(ml).
      */
-    template<class RegId2> Stmt<RegId2> 
+    template<class RegId2> Stmt<RegId2>
     convert(std::function<RegId2(const RegId&)> &rc,
             std::function<MemLoc<RegId2>(const MemLoc<RegId>&)> &mlc) const;
     /* Returns an Stmt equal to this one, but if this Stmt is a locked
@@ -707,7 +789,7 @@ namespace Lang {
      */
     Stmt flatten() const;
     /* Returns a string representation of this statement.
-     * 
+     *
      * Registers r and memory locations ml will be represented with
      * respectively regts(r) and mlts(ml).
      *
@@ -718,7 +800,7 @@ namespace Lang {
      * If label != "" then the statement will be labeled by label in
      * the representation.
      */
-    std::string to_string(const std::function<std::string(const RegId&)> &regts, 
+    std::string to_string(const std::function<std::string(const RegId&)> &regts,
                           const std::function<std::string(const MemLoc<RegId> &)> &mlts,
                           int indentation = -1,std::string label = "") const;
 
@@ -727,8 +809,11 @@ namespace Lang {
      * Returns 0 iff this <= stmt and stmt <= this
      * Otherwise returns -1 iff this <= stmt and
      * returns 1 iff stmt <= this.
+     *
+     * If cmp_pos, then the source code position of the statements are
+     * compared as well, otherwise the position is ignored.
      */
-    int compare(const Stmt &stmt) const throw();
+    int compare(const Stmt &stmt,bool cmp_pos = true) const throw();
     bool operator==(const Stmt &stmt) const throw() { return compare(stmt) == 0; };
     bool operator<(const Stmt &stmt) const throw() { return compare(stmt) < 0; };
     bool operator>(const Stmt &stmt) const throw() { return compare(stmt) > 0; };
@@ -752,10 +837,21 @@ namespace Lang {
      * then *ss is assigned some substatement that satisfies f.
      */
     bool find_substmt(std::function<bool(const Stmt<RegId>&)> &f,Stmt *ss = 0) const throw();
+    /* Set the sequence of lexer symbols associated with this
+     * statement to symbs. The sequence should be the tokens that were
+     * parsed to produce this statement.
+     */
+    void set_lex_symbols(std::vector<Lexer::Token> symbs) { lex_symbols = symbs; };
+    /* Get the sequence of lexer symbols associtaed with this
+     * statement. If no sequence has been associated with this
+     * statement, an empty vector is returned.
+     */
+    const std::vector<Lexer::Token> &get_lex_symbols() const { return lex_symbols; };
   private:
     /* Creates a nop statement .
      * Sets all fields to default values. */
-    Stmt(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    Stmt(const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+         std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
 
     stmt_t type;
     /* Fields used by the different types of statements.
@@ -782,6 +878,10 @@ namespace Lang {
     /* The position in the source code at which this statement occurs.
      * (Defaults to (-1,-1) if no position is given.) */
     Lexer::TokenPos pos;
+    /* An empty vector, or the sequence of tokens that were parsed to
+     * produce this statement.
+     */
+    std::vector<Lexer::Token> lex_symbols;
 
     template<class RegId2> friend class Stmt;
 

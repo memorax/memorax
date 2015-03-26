@@ -1,18 +1,18 @@
 /*
  * Copyright (C) 2012 Carl Leonardsson
- * 
+ *
  * This file is part of Memorax.
  *
  * Memorax is free software: you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Memorax is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
  * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
  * License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
@@ -21,12 +21,15 @@
 #ifndef __TSO_FENCINS_H__
 #define __TSO_FENCINS_H__
 
-#include <list>
 #include "automaton.h"
 #include "machine.h"
 #include "reachability.h"
+#include "tso_lock_sync.h"
 #include "trace.h"
 #include "tso_cycle.h"
+
+#include <list>
+#include <set>
 
 namespace TsoFencins{
 
@@ -92,10 +95,14 @@ namespace TsoFencins{
 
     /* Returns true iff the W of fs is a subset of the W of this. */
     bool includes(const FenceSet &fs) const;
+
+    /* Returns a set of TsoLockSyncs corresponding to the same set of
+     * writes as this FenceSet. */
+    std::set<Sync*> to_sync_set() const;
   private:
     /* Non-atomized machine M */
     Machine machine;
-    /* Atomized machine 
+    /* Atomized machine
      * Same as M, but with each write in writes made locked. */
     Machine atomized_machine;
     /* The set W of non-locked writes that should be made locked.
@@ -122,8 +129,8 @@ namespace TsoFencins{
    * analysis.
    */
   typedef std::function<Reachability::Arg*(const Machine&,const Reachability::Result*)> reach_arg_init_t;
-  std::list<FenceSet> fencins(const Machine &m, 
-                              Reachability &r, 
+  std::list<FenceSet> fencins(const Machine &m,
+                              Reachability &r,
                               reach_arg_init_t reach_arg_init,
                               bool only_one = true);
 
@@ -150,7 +157,7 @@ namespace TsoFencins{
   /* Returns a non-empty set of transitions w. For each such w, there
    * is a transition r such that (w,r) is a critical pair of cycle,
    * and cycle can be opened by a reordering of w and r.
-   * 
+   *
    * (Note that not all such w are guaranteed to be returned.)
    */
   std::set<Machine::PTransition>
@@ -190,7 +197,7 @@ namespace TsoFencins{
   bool fence_between(const Trace &trace, const Machine &m, int wi, int ri);
 
   /* Returns the index i, such that trace[i] == t.
-   * 
+   *
    * Pre: There is an index i such that trace[i] == t.
    */
   int index(const Trace &trace, const Machine::PTransition *t);
@@ -204,7 +211,7 @@ namespace TsoFencins{
    * index or committed_index in trace of any transition in cycle.
    */
   std::pair<int,int> get_cycle_bounds(const cycle_t &cycle, const Trace &trace);
-  
+
 };
 
 #endif
