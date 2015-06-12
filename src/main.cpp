@@ -43,9 +43,9 @@
 #include "sb_constraint.h"
 #include "channel_container.h"
 #include "sb_tso_bwd.h"
-#include "pws_constraint.h"
-#include "pws_container.h"
-#include "pws_pso_bwd.h"
+#include "hsb_constraint.h"
+#include "hsb_container.h"
+#include "hsb_pso_bwd.h"
 #include "test.h"
 #include "zstar.h"
 #include <config.h>
@@ -84,15 +84,15 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
  * If flags["rff"], then convert the machine to register free form
  * before returning it.
  *
- * If flags["a"].argument is "pws", additionaly convert locks to
+ * If flags["a"].argument is "hsb", additionaly convert locks to
  * fences before returning.
  */
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
   PPLexer lex(input_stream);
   std::unique_ptr<Machine> machine(new Machine(Parser::p_test(lex)));
 
-  std::set<std::string> abstractions_requiring_fences{"pws"};
-  std::set<std::string> finite_bounds{"sb", "pws"};
+  std::set<std::string> abstractions_requiring_fences{"hsb"};
+  std::set<std::string> finite_bounds{"sb", "hsb"};
   int reg_count = 0;
   for (const auto &pregs : machine->regs) reg_count += pregs.size();
 
@@ -243,13 +243,13 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     fence_sets = TsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
     print_fence_sets(*machine,fence_sets);
     retval = 0;
-  }else if(flags.find("a")->second.argument == "pws"){
+  }else if(flags.find("a")->second.argument == "hsb"){
     std::list<PsoFencins::FenceSet> fence_sets;
-    PwsPsoBwd reach;
+    HsbPsoBwd reach;
     TsoFencins::reach_arg_init_t arg_init =
       [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
-      PwsConstraint::Common *common = new PwsConstraint::Common(m);
-      return new ExactBwd::Arg(m,common->get_bad_states(),common,new PwsContainer());
+      HsbConstraint::Common *common = new HsbConstraint::Common(m);
+      return new ExactBwd::Arg(m,common->get_bad_states(),common,new HsbContainer());
     };
     fence_sets = PsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
     print_fence_sets(*machine,fence_sets);
@@ -330,10 +330,10 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
     reach = new SbTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new ChannelContainer());
-  }else if(flags.find("a")->second.argument == "pws"){
-    PwsConstraint::Common *common = new PwsConstraint::Common(*machine);
-    reach = new PwsPsoBwd();
-    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new PwsContainer());
+  }else if(flags.find("a")->second.argument == "hsb"){
+    HsbConstraint::Common *common = new HsbConstraint::Common(*machine);
+    reach = new HsbPsoBwd();
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new HsbContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
@@ -447,8 +447,8 @@ void print_help(int argc, char *argv[]){
             << "      The Single Buffer model.\n"
             << "      Equivalent to TSO w.r.t. control state reachability.\n"
             << "      Sound and complete for finite data domains.\n"
-            << "    pws\n"
-            << "      The Partial Write Serialisation model.\n"
+            << "    hsb\n"
+            << "      The Hierarchy Single Buffer model.\n"
             << "      Equivalent to PSO w.r.t. control state reachability.\n"
             << "      Sound and complete for finite data domains.\n";
 }
@@ -554,7 +554,7 @@ int main(int argc, char *argv[]){
           return 1;
         }else if(i < argc-1){
           if(argv[i+1] == std::string("sb") ||
-             argv[i+1] == std::string("pws") ||
+             argv[i+1] == std::string("hsb") ||
              argv[i+1] == std::string("pb")){
             flags["a"] = Flag("a",argv[i],true,argv[i+1]);
             i++;
@@ -629,7 +629,7 @@ int main(int argc, char *argv[]){
     case TEST:
       Test::add_test("Test",Test::test_testing);
       Test::add_test("ZStar",ZStar<int>::test);
-      Test::add_test("PwsConstraint",PwsConstraint::test);
+      Test::add_test("HsbConstraint",HsbConstraint::test);
       retval = Test::run_tests();
       break;
     default: 

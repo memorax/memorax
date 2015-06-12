@@ -18,8 +18,8 @@
  *
  */
 
-#ifndef __PWS_CONSTRAINT_H__
-#define __PWS_CONSTRAINT_H__
+#ifndef __HSB_CONSTRAINT_H__
+#define __HSB_CONSTRAINT_H__
 
 #include "sb_constraint.h"
 #include "machine.h"
@@ -27,7 +27,7 @@
 #include "zstar.h"
 #include <sstream>
 
-class PwsConstraint : public ChannelConstraint{
+class HsbConstraint : public ChannelConstraint{
 private:
   typedef ZStar<int> value_t;
   typedef ZStar<int>::Vector Store;
@@ -37,7 +37,7 @@ public:
   public:
     Common(const Machine &);
     virtual std::string to_string() const {
-      return "<PwsConstraint::Common>";
+      return "<HsbConstraint::Common>";
     };
     /* Constructs and returns a list of bad states based on the
      * machine and possible initial messages in the channel. */
@@ -103,16 +103,16 @@ public:
      * Pre: trans only writes a single memory location. */
     inline value_t value_of_write(const Machine::PTransition &trans) const;
 
-    friend class PwsConstraint;
-    friend class PwsPsoBwd;
+    friend class HsbConstraint;
+    friend class HsbPsoBwd;
   };
   /* Constructs a constraint where process pid is at control state
    * pcs[pid], all registers and memory locations are unrestricted,
    * and the channel consists of exactly one message with an
    * unrestricted memory snapshot and writer and written memory
    * locations as specified by msg. */
-  PwsConstraint(std::vector<int> pcs, const Common::MsgHdr &msg, Common &c);
-  virtual PwsConstraint *clone() const { return new PwsConstraint(*this); }
+  HsbConstraint(std::vector<int> pcs, const Common::MsgHdr &msg, Common &c);
+  virtual HsbConstraint *clone() const { return new HsbConstraint(*this); }
   virtual bool is_init_state() const;
   virtual std::list<const Machine::PTransition*> partred() const;
   virtual std::list<Constraint*> pre(const Machine::PTransition &) const;
@@ -142,8 +142,8 @@ private:
   /* write_buffers[pid][nml] is the write buffer of process pid to memory location nml */
   std::vector<std::vector<Store>> write_buffers;
 
-  Comparison entailment_compare_impl(const PwsConstraint &sbc) const;
-  Comparison entailment_compare_buffers(const PwsConstraint &sbc) const;
+  Comparison entailment_compare_impl(const HsbConstraint &sbc) const;
+  Comparison entailment_compare_buffers(const HsbConstraint &sbc) const;
   Comparison entailment_compare_buffer(const Store &a, const Store& b) const;
   void pretty_print_buffer(std::stringstream &ss, const std::vector<Store> &buffer, Lang::NML nml) const;
 
@@ -156,36 +156,36 @@ private:
    * failing these can be safely discarded. */
   bool unreachable();
 
-  /* Returns the set S of PwsConstraints pwsc such that pwsc is this
-   * PwsConstraint but with the buffer of pid to nml replaced by a buffer b such
+  /* Returns the set S of HsbConstraints hsbc such that hsbc is this
+   * HsbConstraint but with the buffer of pid to nml replaced by a buffer b such
    * that b . v is entailed by this->write_buffers[pid][nmli] where v is the
    * last value in this->write_buffers[pid][nmli], and the upward closure of S
-   * is the set of precisely all such PwsConstraints pwsc.
+   * is the set of precisely all such HsbConstraints hsbc.
    *
    * Pre: write_buffers[pid][nmli].size() > 0
    */
-  std::vector<PwsConstraint*> buffer_pop_back(int pid, Lang::NML nml) const;
+  std::vector<HsbConstraint*> buffer_pop_back(int pid, Lang::NML nml) const;
 
   /* Checks if all writes of a process are serialised, which is a requirement in
-   * order to take a s- or mfence transition in the PWS model. */
+   * order to take a s- or mfence transition in the HSB model. */
   bool is_fully_serialised(int pid) const;
 
   /* Checks if all writes to any memory location in nmls of a process are
    * serialised, which is a requirement in order to take a cas transition in the
-   * PWS model. */
+   * HSB model. */
   bool is_fully_serialised(int pid, const std::vector<Lang::MemLoc<int>> nmls) const;
 
   /* Helper for the public pre */
   struct pre_constr_t{
-    pre_constr_t(PwsConstraint *pwsc) : pwsc(pwsc), channel_pop_back(false),
+    pre_constr_t(HsbConstraint *hsbc) : hsbc(hsbc), channel_pop_back(false),
                                         buffer_pop_back(false), written_nmls() {};
-    pre_constr_t(PwsConstraint *pwsc, bool channel_pop_back,
+    pre_constr_t(HsbConstraint *hsbc, bool channel_pop_back,
                  bool buffer_pop_back, VecSet<Lang::NML> wn)
-      : pwsc(pwsc), channel_pop_back(channel_pop_back),
+      : hsbc(hsbc), channel_pop_back(channel_pop_back),
         buffer_pop_back(buffer_pop_back), written_nmls(wn) {};
-    PwsConstraint *pwsc;
-    bool channel_pop_back; // true iff the last message in pwsc should be popped
-    bool buffer_pop_back; // true iff the last value in the buffer of written_nmls[0] in pwsc should be popped
+    HsbConstraint *hsbc;
+    bool channel_pop_back; // true iff the last message in hsbc should be popped
+    bool buffer_pop_back; // true iff the last value in the buffer of written_nmls[0] in hsbc should be popped
     VecSet<Lang::NML> written_nmls; // NMLs that were written. only one if buffer_pop_back
   };
 
@@ -193,7 +193,7 @@ private:
   std::list<pre_constr_t> pre(const Machine::PTransition &, bool locked) const;
 
   friend class Common;
-  friend class PwsPsoBwd;
+  friend class HsbPsoBwd;
 
   /*****************/
   /* Configuration */
@@ -208,7 +208,7 @@ private:
 // Implementations
 // -----------------------------------------------------------------------------
 
-inline VecSet<int> PwsConstraint::possible_values(const ZStar<int> &buffer_value,
+inline VecSet<int> HsbConstraint::possible_values(const ZStar<int> &buffer_value,
                                                   const Lang::NML &nml) const {
   Lang::VarDecl var_decl = common.machine.get_var_decl(nml);
   if (buffer_value.is_wild()) {
@@ -219,10 +219,10 @@ inline VecSet<int> PwsConstraint::possible_values(const ZStar<int> &buffer_value
   } else return VecSet<int>::singleton(buffer_value.get_int());
 };
 
-inline ZStar<int> PwsConstraint::Common::value_of_write(const Machine::PTransition &trans) const {
+inline ZStar<int> HsbConstraint::Common::value_of_write(const Machine::PTransition &trans) const {
   assert(trans.instruction.get_writes().size() == 1);
   Store s = store_of_write(trans);
   return s[index(Lang::NML(trans.instruction.get_writes()[0], trans.pid))];
 };
 
-#endif // __PWS_CONSTRAINT_H__
+#endif // __HSB_CONSTRAINT_H__

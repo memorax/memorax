@@ -18,15 +18,15 @@
  *
  */
 
-#ifndef __PWS_CONTAINER__
-#define __PWS_CONTAINER__
+#ifndef __HSB_CONTAINER__
+#define __HSB_CONTAINER__
 
 #include "channel_container.h"
-#include "pws_constraint.h"
+#include "hsb_constraint.h"
 
-class PwsContainer : public ChannelContainer {
+class HsbContainer : public ChannelContainer {
 public:
-  PwsContainer() : ChannelContainer() {};
+  HsbContainer() : ChannelContainer() {};
   virtual void clear();
 protected:
   virtual std::vector<CWrapper*> &get_F_set(CWrapper *);

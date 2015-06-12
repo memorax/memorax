@@ -18,13 +18,13 @@
  *
  */
 
-#include "pws_pso_bwd.h"
-#include "pws_constraint.h"
+#include "hsb_pso_bwd.h"
+#include "hsb_constraint.h"
 
-Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) const {
-  PwsConstraint::Common &common = dynamic_cast<PwsConstraint::Common&>(*cmn);
+Trace *HsbPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) const {
+  HsbConstraint::Common &common = dynamic_cast<HsbConstraint::Common&>(*cmn);
 
- Log::extreme << " *** PWS trace ***\n";
+ Log::extreme << " *** HSB trace ***\n";
  trace->print(Log::extreme,Log::extreme,Log::json,common.machine);
  Log::extreme << "\n\n";
 
@@ -38,8 +38,8 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
    * pid's buffer to memory location nmli and contains the values of all writes lost */
   std::map<std::pair<int, int>, std::list<std::vector<ZStar<int> > > > lost_values;
   for (int trace_pos = 1; trace_pos <= trace->size(); ++trace_pos) {
-    const PwsConstraint &pwsc1 = dynamic_cast<const PwsConstraint&>(*trace->constraint(trace_pos-1));
-    const PwsConstraint &pwsc2 = dynamic_cast<const PwsConstraint&>(*trace->constraint(trace_pos));
+    const HsbConstraint &hsbc1 = dynamic_cast<const HsbConstraint&>(*trace->constraint(trace_pos-1));
+    const HsbConstraint &hsbc2 = dynamic_cast<const HsbConstraint&>(*trace->constraint(trace_pos));
     const Machine::PTransition *trans = trace->transition(trace_pos);
     const Lang::Stmt<int> &s = trans->instruction;
     int pid = trans->pid;
@@ -48,10 +48,10 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
       assert(s.get_writes().size() == 1);
       Lang::NML nml(s.get_writes()[0], pid);
       int nmli = common.index(nml);
-      if (pwsc1.write_buffers[pid][nmli].size() + 1 != pwsc2.write_buffers[pid][nmli].size()) {
+      if (hsbc1.write_buffers[pid][nmli].size() + 1 != hsbc2.write_buffers[pid][nmli].size()) {
         /* Value lost in the buffer. */
-        assert(pwsc1.write_buffers[pid][nmli].size() == pwsc2.write_buffers[pid][nmli].size());
-        lost_values[p(pid, nmli)].back().push_back(pwsc1.write_buffers[pid][nmli].back());
+        assert(hsbc1.write_buffers[pid][nmli].size() == hsbc2.write_buffers[pid][nmli].size());
+        lost_values[p(pid, nmli)].back().push_back(hsbc1.write_buffers[pid][nmli].back());
       } else {
         /* No values lost in the buffer. */
         lost_values[p(pid, nmli)].push_back({});
@@ -61,21 +61,21 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
       assert(s.get_writes().size() == 1);
       Lang::NML nml(s.get_writes()[0], pid);
       int nmli = common.index(nml);
-      assert(pwsc1.write_buffers[pid][nmli].size() == pwsc2.write_buffers[pid][nmli].size() + 1);
+      assert(hsbc1.write_buffers[pid][nmli].size() == hsbc2.write_buffers[pid][nmli].size() + 1);
       for (ZStar<int> lost_value : lost_values[p(pid, nmli)].front()) {
-        std::unique_ptr<PwsConstraint> clone(pwsc2.clone());
+        std::unique_ptr<HsbConstraint> clone(hsbc2.clone());
         clone->channel.back().store = clone->channel.back().store.assign(nmli, lost_value);
         temp->push_back(*trans, clone.release());
       }
       lost_values[p(pid, nmli)].pop_front();
     } break;
     default:
-      assert(pwsc1.write_buffers == pwsc2.write_buffers);
+      assert(hsbc1.write_buffers == hsbc2.write_buffers);
     }
-    temp->push_back(*trans, pwsc2.clone());
+    temp->push_back(*trans, hsbc2.clone());
   }
 
-  Log::extreme << " *** PWS trace (no buffer value loss) ***\n";
+  Log::extreme << " *** HSB trace (no buffer value loss) ***\n";
   temp->print(Log::extreme,Log::extreme,Log::json,common.machine);
   Log::extreme << "\n\n";
 
@@ -94,7 +94,7 @@ Trace *PwsPsoBwd::convert_trace(Trace *trace, ChannelConstraint::Common *cmn) co
   return result;
 }
 
-bool PwsPsoBwd::produces_message(const Lang::Stmt<int> &s) const{
+bool HsbPsoBwd::produces_message(const Lang::Stmt<int> &s) const{
   assert(s.get_writes().size() == 0    ||
          s.get_type() == Lang::UPDATE  ||
          s.get_type() == Lang::WRITE   ||
@@ -106,7 +106,7 @@ bool PwsPsoBwd::produces_message(const Lang::Stmt<int> &s) const{
           s.get_type() != Lang::WRITE);
 }
 
-bool PwsPsoBwd::consumes_message(const Lang::Stmt<int> &s) const{
+bool HsbPsoBwd::consumes_message(const Lang::Stmt<int> &s) const{
   return (s.get_type() == Lang::UPDATE ||
           (s.get_type() == Lang::LOCKED && s.get_writes().size() > 0));
 }

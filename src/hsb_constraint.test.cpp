@@ -20,9 +20,9 @@
 
 #include <iostream>
 #include <iterator>
-#include "pws_pso_bwd.h"
-#include "pws_container.h"
-#include "pws_constraint.h"
+#include "hsb_pso_bwd.h"
+#include "hsb_container.h"
+#include "hsb_constraint.h"
 #include "intersection_iterator.h"
 #include "preprocessor.h"
 
@@ -44,27 +44,27 @@ static Machine::PTransition get_transition(const Machine &m, int pid, int from, 
       return Machine::PTransition(*t, pid);
   }
   stringstream ss;
-  ss << "PwsConstraint.test.cpp::get_transition: Couldn't find transition P"
+  ss << "HsbConstraint.test.cpp::get_transition: Couldn't find transition P"
      << pid << " Q" << from << "->Q" << to;
   throw new std::logic_error(ss.str());
 }
 
 static void test_pre_sequence(string name, const Machine& m, vector<Machine::PTransition> trans) {
-  PwsConstraint::Common common(m);
+  HsbConstraint::Common common(m);
   std::reverse(trans.begin(), trans.end());
   function<string(Machine::PTransition)> pttostr = [m](Machine::PTransition pt)
     { return pt.to_string(m.reg_pretty_vts(pt.pid), m.ml_pretty_vts(pt.pid)); };
-  list<unique_ptr<PwsConstraint>> constraints;
+  list<unique_ptr<HsbConstraint>> constraints;
   {
     list<Constraint*> bs = common.get_bad_states();
     transform(bs.begin(), bs.end(), back_inserter(constraints),
-              [](Constraint *c) { return unique_ptr<PwsConstraint>(dynamic_cast<PwsConstraint*>(c)); });
+              [](Constraint *c) { return unique_ptr<HsbConstraint>(dynamic_cast<HsbConstraint*>(c)); });
   }
 
   for (Machine::PTransition pt : trans) {
     bool in_any_partred = false;
-    list<unique_ptr<PwsConstraint>> news;
-    for (const unique_ptr<PwsConstraint> &c : constraints) {
+    list<unique_ptr<HsbConstraint>> news;
+    for (const unique_ptr<HsbConstraint> &c : constraints) {
       {
         auto trans = c->partred();
         if (!any_of(trans.begin(), trans.end(), [pt](const Machine::PTransition *t) { return *t == pt; }))
@@ -73,10 +73,10 @@ static void test_pre_sequence(string name, const Machine& m, vector<Machine::PTr
       in_any_partred = true;
       list<Constraint*> pres = c->pre(pt);
       transform(pres.begin(), pres.end(), back_inserter(news),
-                [](Constraint *c) { return unique_ptr<PwsConstraint>(dynamic_cast<PwsConstraint*>(c)); });
+                [](Constraint *c) { return unique_ptr<HsbConstraint>(dynamic_cast<HsbConstraint*>(c)); });
     }
     if (!in_any_partred) {
-      Log::debug << "  " << name << ": Transition \"" << pttostr(pt) << "\" was not suggested by any PwsConstraint::partred " 
+      Log::debug << "  " << name << ": Transition \"" << pttostr(pt) << "\" was not suggested by any HsbConstraint::partred " 
                  << (news.empty() ? "and produced no constraints\n" : "but produced new constraints\n");
       Test::inner_test(name, false);
       return;
@@ -87,14 +87,14 @@ static void test_pre_sequence(string name, const Machine& m, vector<Machine::PTr
       return;
     }
     Log::extreme << "  " << name << ": Transition \"" << pttostr(pt) << "\" produced the following constraints\n";
-    for (const unique_ptr<PwsConstraint> &c : news) Log::extreme << c->to_string() << "\n";
+    for (const unique_ptr<HsbConstraint> &c : news) Log::extreme << c->to_string() << "\n";
     swap(constraints, news);
   }
   Test::inner_test(name, any_of(constraints.begin(), constraints.end(),
-                                [](const unique_ptr<PwsConstraint> &c) { return c->is_init_state(); }));
+                                [](const unique_ptr<HsbConstraint> &c) { return c->is_init_state(); }));
 }
 
-void PwsConstraint::test_pre() {
+void HsbConstraint::test_pre() {
   auto vs = VecSet<MemLoc<int>>::singleton;
   typedef Stmt<int> stmt;
   typedef MemLoc<int> ml;
@@ -278,18 +278,18 @@ text
   goto L0
 )";
     Machine m = *get_machine(ss);
-    PwsPsoBwd reach;
-    PwsConstraint::Common *c = new PwsConstraint::Common(m);
-    ExactBwd::Arg arg(m, c->get_bad_states(), c, new PwsContainer());
+    HsbPsoBwd reach;
+    HsbConstraint::Common *c = new HsbConstraint::Common(m);
+    ExactBwd::Arg arg(m, c->get_bad_states(), c, new HsbContainer());
     std::unique_ptr<Reachability::Result> res(reach.reachability(&arg));
     Test::inner_test("TSO fence set unsafe for Peterson's algorithm under PSO",
                      res->result == Reachability::REACHABLE);
   }
 }
 
-void PwsConstraint::test() {
+void HsbConstraint::test() {
   try {
-    PwsConstraint::test_pre();
+    HsbConstraint::test_pre();
   } catch (std::exception *ex) {
     Log::warning << "Exception " << ex->what() << " was thrown while testing" << std::endl;
     throw;

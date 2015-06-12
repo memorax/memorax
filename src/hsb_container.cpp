@@ -18,19 +18,19 @@
  *
  */
 
-#include "pws_container.h"
+#include "hsb_container.h"
 
-void PwsContainer::clear() {
+void HsbContainer::clear() {
   ChannelContainer::clear();
   F.clear();
 };
 
-std::vector<ChannelContainer::CWrapper*> &PwsContainer::get_F_set(CWrapper *cw) {
+std::vector<ChannelContainer::CWrapper*> &HsbContainer::get_F_set(CWrapper *cw) {
   return F[cw->sbc->get_control_states()][cw->sbc->characterize_channel()]
-    [static_cast<PwsConstraint*>(cw->sbc)->get_filled_buffers()];
+    [static_cast<HsbConstraint*>(cw->sbc)->get_filled_buffers()];
 }
 
-void PwsContainer::visit_F(std::function<void(std::vector<CWrapper*>&)> f) {
+void HsbContainer::visit_F(std::function<void(std::vector<CWrapper*>&)> f) {
   for(auto &FPerPcs : F) {
     for (auto &FPerChar : FPerPcs.second) {
       for (auto &subset : FPerChar.second) {

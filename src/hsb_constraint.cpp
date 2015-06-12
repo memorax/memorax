@@ -18,7 +18,7 @@
  *
  */
 
-#include "pws_constraint.h"
+#include "hsb_constraint.h"
 #include "intersection_iterator.h"
 #include <iostream>
 #include <iomanip>
@@ -29,15 +29,15 @@
 /* Configuration */
 /*****************/
 
-const bool PwsConstraint::use_channel_suffix_equality = true;
-const bool PwsConstraint::use_limit_other_updates = true;
-const bool PwsConstraint::use_pending_sets = true;
-const bool PwsConstraint::use_serialisations_only_after_writes = true;
-const bool PwsConstraint::use_last_write_sets = true;
+const bool HsbConstraint::use_channel_suffix_equality = true;
+const bool HsbConstraint::use_limit_other_updates = true;
+const bool HsbConstraint::use_pending_sets = true;
+const bool HsbConstraint::use_serialisations_only_after_writes = true;
+const bool HsbConstraint::use_last_write_sets = true;
 
 /*****************/
 
-void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> pred,
+void HsbConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> pred,
                                          const std::vector<Automaton::State> &states,
                                          std::vector<std::vector<std::map<Lang::NML, value_t> > > &sets) {
   sets.push_back(std::vector<std::map<Lang::NML, ZStar<int> > >(states.size()));
@@ -63,7 +63,7 @@ void PwsConstraint::Common::init_pending(std::function<bool(const Lang::Stmt<int
   }
 }
 
-void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> pred,
+void HsbConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<int>&, Lang::MemLoc<int>)> pred,
                                             const std::vector<Automaton::State> &states,
                                             int state, int pid,
                                             std::vector<std::map<Lang::NML, ZStar<int> > > &set,
@@ -86,11 +86,11 @@ void PwsConstraint::Common::iterate_pending(std::function<bool(const Lang::Stmt<
   }
 }
 
-PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
+HsbConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
   /* Check that all variables and registers have finite domains */
   for (Lang::VarDecl gvar : m.gvars) {
     if (gvar.domain.is_int()) {
-      throw new std::logic_error("PwsConstraint::Common: PwsConstraint requires finite domains. Infinite domain for global variable " +
+      throw new std::logic_error("HsbConstraint::Common: HsbConstraint requires finite domains. Infinite domain for global variable " +
                                  gvar.name);
     }
   }
@@ -98,7 +98,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
     for (Lang::VarDecl lvar : m.lvars[p]) {
       if (lvar.domain.is_int()) {
         std::stringstream ss;
-        ss << "PwsConstraint::Common: PwsConstraint requires finite domains. Infinite domain for local variable "
+        ss << "HsbConstraint::Common: HsbConstraint requires finite domains. Infinite domain for local variable "
            << lvar.name << "[P" << p << "]";
         throw new std::logic_error(ss.str());
       }
@@ -106,7 +106,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
     for (Lang::VarDecl reg : m.regs[p]) {
       if (reg.domain.is_int()) {
         std::stringstream ss;
-        ss << "PwsConstraint::Common: PwsConstraint requires finite domains. Infinite domain for register "
+        ss << "HsbConstraint::Common: HsbConstraint requires finite domains. Infinite domain for register "
            << "P" << p << ":" << reg.name;
         throw new std::logic_error(ss.str());
       }
@@ -127,7 +127,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
         if (t->instruction.get_type() == Lang::SLOCKED ||
             (t->instruction.get_type() == Lang::LOCKED &&
              t->instruction.get_statement(0)->get_type() == Lang::WRITE))
-          throw new std::logic_error("PwsConstraint::Common: PwsConstraint requires the machine "
+          throw new std::logic_error("HsbConstraint::Common: HsbConstraint requires the machine "
                                      "uses fence semantics rather than lock semantics. Have you "
                                      "forgotten to use Machine::convert_locks_to_fences?");
       }
@@ -328,7 +328,7 @@ PwsConstraint::Common::Common(const Machine &m) : ChannelConstraint::Common(m) {
 }
 std::list<std::pair<std::map<Lang::NML, ZStar<int> >,
                     std::map<Lang::NML, ZStar<int> > > >
-PwsConstraint::Common::powermaps(std::map<Lang::NML, value_t> map) const {
+HsbConstraint::Common::powermaps(std::map<Lang::NML, value_t> map) const {
   if (map.empty()) return {{map, map}};
   std::pair<Lang::NML, value_t> kvp = *map.begin();
   map.erase(map.begin());
@@ -348,25 +348,25 @@ PwsConstraint::Common::powermaps(std::map<Lang::NML, value_t> map) const {
 }
 
 
-std::list<Constraint*> PwsConstraint::Common::get_bad_states() {
+std::list<Constraint*> HsbConstraint::Common::get_bad_states() {
   std::list<Constraint*> l;
   for (const std::vector<int> &pcs : machine.forbidden) {
     for (const MsgHdr &msg : messages) {
-      PwsConstraint *pwsc = new PwsConstraint(pcs, msg, *this);
-      if (pwsc->unreachable()) delete pwsc;
-      else l.push_back(pwsc);
+      HsbConstraint *hsbc = new HsbConstraint(pcs, msg, *this);
+      if (hsbc->unreachable()) delete hsbc;
+      else l.push_back(hsbc);
     }
   }
   return l;
 };
 
-PwsConstraint::PwsConstraint(std::vector<int> pcs, const Common::MsgHdr &msg, Common &c)
+HsbConstraint::HsbConstraint(std::vector<int> pcs, const Common::MsgHdr &msg, Common &c)
   : ChannelConstraint(pcs, msg, c), common(c) {
   for (unsigned p = 0; p < common.machine.automata.size(); p++)
     write_buffers.push_back(std::vector<Store>(common.mem_size, Store(0)));
 }
 
-std::list<const Machine::PTransition*> PwsConstraint::partred() const{
+std::list<const Machine::PTransition*> HsbConstraint::partred() const{
   std::list<const Machine::PTransition*> l;
   if (use_limit_other_updates) {
     for (unsigned p = 0; p < pcs.size(); ++p) {
@@ -392,51 +392,51 @@ std::list<const Machine::PTransition*> PwsConstraint::partred() const{
   return l;
 }
 
-std::list<Constraint*> PwsConstraint::pre(const Machine::PTransition &t) const {
+std::list<Constraint*> HsbConstraint::pre(const Machine::PTransition &t) const {
   std::list<Constraint*> res;
   std::list<pre_constr_t> r = pre(t, false);
   for (const pre_constr_t &c : r) {
     bool move_p_to_last = false;
-    std::vector<PwsConstraint*> pwscs;
+    std::vector<HsbConstraint*> hsbcs;
     if (c.channel_pop_back) {
-      assert(c.pwsc->channel.back().nmls == c.written_nmls);
-      assert(c.pwsc->channel.size() > 1);
+      assert(c.hsbc->channel.back().nmls == c.written_nmls);
+      assert(c.hsbc->channel.size() > 1);
 
-      assert((c.pwsc->cpointers[t.pid] == int(c.pwsc->channel.size()) - 1)
+      assert((c.hsbc->cpointers[t.pid] == int(c.hsbc->channel.size()) - 1)
              ==
              (t.instruction.get_type() == Lang::LOCKED));
-      if (c.pwsc->cpointers[t.pid] == int(c.pwsc->channel.size()) - 1) {
-        --c.pwsc->cpointers[t.pid];
+      if (c.hsbc->cpointers[t.pid] == int(c.hsbc->channel.size()) - 1) {
+        --c.hsbc->cpointers[t.pid];
         /* Make sure after hidden messages have been added that
          * process t.pid points to the rightmost message */
         move_p_to_last = true;
       }
-      for (ChannelConstraint *chc : c.pwsc->channel_pop_back()) {
-        assert (dynamic_cast<PwsConstraint*>(chc));
-        pwscs.push_back(static_cast<PwsConstraint*>(chc));
+      for (ChannelConstraint *chc : c.hsbc->channel_pop_back()) {
+        assert (dynamic_cast<HsbConstraint*>(chc));
+        hsbcs.push_back(static_cast<HsbConstraint*>(chc));
       }
-      delete c.pwsc;
+      delete c.hsbc;
     }
     else if (c.buffer_pop_back) {
       assert(c.written_nmls.size() == 1);
       Lang::NML nml = c.written_nmls[0];
-      pwscs = c.pwsc->buffer_pop_back(t.pid, nml);
-      delete c.pwsc;
+      hsbcs = c.hsbc->buffer_pop_back(t.pid, nml);
+      delete c.hsbc;
     }
     else {
-      pwscs.push_back(c.pwsc);
+      hsbcs.push_back(c.hsbc);
     }
 
-    for (PwsConstraint *pwsc : pwscs) {
-      if (move_p_to_last) pwsc->cpointers[t.pid] = int(pwsc->channel.size()) - 1;
-      if (pwsc->unreachable()) delete pwsc;
-      else                     res.push_back(pwsc);
+    for (HsbConstraint *hsbc : hsbcs) {
+      if (move_p_to_last) hsbc->cpointers[t.pid] = int(hsbc->channel.size()) - 1;
+      if (hsbc->unreachable()) delete hsbc;
+      else                     res.push_back(hsbc);
     }
   }
   return res;
 }
 
-std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransition &t, bool locked) const {
+std::list<HsbConstraint::pre_constr_t> HsbConstraint::pre(const Machine::PTransition &t, bool locked) const {
   const Lang::Stmt<int> &s = t.instruction;
   /* We only allow locked blocks representing a cas. */
   assert(!locked || s.get_type() == Lang::READASSERT ||
@@ -475,13 +475,13 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
        * the same value. */
       VecSet<Store> stores = possible_reg_stores(reg_stores[t.pid], t.pid, s.get_expr(), val);
       for (int j = 0; j < stores.size(); ++j) {
-        PwsConstraint *pwsc = this->clone();
-        pwsc->pcs[t.pid] = t.source;
-        if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
-                             pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val);
-        else pwsc->channel[msgi].store = pwsc->channel[msgi].store.assign(nmli, val);
-        pwsc->reg_stores[t.pid] = stores[j];
-        res.push_back(pwsc);
+        HsbConstraint *hsbc = this->clone();
+        hsbc->pcs[t.pid] = t.source;
+        if (buffer_size > 0) hsbc->write_buffers[t.pid][nmli] =
+                             hsbc->write_buffers[t.pid][nmli].assign(buffer_size - 1, val);
+        else hsbc->channel[msgi].store = hsbc->channel[msgi].store.assign(nmli, val);
+        hsbc->reg_stores[t.pid] = stores[j];
+        res.push_back(hsbc);
       }
     }
   } break;
@@ -514,12 +514,12 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       for (int val : vals) {
         VecSet<Store> rstores = possible_reg_stores(reg_stores[pid], pid, s.get_expr(), val);
         for (const Store &rstore : rstores) {
-          PwsConstraint *pwsc = this->clone();
-          pwsc->pcs[pid] = t.source;
-          if (locked) pwsc->channel.back().store = pwsc->channel.back().store.assign(nmli, val);
-          else         pwsc->write_buffers[pid][nmli].assign(pwsc->write_buffers[pid][nmli].size() - 1, val);
-          pwsc->reg_stores[pid] = rstore;
-          res.push_back(pre_constr_t(pwsc, locked, !locked, VecSet<Lang::NML>::singleton(nml)));
+          HsbConstraint *hsbc = this->clone();
+          hsbc->pcs[pid] = t.source;
+          if (locked) hsbc->channel.back().store = hsbc->channel.back().store.assign(nmli, val);
+          else         hsbc->write_buffers[pid][nmli].assign(hsbc->write_buffers[pid][nmli].size() - 1, val);
+          hsbc->reg_stores[pid] = rstore;
+          res.push_back(pre_constr_t(hsbc, locked, !locked, VecSet<Lang::NML>::singleton(nml)));
         }
       }
     }
@@ -538,18 +538,18 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
         std::vector<pre_constr_t> W;
         Machine::PTransition t2(t.target, *si.get_statement(i), t.target, t.pid);
         for (pre_constr_t v : V) {
-          for (pre_constr_t w : v.pwsc->pre(t2, true)) {
+          for (pre_constr_t w : v.hsbc->pre(t2, true)) {
             w.channel_pop_back = w.channel_pop_back || v.channel_pop_back;
             w.buffer_pop_back  = w.buffer_pop_back  || v.buffer_pop_back;
             w.written_nmls.insert(v.written_nmls);
             W.push_back(w);
           }
-          delete v.pwsc;
+          delete v.hsbc;
         }
         V = W;
       }
       for (pre_constr_t v : V) {
-        v.pwsc->pcs[t.pid] = t.source;
+        v.hsbc->pcs[t.pid] = t.source;
         res.push_back(v);
       }
     }
@@ -565,19 +565,19 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       if (cpointers[t.pid] == 0) {
         /* Need to insert a fresh message. */
         for (const Common::MsgHdr &hdr : common.messages) {
-          PwsConstraint *pwsc = this->clone();
+          HsbConstraint *hsbc = this->clone();
           Msg msg(Store(common.mem_size), hdr.wpid, hdr.nmls);
-          pwsc->channel.insert(pwsc->channel.begin(), msg);
-          for (int p = 0; p < int(pwsc->cpointers.size()); p++) {
-            if (p != t.pid) pwsc->cpointers[p]++;
+          hsbc->channel.insert(hsbc->channel.begin(), msg);
+          for (int p = 0; p < int(hsbc->cpointers.size()); p++) {
+            if (p != t.pid) hsbc->cpointers[p]++;
           }
-          res.push_back(pwsc);
+          res.push_back(hsbc);
         }
       } else {
         /* Update with a message in the channel */
-        PwsConstraint *pwsc = this->clone();
-        pwsc->cpointers[t.pid]--;
-        res.push_back(pwsc);
+        HsbConstraint *hsbc = this->clone();
+        hsbc->cpointers[t.pid]--;
+        res.push_back(hsbc);
       }
     }
   } break;
@@ -605,9 +605,9 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       Intersection<VecSet<Lang::NML>, Lang::NML, VecSet<Lang::NML>::const_iterator> inter(channel.back().nmls, nmls);
       for (const Lang::NML &nml : inter) {
         int nmli = common.index(nml);
-        PwsConstraint *pwsc = this->clone();
-        pwsc->write_buffers[pid][nmli] = pwsc->write_buffers[pid][nmli].push_front(channel.back().store[nmli]);
-        res.push_back(pre_constr_t(pwsc, true, false, VecSet<Lang::NML>::singleton(nml)));
+        HsbConstraint *hsbc = this->clone();
+        hsbc->write_buffers[pid][nmli] = hsbc->write_buffers[pid][nmli].push_front(channel.back().store[nmli]);
+        res.push_back(pre_constr_t(hsbc, true, false, VecSet<Lang::NML>::singleton(nml)));
       }
     }
   } break;
@@ -618,9 +618,9 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
     if (!is_fully_serialised(t.pid)) break;
     /* All conditions are fullfilled, fall through to NOP */
   case Lang::NOP: {
-    PwsConstraint *pwsc = this->clone();
-    pwsc->pcs[t.pid] = t.source;
-    res.push_back(pwsc);
+    HsbConstraint *hsbc = this->clone();
+    hsbc->pcs[t.pid] = t.source;
+    res.push_back(hsbc);
   } break;
 
   case Lang::ASSIGNMENT: {
@@ -630,19 +630,19 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       VecSet<Store> rss = possible_reg_stores(reg_stores[t.pid].assign(s.get_reg(), value_t::STAR),
                                               t.pid, s.get_expr(), val_r);
       for (const Store &new_reg_store : rss) {
-        PwsConstraint *pwsc = this->clone();
-        pwsc->reg_stores[t.pid] = new_reg_store;
-        pwsc->pcs[t.pid] = t.source;
-        res.push_back(pwsc);
+        HsbConstraint *hsbc = this->clone();
+        hsbc->reg_stores[t.pid] = new_reg_store;
+        hsbc->pcs[t.pid] = t.source;
+        res.push_back(hsbc);
       }
     }
   } break;
 
   case Lang::READASSIGN: {
     if (reg_stores[t.pid][s.get_reg()] == value_t::STAR) {
-      PwsConstraint *pwsc = this->clone();
-      pwsc->pcs[t.pid] = t.source;
-      res.push_back(pwsc);
+      HsbConstraint *hsbc = this->clone();
+      hsbc->pcs[t.pid] = t.source;
+      res.push_back(hsbc);
     } else {
       Lang::NML nml(s.get_memloc(), t.pid);
       int nmli = common.index(nml);
@@ -659,12 +659,12 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
       int reg_val = reg_stores[t.pid][s.get_reg()].get_int();
 
       if (all_vals.count(reg_val) > 0) {
-        PwsConstraint *pwsc = this->clone();
-        pwsc->pcs[t.pid] = t.source;
-        if (buffer_size > 0) pwsc->write_buffers[t.pid][nmli] =
-                               pwsc->write_buffers[t.pid][nmli].assign(buffer_size - 1, reg_val);
-        else pwsc->channel[msgi].store = pwsc->channel[msgi].store.assign(nmli, reg_val);
-        res.push_back(pwsc);
+        HsbConstraint *hsbc = this->clone();
+        hsbc->pcs[t.pid] = t.source;
+        if (buffer_size > 0) hsbc->write_buffers[t.pid][nmli] =
+                               hsbc->write_buffers[t.pid][nmli].assign(buffer_size - 1, reg_val);
+        else hsbc->channel[msgi].store = hsbc->channel[msgi].store.assign(nmli, reg_val);
+        res.push_back(hsbc);
       }
     }
   } break;
@@ -672,28 +672,28 @@ std::list<PwsConstraint::pre_constr_t> PwsConstraint::pre(const Machine::PTransi
   case Lang::ASSUME: {
     VecSet<Store> rstores = possible_reg_stores(reg_stores[t.pid], t.pid, s.get_condition());
     for (const Store &store : rstores) {
-      PwsConstraint *pwsc = this->clone();
-      pwsc->pcs[t.pid] = t.source;
-      pwsc->reg_stores[t.pid] = store;
-      res.push_back(pwsc);
+      HsbConstraint *hsbc = this->clone();
+      hsbc->pcs[t.pid] = t.source;
+      hsbc->reg_stores[t.pid] = store;
+      res.push_back(hsbc);
     }
   } break;
 
   default:
-    throw new std::logic_error("PwsConstraint::pre: Unsupported transition: "
+    throw new std::logic_error("HsbConstraint::pre: Unsupported transition: "
                                + t.to_string(common.machine));
   }
   return res;
 }
 
-bool PwsConstraint::is_fully_serialised(int pid) const {
+bool HsbConstraint::is_fully_serialised(int pid) const {
   for (unsigned nmli = 0; nmli < write_buffers[pid].size(); nmli++) {
     if (write_buffers[pid][nmli].size() != 0) return false;
   }
   return true;
 }
 
-bool PwsConstraint::is_fully_serialised(int pid, const std::vector<Lang::MemLoc<int>> nmls) const {
+bool HsbConstraint::is_fully_serialised(int pid, const std::vector<Lang::MemLoc<int>> nmls) const {
   for (Lang::MemLoc<int> ml : nmls) {
     Lang::NML nml(ml, pid);
     if (write_buffers[pid][common.index(nml)].size() != 0) return false;
@@ -701,11 +701,11 @@ bool PwsConstraint::is_fully_serialised(int pid, const std::vector<Lang::MemLoc<
   return true;
 }
 
-std::vector<PwsConstraint*> PwsConstraint::buffer_pop_back(int pid, Lang::NML nml) const {
+std::vector<HsbConstraint*> HsbConstraint::buffer_pop_back(int pid, Lang::NML nml) const {
   // TODO: ponder the completeness of this
   int nmli = common.index(nml);
   assert(write_buffers[pid][nmli].size() > 0); // Precondition
-  std::vector<PwsConstraint*> res;
+  std::vector<HsbConstraint*> res;
   // Case one: no write was hidden by the popped one
   res.push_back(this->clone());
   res.back()->write_buffers[pid][nmli] =
@@ -718,7 +718,7 @@ std::vector<PwsConstraint*> PwsConstraint::buffer_pop_back(int pid, Lang::NML nm
 }
 
 
-bool PwsConstraint::is_init_state() const {
+bool HsbConstraint::is_init_state() const {
   if (!ChannelConstraint::is_init_state()) return false;
   for (auto pwb : write_buffers)
     for (const Store &buffer : pwb)
@@ -726,7 +726,7 @@ bool PwsConstraint::is_init_state() const {
   return true;
 }
 
-void PwsConstraint::process_to_string(int p, std::stringstream &ss) const noexcept {
+void HsbConstraint::process_to_string(int p, std::stringstream &ss) const noexcept {
   ChannelConstraint::process_to_string(p, ss);
   ss << " buffer={";
   for (int g = 0; g < common.gvar_count; g++) {
@@ -738,7 +738,7 @@ void PwsConstraint::process_to_string(int p, std::stringstream &ss) const noexce
   ss << "}";
 }
 
-void PwsConstraint::pretty_print_buffer(std::stringstream &ss, const std::vector<Store> &buffer,
+void HsbConstraint::pretty_print_buffer(std::stringstream &ss, const std::vector<Store> &buffer,
                                         Lang::NML nml) const {
   int nmli = common.index(nml);
   if (buffer[nmli].size() == 0) return;
@@ -749,29 +749,29 @@ void PwsConstraint::pretty_print_buffer(std::stringstream &ss, const std::vector
   ss << "; ";
 }
 
-Constraint::Comparison PwsConstraint::entailment_compare(const Constraint &c) const {
-  const PwsConstraint &pwsc = dynamic_cast<const PwsConstraint&>(c);
-  return entailment_compare_impl(pwsc);
+Constraint::Comparison HsbConstraint::entailment_compare(const Constraint &c) const {
+  const HsbConstraint &hsbc = dynamic_cast<const HsbConstraint&>(c);
+  return entailment_compare_impl(hsbc);
 }
 
-Constraint::Comparison PwsConstraint::entailment_compare_impl(const PwsConstraint &pwsc) const {
-  Constraint::Comparison cmp = entailment_compare_buffers(pwsc);
+Constraint::Comparison HsbConstraint::entailment_compare_impl(const HsbConstraint &hsbc) const {
+  Constraint::Comparison cmp = entailment_compare_buffers(hsbc);
   if (cmp == Constraint::INCOMPARABLE) return cmp;
-  return comb_comp(ChannelConstraint::entailment_compare(pwsc), cmp);
+  return comb_comp(ChannelConstraint::entailment_compare(hsbc), cmp);
 }
 
-Constraint::Comparison PwsConstraint::entailment_compare_buffers(const PwsConstraint &pwsc) const {
+Constraint::Comparison HsbConstraint::entailment_compare_buffers(const HsbConstraint &hsbc) const {
   Comparison cmp = EQUAL;
   for (int p = 0; p < common.machine.proc_count(); p++) {
     for (int ml = 0; ml < common.mem_size; ml++) {
-      cmp = comb_comp(entailment_compare_buffer(write_buffers[p][ml], pwsc.write_buffers[p][ml]), cmp);
+      cmp = comb_comp(entailment_compare_buffer(write_buffers[p][ml], hsbc.write_buffers[p][ml]), cmp);
       if (cmp == Constraint::INCOMPARABLE) return cmp;
     }
   }
   return cmp;
 }
 
-Constraint::Comparison PwsConstraint::entailment_compare_buffer(const Store& a, const Store& b) const {
+Constraint::Comparison HsbConstraint::entailment_compare_buffer(const Store& a, const Store& b) const {
   if (a.size() == b.size()) {
     return a.entailment_compare(b);
   } else if (a.size() > b.size()) {
@@ -790,7 +790,7 @@ Constraint::Comparison PwsConstraint::entailment_compare_buffer(const Store& a, 
   return LESS; // a is a subword of b
 }
 
-std::vector<std::pair<int, Lang::NML> > PwsConstraint::get_filled_buffers() const {
+std::vector<std::pair<int, Lang::NML> > HsbConstraint::get_filled_buffers() const {
   std::vector<std::pair<int, Lang::NML> > res;
   for (unsigned p = 0; p < write_buffers.size(); ++p) {
     for (Lang::NML nml : common.nmls) {
@@ -801,8 +801,8 @@ std::vector<std::pair<int, Lang::NML> > PwsConstraint::get_filled_buffers() cons
   return res;
 }
 
-bool PwsConstraint::unreachable() {
-  if (PwsConstraint::use_pending_sets) {
+bool HsbConstraint::unreachable() {
+  if (HsbConstraint::use_pending_sets) {
     // Check each message that is ahead of the writing process' cpointer
     for (int ci = channel.size()-1; ci >= 0; --ci) {
       int pid = channel[ci].wpid;
@@ -981,7 +981,7 @@ bool PwsConstraint::unreachable() {
   return false;
 }
 
-bool PwsConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli) {
+bool HsbConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli) {
   if (nmli < 0) nmli = common.index(nml);
   for (const std::vector<Store> &processwb : write_buffers)
     // This write is the last write and disallows any write propagation.
@@ -989,7 +989,7 @@ bool PwsConstraint::propagate_value_in_channel(const Lang::NML &nml, int nmli) {
   return ChannelConstraint::propagate_value_in_channel(nml, nmli);
 }
 
-int PwsConstraint::get_weight() const {
+int HsbConstraint::get_weight() const {
     int buffered_values = 0;
     for (const std::vector<Store> &pwrite_buffer : write_buffers)
       for (const Store &store : pwrite_buffer)

@@ -29,9 +29,9 @@ predicates.tcc predicates.h \
 preprocessor.h preprocessor.cpp \
 pputils.h \
 pso_fencins.h pso_fencins.cpp \
-pws_constraint.h pws_constraint.cpp pws_constraint.test.cpp \
-pws_container.h pws_container.cpp \
-pws_pso_bwd.cpp pws_pso_bwd.h \
+hsb_constraint.h hsb_constraint.cpp hsb_constraint.test.cpp \
+hsb_container.h hsb_container.cpp \
+hsb_pso_bwd.cpp hsb_pso_bwd.h \
 reachability.cpp reachability.h \
 sb_constraint.cpp sb_constraint.h \
 sb_tso_bwd.cpp sb_tso_bwd.h \

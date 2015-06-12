@@ -614,7 +614,7 @@ namespace Lang {
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
                               const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
     /* Serialise: A serialisation of a write to memory location writes[0]
-     * This operation concern only the PSO memory model abstraction PWS.
+     * This operation concern only the PSO memory model abstraction HSB.
      */
     static Stmt<RegId> serialise(VecSet<MemLoc<RegId>> mls,
                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));

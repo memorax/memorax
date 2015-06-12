@@ -18,17 +18,17 @@
  *
  */
 
-#ifndef __PWS_PSO_BWD_H__
-#define __PWS_PSO_BWD_H__
+#ifndef __HSB_PSO_BWD_H__
+#define __HSB_PSO_BWD_H__
 
 #include "channel_bwd.h"
 
-/* This class is a wrapper for Bwd when used for PwsConstraints. It executes
- * exactly as Bwd, but converts the PWS trace into a PSO trace before returning
+/* This class is a wrapper for Bwd when used for HsbConstraints. It executes
+ * exactly as Bwd, but converts the HSB trace into a PSO trace before returning
  * the result.
  */
 
-class PwsPsoBwd : public ChannelBwd {
+class HsbPsoBwd : public ChannelBwd {
 protected:
   virtual Trace *convert_trace(Trace *trace, ChannelConstraint::Common *common) const;
 private:
