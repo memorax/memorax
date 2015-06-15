@@ -24,18 +24,29 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <functional>]],
                                    [[int j = 42; std::function<int(int)> f = [j](int i){ return i+j; }]])],
   [AC_MSG_RESULT([yes])],
   [AC_MSG_RESULT([no]) ; 
-   AC_MSG_CHECKING([for lambdas with switch -std=c++0x]) ;
+   AC_MSG_CHECKING([for lambdas with switch -std=c++11]) ;
    OLDCXXFLAGS=$CXXFLAGS ;
-   CXXFLAGS="$CXXFLAGS -std=c++0x" ;
+   CXXFLAGS="$CXXFLAGS -std=c++11" ;
    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <functional>]],
                                        [[int j = 42; std::function<int(int)> f = [j](int i){ return i+j; }]])],
      [AC_MSG_RESULT([yes])],
-     [AC_MSG_FAILURE([Failed to compile lambda expression. Does your compiler support C++0x?])])])
+     [AC_MSG_RESULT([no]) ;
+        AC_MSG_CHECKING([for lambdas with switch -std=c++0x]) ;
+        CXXFLAGS="$OLDCXXFLAGS -std=c++0x" ;
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <functional>]],
+                                           [[int j = 42; std::function<int(int)> f = [j](int i){ return i+j; }]])],
+                          [AC_MSG_RESULT([yes])],
+                          [AC_MSG_FAILURE([Failed to compile lambda expression. Does your compiler support C++11?])])])])
 AC_MSG_CHECKING([for automatic type inference])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <list>]],
                                    [[std::list<int> l; for(auto it = l.begin(); it != l.end(); ++it) ;]])],
                   [AC_MSG_RESULT([yes])],
-                  [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile auto-typed declaration. Does your compiler support C++0x?])])
+                  [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile auto-typed declaration. Does your compiler support C++11?])])
+AC_MSG_CHECKING([for range-based for loops])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <list>]],
+                                   [[std::list<int> l; for(int i : l) ;]])],
+                  [AC_MSG_RESULT([yes])],
+                  [AC_MSG_RESULT([no]) ; AC_MSG_FAILURE([Failed to compile range-based for loop. Does your compiler support C++11?])])
 AC_MSG_CHECKING([for gmpxx])
 OLDLIBS=$LIBS
 LIBS="$LIBS -lgmpxx -lgmp"
@@ -89,6 +100,8 @@ else
   AC_DEFINE([HAVE_LIBMATHSAT],[1],[Define to 1 if you have the `mathsat' library (-lmathsat).])
 fi
 
+m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
+
 AC_SUBST([MANUALDEP])
 AC_SUBST([MANUALBUILDRULE])
 AC_SUBST([FDLDEP])
@@ -96,8 +109,8 @@ AC_SUBST([FDLBUILDRULE])
 AC_SUBST([MANUALCLEANRULE])
 MANUALDEP='manual.tex fdl.pdf';
 FDLDEP='fdl-1.3.tex'
-MANUALBUILDRULE='pdflatex manual.tex && bibtex manual.aux && pdflatex manual.tex && pdflatex manual.tex';
-FDLBUILDRULE='pdflatex fdl-1.3.tex && pdflatex fdl-1.3.tex && mv fdl-1.3.pdf fdl.pdf'
+MANUALBUILDRULE='pdflatex -interaction=batchmode manual.tex && bibtex manual.aux && pdflatex -interaction=batchmode manual.tex && pdflatex -interaction=batchmode manual.tex';
+FDLBUILDRULE='pdflatex -interaction=batchmode fdl-1.3.tex && pdflatex -interaction=batchmode fdl-1.3.tex && mv fdl-1.3.pdf fdl.pdf'
 MANUALCLEANRULE='rm -f manual.aux manual.bbl manual.blg manual.log manual.out manual.toc manual.pdf fdl-1.3.out fdl-1.3.aux fdl-1.3.log fdl.pdf'
 AC_CHECK_FILE([doc/manual.tex],
               [AC_CHECK_FILE([doc/biblio.bib],

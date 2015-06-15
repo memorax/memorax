@@ -1,17 +1,18 @@
 Installation Instructions
-*************************
+=========================
 
 Memorax can be compiled and installed on UNIX-like systems.
 
 Requirements
-============
+------------
 
   1. A C++ compiler supporting C++11. For example g++ version 4.6 or
      higher.
 
   2. In order to run the graphical interface, python is required at a
      version of 2.6 or higher installed with tcl/tk of version 8.4 or
-     higher.
+     higher. Python version 3 and above are currently not supported
+     due to major changes in the Tkinter API.
 
   3. For predicate abstraction the MathSAT SMT solver as well as the
      library gmpxx are required. Memorax supports MathSAT 4 and
@@ -26,22 +27,22 @@ Requirements
   autotools and a latex installation will also be required.
 
 Basic Installation
-==================
+------------------
 
    In the simplest case, Memorax can be installed with the following
    commands:
 
-   $ tar xvf memorax-<version>.tar.gz
-   $ cd memorax-<version>
-   $ ./configure
-   $ make
-   $ make install
+    $ tar xvf memorax-<version>.tar.gz
+    $ cd memorax-<version>
+    $ ./configure
+    $ make
+    $ make install
 
    In case you have no configure script, then you should refer to the
    next section.
 
 Building the configure Script and Makefiles
-===========================================
+-------------------------------------------
 
    The installable tarballs are provided with a configure script and
    Makefile templates. But in case you acquired the Memorax sources by
@@ -49,8 +50,8 @@ Building the configure Script and Makefiles
    files using GNU autotools. The easiest way to do this is as
    follows:
 
-   $ cd memorax-<version>
-   $ autoreconf --install
+    $ cd memorax-<version>
+    $ autoreconf --install
 
    This will automatically produce a configure script as well as
    Makefile templates, from the autotools template files configure.ac,
@@ -59,45 +60,42 @@ Building the configure Script and Makefiles
    After building the installation files, you should be able to
    proceed in the same way as above:
 
-   $ ./configure
-   $ make
-   $ make install
-
+    $ ./configure
+    $ make
+    $ make install
+    
 Installation Options
-====================
+--------------------
 
    The configure script is built with GNU autotools, and should accept
    the usual options and environment variables. This section outlines
    some of the typical use cases.
 
-Changing Installation Directory
--------------------------------
+###Changing Installation Directory
 
    The command 'make install' will install Memorax, its graphical
    interface and its documentation in the directories which are
    standard on your system. To override this behavior add the switch
    --prefix to the './configure' command:
 
-   $ ./configure --prefix=/your/desired/install/path
+    $ ./configure --prefix=/your/desired/install/path
 
-Compiling with Predicate Abstraction Support
---------------------------------------------
+###Compiling with Predicate Abstraction Support
 
    To support predicate abstraction, Memorax must be compiled with
    MathSAT and gmpxx. Their header files and shared libraries must
    reside where they can be found by the compilation. If they are
    installed in non-standard locations, then the compilation can be
-   directed to their location by appropriately specifying CXXFLAGS and
+   directed to their location by appropriately specifying CPPFLAGS and
    LDFLAGS when invoking the './configure' command:
 
-   $ ./configure CXXFLAGS='-I/path/to/mathsat/include' \
-                 LDFLAGS='-L/path/to/mathsat/lib'
+    $ ./configure CPPFLAGS='-I/path/to/mathsat/include' \
+                  LDFLAGS='-L/path/to/mathsat/lib'
 
    If MathSAT and/or gmpxx are not found by the configure script, then
    Memorax will be installed without support for predicate abstraction.
 
-Specifying Compiler
--------------------
+###Specifying Compiler
 
    When the configure script is invoked, it will by GNU autotools
    magic determine which C++ compiler will be used during
@@ -107,18 +105,27 @@ Specifying Compiler
    so, specify the path to g++-4.6 in CXX when invoking the
    './configure' command:
 
-   $ ./configure CXX='/path/to/g++-4.6'
+    $ ./configure CXX='/path/to/g++-4.6'
+
+###Choosing the right Python version
+
+   The autotools script will choose the highest version of Python it
+   can find on your path. If that version happens to be Python 3 or
+   above, the installation will warn you that Tkinter was not found,
+   even when it is installed. In order to be able to use the GUI, you
+   must manually specify the path to Python 2. For example:
+
+    $ ./configure PYTHON=/usr/bin/python2
 
 Troubleshooting
-===============
+---------------
 
-MSatFailure
------------
+###MSatFailure
 
    In case you get the following error message when trying to use the
    PB abstraction:
 
-   Error: MSatFailure: Program is not compiled with MathSAT.
+    Error: MSatFailure: Program is not compiled with MathSAT.
 
    In order to use predicate abstraction, (e.g. the PB abstraction)
    the Memorax tool needs to be compiled with MathSAT. To solve the
@@ -128,7 +135,7 @@ MSatFailure
    section "Compiling with Predicate Abstraction Support" above.
 
 License
-*******
+=======
 
    The Memorax tool is licensed under GPLv3. See COPYING.
 
@@ -143,7 +150,7 @@ License
    General Public License for more details.
 
 Contact / Bug Report
-********************
+====================
 
    Feedback, questions or bug reports should be directed to Carl
    Leonardsson (carl.leonardsson@it.uu.se).

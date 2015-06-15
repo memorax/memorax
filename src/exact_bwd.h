@@ -52,6 +52,8 @@ public:
       if(common) delete common;
       if(container) delete container;
     };
+    Arg(const Arg&) = delete;
+    Arg &operator =(const Arg&) = delete;
     /* Reachability analysis will start from these bad states and try
      * to reach an initial state.
      */

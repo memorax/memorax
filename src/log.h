@@ -87,6 +87,9 @@ namespace Log{
    * (notably GUI) */
   extern redirection_stream json;
 
+  /* This stream never prints */
+  extern redirection_stream null;
+
   /* Redirect output to the stream pointed to by os. If os == 0, then
    * the output to the corresponding log levels will be silent.
    */

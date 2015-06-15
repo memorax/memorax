@@ -171,6 +171,19 @@ std::list<std::pair<const Machine::PTransition*,const Machine::PTransition*> > T
   return l;
 };
 
+std::string TsoCycle::to_string(const Machine &m) const{
+  std::string s;
+  if(complete){
+    s = "TsoCycle (complete):\n";
+  }else{
+    s = "TsoCycle (fragment):\n";
+  }
+  for(int i = 0; i < frag_len; i++){
+    s += "  "+frag[i]->to_string(m)+"\n";
+  }
+  return s;
+};
+
 std::string TsoCycle::to_string(const std::function<std::string(const int&)> &regts, 
                                 const std::function<std::string(const Lang::MemLoc<int> &)> &mlts) const{
   std::string s;

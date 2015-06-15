@@ -471,7 +471,7 @@ namespace Lang {
     /* Synchronized Write: syncwr: writes[0] := e0
      * Used in VIPS-M. */
     SYNCWR,
-    /* Fence: A full memory fence. Used in particular in VIPS-M. */
+    /* Fence: A full memory fence. Used in particular in VIPS-M and HSB. */
     FENCE,
     /* SSFence: A memory fence that enforces W->W order. */
     SSFENCE,
@@ -491,6 +491,19 @@ namespace Lang {
      *   nop, assignment, assume, readassert, readassign, write, locked, sequence
      */
     LOCKED,
+    /* Store-store locked block: 
+     * slocked {
+     *   stmts[0]
+     * or
+     *   ...
+     * or
+     *   stmts[stmt_count-1]
+     * }
+     * Invariant: 
+     *   No labels occur in stmts.
+     *   The only kind of statement which may occur in stmts are write.
+     */
+    SLOCKED,
     /* Goto: goto lbl */
     GOTO,
     /* Update: An update concerning memory location writes[0], and a
@@ -511,6 +524,8 @@ namespace Lang {
      * writes[0] in L1 is written to memory.
      */
     WRLLC,
+    /* Serialise: A serialisation of a write to memory location writes[0] */
+    SERIALISE,
     /* If statement:
      * If stmt_count == 1 then: if b then stmts[0]
      * If stmt_count == 2 then: if b then stmts[0] else stmts[1]
@@ -533,7 +548,7 @@ namespace Lang {
     /* Sequence of statements:
      * { stmts[0], ..., stmts[stmt_count-1] }
      */
-    SEQUENCE
+    SEQUENCE,
   };
 
   /* Class of statements.
@@ -617,8 +632,26 @@ namespace Lang {
                                     std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* Cas: cas(ml,e0,e1) */
     static Stmt<RegId> cas(MemLoc<RegId> ml, const Expr<RegId> &e0, const Expr<RegId> &e1,
-                           const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+			   const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                            std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Store-store locked block:
+     * slocked {
+     *   ss[0]
+     * or
+     *   ...
+     * or
+     *   ss[ss.size()-1]
+     * }
+     *
+     * Pre: ss contains no labels
+     *      All statements in ss are of type write.
+     *      ss.size() > 0
+     */ 
+    static Stmt<RegId> slocked_block(const std::vector<Stmt> &ss,
+                                     const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
+    /* Store-store locked write: slocked write: ml := e */
+    static Stmt<RegId> slocked_write(MemLoc<RegId> ml, const Expr<RegId> &e,
+                                    const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
     /* Goto: goto lbl */
     static Stmt<RegId> goto_stmt(label_t lbl,
                                  const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
@@ -636,7 +669,7 @@ namespace Lang {
      * SB.
      */
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
-                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+			      const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* A fetch concerning the memory location ml. */
     static Stmt<RegId> fetch(MemLoc<RegId> ml,
@@ -650,6 +683,11 @@ namespace Lang {
     static Stmt<RegId> wrllc(MemLoc<RegId> ml,
                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                              std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* Serialise: A serialisation of a write to memory location writes[0]
+     * This operation concern only the PSO memory model abstraction HSB.
+     */
+    static Stmt<RegId> serialise(VecSet<MemLoc<RegId>> mls,
+                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1));
     /* Type of a labeled statement. */
     struct labeled_stmt_t{
       labeled_stmt_t() : lbl(""), stmt() {};
@@ -828,6 +866,14 @@ namespace Lang {
      * assigned a human-readable explanation of the failure.
      */
     static bool check_locked_invariant(const Stmt &stmt, std::string *comment);
+    /* Checks if stmt is an acceptable statement as an element of
+     * stmts for an SLOCKED statement. Returns true if so, false
+     * otherwise.
+     *
+     * If comment != 0 and stmt is not acceptable, then *comment is
+     * assigned a human-readable explanation of the failure.
+     */
+    static bool check_slocked_invariant(const Stmt &stmt, std::string *comment);
     /* Applies f to all substatements of this statement (including
      * this statement itself) in some order. If there is a
      * substatement that satisfies f, then true is returned, otherwise

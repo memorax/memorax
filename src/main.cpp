@@ -27,12 +27,18 @@
 #include "min_coverage.h"
 #include "pb_cegar.h"
 #include "pb_constraint.h"
+#include "tso_fencins.h"
+#include "pso_fencins.h"
+#include <cerrno>
 #include "pb_container2.h"
 #include "predicates.h"
 #include "preprocessor.h"
 #include "sb_constraint.h"
-#include "sb_container.h"
+#include "channel_container.h"
 #include "sb_tso_bwd.h"
+#include "hsb_constraint.h"
+#include "hsb_container.h"
+#include "hsb_pso_bwd.h"
 #include "shellcmd.h"
 #include "sync_set_printer.h"
 #include "test.h"
@@ -93,22 +99,35 @@ template<typename ITER> void inform_ignore(ITER begin, ITER end,
  *
  * If flags["rff"], then convert the machine to register free form
  * before returning it.
+ *
+ * If flags["a"].argument is "hsb", additionaly convert locks to
+ * fences before returning.
  */
 Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input_stream){
   PPLexer lex(input_stream);
-  Machine *m0 = new Machine(Parser::p_test(lex));
+  std::unique_ptr<Machine> machine(new Machine(Parser::p_test(lex)));
+
+  std::set<std::string> abstractions_requiring_fences{"hsb"};
+  std::set<std::string> finite_bounds{"sb", "hsb"};
+  int reg_count = 0;
+  for (const auto &pregs : machine->regs) reg_count += pregs.size();
+
   if(flags.count("rff")){
-    Machine *m1 = m0->remove_registers();
-    Machine *m2 = m1->remove_superfluous_nops();
-    delete m0;
-    delete m1;
-    return m2;
-  }else{
-    return m0;
+    machine = std::unique_ptr<Machine>(machine->remove_registers());
+    machine = std::unique_ptr<Machine>(machine->remove_superfluous_nops());
+  } else if (flags.count("a") && finite_bounds.count(flags.at("a").argument) && reg_count > 0) {
+    Log::msg << "Warning: You are using an abstraction for finite data bounds without register "
+             << "free form (--rff). Performance is commonly much better with register free "
+             << "form." << std::endl;
   }
+  if(flags.count("a") && abstractions_requiring_fences.count(flags.at("a").argument)){
+    machine = std::unique_ptr<Machine>(machine->convert_locks_to_fences());
+  }
+  return machine.release();
 };
 
-void print_fence_sets(const Machine &machine, const std::list<TsoFencins::FenceSet> &fence_sets){
+template<class FenceSet>
+void print_fence_sets(const Machine &machine, const std::list<FenceSet> &fence_sets){
   std::set<std::set<Sync*> > sync_sets;
   for(auto it = fence_sets.begin(); it != fence_sets.end(); ++it){
     sync_sets.insert(it->to_sync_set());
@@ -152,9 +171,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
   fencins_timer.start();
 
   if(flags.find("a")->second.argument == "pb"){
-    Machine *tmp_machine = machine.release();
-    machine = std::unique_ptr<Machine>(tmp_machine->add_domain_assumes());
-    delete tmp_machine;
+    machine = std::unique_ptr<Machine>(machine->add_domain_assumes());
     PbConstraint::pred_set preds;
     int k = 1;
     if(flags.count("k")){
@@ -264,7 +281,7 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
     TsoFencins::reach_arg_init_t arg_init =
       [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
       SbConstraint::Common *common = new SbConstraint::Common(m);
-      return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
+      return new ExactBwd::Arg(m,common->get_bad_states(),common,new ChannelContainer());
     };
     std::string fmin = "cheap";
     if(flags.count("fmin")){
@@ -375,7 +392,17 @@ int fencins(const std::map<std::string,Flag> flags, std::istream &input_stream){
       }
     }
     retval = 0;
-  }else{
+  }else if(flags.find("a")->second.argument == "hsb"){
+    std::list<PsoFencins::FenceSet> fence_sets;
+    HsbPsoBwd reach;
+    TsoFencins::reach_arg_init_t arg_init =
+      [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
+      HsbConstraint::Common *common = new HsbConstraint::Common(m);
+      return new ExactBwd::Arg(m,common->get_bad_states(),common,new HsbContainer());
+    };
+    fence_sets = PsoFencins::fencins(*machine,reach,arg_init,flags.count("only-one"));
+    print_fence_sets(*machine,fence_sets);
+    retval = 0;  }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
   }
@@ -451,10 +478,14 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
   }else if(flags.find("a")->second.argument == "sb"){
     SbConstraint::Common *common = new SbConstraint::Common(*machine);
     reach = new SbTsoBwd();
-    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new SbContainer());
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new ChannelContainer());
   }else if(flags.find("a")->second.argument == "vips"){
     reach = new VipsBitReachability();
     rarg = new Reachability::Arg(*machine);
+  }else if(flags.find("a")->second.argument == "hsb"){
+    HsbConstraint::Common *common = new HsbConstraint::Common(*machine);
+    reach = new HsbPsoBwd();
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new HsbContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
@@ -484,8 +515,8 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
 
 /* Produce a pdf showing the automata generated from the code inputted on cin. */
 int dotify(const std::map<std::string,Flag> flags, std::istream &input_stream){
-  std::string used_flags[] = {"o","rff"};
-  inform_ignore(used_flags,used_flags+2,flags);
+  std::string used_flags[] = {"o","rff","a"};
+  inform_ignore(used_flags,used_flags+3,flags);
   if(flags.count("o") == 0){
     Log::warning << "For command dotify. Specify an output file.pdf using the flag -o.\n";
     return 1;
@@ -580,14 +611,18 @@ void print_help(int argc, char *argv[]){
             << "        Print version and quit.\n"
             << std::endl
             << "  Abstractions:\n"
-            << "    pb (default)\n"
+            << "    pb\n"
             << "      TSO with bounded number of buffer messages per process and variable.\n"
             << "      Uses predicate abstraction.\n"
             << "      Overapproximation of TSO.\n"
             << "      Sound, but incomplete with CEGAR.\n"
-            << "    sb\n"
+            << "    sb (default)\n"
             << "      The Single Buffer model.\n"
             << "      Equivalent to TSO w.r.t. control state reachability.\n"
+            << "      Sound and complete for finite data domains.\n"
+            << "    hsb\n"
+            << "      The Hierarchy Single Buffer model.\n"
+            << "      Equivalent to PSO w.r.t. control state reachability.\n"
             << "      Sound and complete for finite data domains.\n"
             << "    vips\n"
             << "      VIPS-M. Explicit state forward analysis.\n"
@@ -763,6 +798,7 @@ int main(int argc, char *argv[]){
         }else if(i < argc-1){
           if(argv[i+1] == std::string("sb") ||
              argv[i+1] == std::string("pb") ||
+             argv[i+1] == std::string("hsb") ||
              argv[i+1] == std::string("vips")){
             flags["a"] = Flag("a",argv[i],true,argv[i+1]);
             i++;
@@ -853,6 +889,7 @@ int main(int argc, char *argv[]){
       Test::add_test("VipsSyncrdSync",VipsSyncwrSync::test);
       Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
       Test::add_test("ZStar",ZStar<int>::test);
+      Test::add_test("HsbConstraint",HsbConstraint::test);
       retval = Test::run_tests();
       break;
     default:

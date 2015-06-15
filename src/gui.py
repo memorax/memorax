@@ -311,6 +311,8 @@ CS:\n\
         self.fmin_sel.set("cost")
         self.rff_check = Tkinter.IntVar() # Checks whether or not to use register free form
         self.rff_check.set(True)
+        self.fence_check = Tkinter.IntVar() # Checks whether or not to use register free form
+        self.fence_check.set(False)
 
         master.bind_all("<F1>",lambda evt: self.select_command("reach"))
         master.bind_all("<F2>",lambda evt: self.select_command("fencins"))
@@ -612,6 +614,12 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
             self.set_hint(self.wg_abs_sel_vips,
                           "Abstraction VIPS-M:\nExplicit state forward analysis. Sound and complete.\n"+
                           "Memory model: VIPS-M\nIntegers: Bounded")
+            self.wg_abs_sel_hsb = Tkinter.Radiobutton(self.wg_abs_sel_frame,text="HSB",variable=self.abs_sel,value="hsb",
+                                                      bg=self.bg_colour,command=self.select_abstraction_from_wg)
+            self.wg_abs_sel_hsb.pack(side=Tkinter.LEFT)
+            self.set_hint(self.wg_abs_sel_hsb,
+                          "Abstraction HSB:\nExact analysis using the WQO framework over the HSB semantic.\n"+
+                          "Memory model: PSO (SB)\nIntegers: Bounded")
             self.wg_rff_check = Tkinter.Checkbutton(self.wg_command_inner_frame,text="Register Free Form",variable=self.rff_check,
                                                     bg=self.bg_colour)
             self.set_hint(self.wg_rff_check,
@@ -651,6 +659,11 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
             self.set_hint(self.wg_rff_check,
                           "Transform the machine to Register Free Form before using it.")
             self.wg_rff_check.pack(side=Tkinter.RIGHT)
+            self.wg_fence_check = Tkinter.Checkbutton(self.wg_dotify_frame,text="Use fences",variable=self.fence_check,
+                                                    bg=self.bg_colour)
+            self.set_hint(self.wg_fence_check,
+                          "Represent locked writes with separate fence transitions. This is the form used by HSB.")
+            self.wg_fence_check.pack(side=Tkinter.RIGHT)
             self.wg_dotify_lbl = Tkinter.Label(self.wg_dotify_frame,text="Output: ",bg=self.bg_colour)
             self.wg_dotify_output = Tkinter.Entry(self.wg_dotify_frame,width=40)
             self.set_dotify_output_from_code_filename()
@@ -718,6 +731,7 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
         return "cost"
 
     def select_abstraction_from_wg(self):
+        self.fence_check.set(self.abs_sel.get() == "hsb")
         if self.abstraction_has_cegar(self.abs_sel.get()):
             self.wg_cegar_check.config(state=Tkinter.NORMAL)
         else:
@@ -908,6 +922,10 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                 rff=" --rff"
             else:
                 rff=""
+            if self.fence_check.get():
+                fence=" -a hsb"
+            else:
+                fence=""
             rmm_code = self.wg_code.get("1.0","end")
             if self.commands[self.command_sel.get()] == "reach":
                 cmd = self.conf.binary+" reach"+verb+rff+" --json --abstraction "+self.abs_sel.get()
@@ -924,7 +942,7 @@ the GNU General Public License Version 3 (http://www.gnu.org/licenses/).\n"""
                 self.run_and_output(cmd,input=rmm_code)
             elif self.commands[self.command_sel.get()] == "dotify":
                 output = self.wg_dotify_output.get()
-                cmd = self.conf.binary+" dotify --json"+verb+rff+" -o "+output
+                cmd = self.conf.binary+" dotify --json"+verb+rff+fence+" -o "+output
                 self.run_and_output(cmd,input=rmm_code,on_done=lambda: self.show_dotify_pdf(output))
             else:
                 self.perror_clear("Run("+self.commands[self.command_sel.get()]+"): Not implemented")

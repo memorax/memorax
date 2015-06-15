@@ -501,6 +501,7 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
       }
       break;
     }
+  case Lang::SLOCKED:
   case Lang::LOCKED:
     {
       for(int i = 0; i < stmt.get_statement_count(); ++i){
@@ -508,7 +509,10 @@ Machine::remove_registers(const Lang::Stmt<int> &stmt,
         for(unsigned j = 0; j < vs.size(); ++j){
           std::vector<Lang::Stmt<int> > seq;
           seq.push_back(vs[j].first);
-          s.insert(pr_t(Lang::Stmt<int>::locked_block(seq,pos),vs[j].second));
+          if (stmt.get_type() == Lang::SLOCKED)
+            s.insert(pr_t(Lang::Stmt<int>::slocked_block(seq,pos),vs[j].second));
+          else
+            s.insert(pr_t(Lang::Stmt<int>::locked_block(seq,pos),vs[j].second));
         }
       }
       break;
@@ -602,6 +606,7 @@ void Machine::get_reg_relevant_aux(int reg, const Lang::Stmt<int> &stmt,
   case Lang::SYNCWR:
     *may_read = stmt.get_expr().get_registers().count(reg);
     break;
+  case Lang::SLOCKED:
   case Lang::LOCKED:
     {
       bool mr;
@@ -1067,6 +1072,7 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
       ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
       break;
     }
+  case Lang::SLOCKED:
   case Lang::LOCKED:
     {
       std::vector<Lang::Stmt<int> > v;
@@ -1078,7 +1084,10 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
         }
         v.push_back(Lang::Stmt<int>::sequence(lv2,s.get_statement(i)->get_pos()));
       }
-      ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
+      if (s.get_type() == Lang::SLOCKED)
+        ss.push_back(Lang::Stmt<int>::slocked_block(v,s.get_pos()));
+      else
+        ss.push_back(Lang::Stmt<int>::locked_block(v,s.get_pos()));
       break;
     }
   case Lang::SEQUENCE:
@@ -1100,6 +1109,74 @@ std::vector<Lang::Stmt<int> > Machine::add_domain_assumes(const Lang::Stmt<int> 
   }
   return ss;
 };
+
+Machine *Machine::convert_locks_to_fences() const{
+  std::unique_ptr<Machine> machine(new Machine(*this));
+
+  for (Automaton &au : machine->automata)
+    convert_locks_to_fences(au);
+
+  return machine.release();
+};
+
+void Machine::convert_locks_to_fences(Automaton &au) const{
+  int next_free_state = au.get_states().size();
+
+  /* ssfences_into[s] is a state t that only have a single forward transition,
+   * and that transition is a ssfence and goes to state s. Analogously for
+   * fences_into. */
+  std::map<int, int> ssfences_into, fences_into;
+  for (const Automaton::State &state : au.get_states())
+    if (state.fwd_transitions.size() == 1) {
+      const Automaton::Transition &trans = **state.fwd_transitions.cbegin();
+      if (trans.instruction.get_type() == Lang::SSFENCE) ssfences_into[trans.target] = trans.source;
+      if (trans.instruction.get_type() == Lang::FENCE) fences_into[trans.target] = trans.source;
+    }
+
+  /* We need a copy because we will be adding states, which breaks the iterator. */
+  std::vector<Automaton::State> states = au.get_states();
+  for (const Automaton::State &state : states) {
+    for (Automaton::Transition *trans : state.fwd_transitions) {
+      const Lang::Stmt<int> &stmt = trans->instruction;
+      switch (stmt.get_type()) {
+      case Lang::SLOCKED:
+      case Lang::LOCKED:
+        if (stmt.get_statement_count() == 1 &&
+            stmt.get_statement(0)->get_type() == Lang::WRITE) {
+          std::map<int, int> &map = stmt.get_type() == Lang::SLOCKED ? ssfences_into : fences_into;
+          int fence_state;
+          auto find = map.find(trans->target);
+          if (find == map.end()) {
+            /* There is no fence state, we have to create one. */
+            fence_state = next_free_state++;
+            au.add_transition({fence_state, stmt.get_type() == Lang::SLOCKED ?
+                               Lang::Stmt<int>::ss_fence() : Lang::Stmt<int>::full_fence(),
+                               trans->target});
+          } else {
+            fence_state = find->second;
+          }
+          /* We make a copy of the transition because it will be freed by the
+           * assignment operator before it copies. */
+          Lang::Stmt<int> tmp = *stmt.get_statement(0);
+          trans->instruction = tmp;
+          au.get_states()[trans->target].bwd_transitions.erase(trans);
+          trans->target = fence_state;
+          au.get_states()[trans->target].bwd_transitions.insert(trans);
+        } else {
+          assert(trans->instruction.get_type() != Lang::SLOCKED);
+          if (stmt.get_statement_count() != 1 ||
+              stmt.get_statement(0)->get_type() != Lang::SEQUENCE ||
+              stmt.get_statement(0)->get_statement_count() != 2 ||
+              stmt.get_statement(0)->get_statement(0)->get_type() != Lang::READASSERT ||
+              stmt.get_statement(0)->get_statement(1)->get_type() != Lang::WRITE)
+            throw new std::logic_error("Machine::convert_locks_to_fences: Error, locked blocks "
+                                       "must be either trivial writes or cas.");
+        }
+      default:;
+      }
+    }
+  }
+}
 
 Lang::VarDecl Machine::get_declaration(const Lang::NML &nml) const{
   if(nml.is_global()){

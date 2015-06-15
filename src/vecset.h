@@ -47,7 +47,9 @@ public:
   VecSet(ITER begin, ITER end);
   VecSet(std::initializer_list<T> il);
   VecSet(const VecSet &) = default;
+  VecSet(VecSet &&) = default;
   VecSet &operator=(const VecSet&) = default;
+  VecSet &operator=(VecSet&&) = default;
   virtual ~VecSet() {};
   /* Returns a set which is the singleton {t}. */
   static VecSet singleton(const T &t){

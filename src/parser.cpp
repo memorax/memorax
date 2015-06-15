@@ -519,6 +519,18 @@ Parser::stmt_t Parser::p_stmt_toks(Lexer &lex,const Context &ctx,std::vector<Lex
       }
       break;
     }
+ case Lexer::SLOCKED:
+    {
+      Lexer::TokenPos pos0 = tok.pos;
+      force(lex,Lexer::WRITE);
+      force(lex,Lexer::COLON);
+      Parser::memloc_or_pointer_t ml = p_memloc(lex,ctx);
+      force(lex,Lexer::ASSIGNMENT);
+      expr_t e = p_expr(lex);
+      return resolve_pointer(ml,[&e,&pos0](const memloc_t &ml){
+          return stmt_t::slocked_write(ml,e,pos0);
+        },ctx,mytoks);
+    }
   case Lexer::LCURL:
     {
       ppush(&mytoks,tok);

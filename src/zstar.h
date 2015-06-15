@@ -64,6 +64,19 @@ public:
   ZStar operator*(const ZStar &zs) const throw();
   ZStar operator/(const ZStar &zs) const throw();
 
+  /* Return true iff the cut of the sets of values represented by this ZStar and
+   * zs is nonempty. */
+  inline bool unifiable(const ZStar &zs) const noexcept {
+    return wild || zs.wild || z == zs.z;
+  };
+
+  /* If the cut of the sets of values represented by this ZStar and zs is
+   * nonempty, return a ZStar representing that cut. Otherwise, set unifiable to
+   * false and return an arbitrary ZStar.
+   */
+  ZStar unify(const ZStar &zs, bool *unifiable) const;
+
+
   std::string to_string() const throw();
 
   /* An unmutable vector of ZStar values.
@@ -88,10 +101,20 @@ public:
     ~Vector();
     /* The ZValue at index i in this vector */
     const ZStar &operator[](int i) const;
+    /* The last ZValue in this vector */
+    const ZStar &back() const { return (*this)[size() - 1]; }
     /* Return a new Vector which is identical to this one, except that
      * element i is set to val.
      */
     Vector assign(int i, const ZStar &val) const;
+    /* Return a new Vector which has val as its first element, and the elements
+     * of this one as the rest.
+     */
+    Vector push_front(ZStar val) const;
+    /* Return a new Vector which is identical to this one, except the very last
+     * element is removed.
+     */
+    Vector pop_back() const;
     /* If there is a least upper bound lub (by entailment_compare) of
      * this store and s, then *unifiable is set to true and lub is
      * returned. Otherwise *unifiable is set to false and an arbitrary

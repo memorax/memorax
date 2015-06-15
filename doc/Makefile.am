@@ -16,11 +16,11 @@ nobase_dist_doc_DATA = \
 EXTRA_DIST = manual.tex biblio.bib fdl-1.3.tex fdl.pdf Makefile.am
 
 fdl.pdf: @FDLDEP@
-	@FDLBUILDRULE@
+	$(AM_V_GEN)@FDLBUILDRULE@
 
 manual.pdf: @MANUALDEP@
-	@MANUALBUILDRULE@
+	$(AM_V_GEN)@MANUALBUILDRULE@
 
 clean-local:
-	@MANUALCLEANRULE@bakery.bound2.rmm
+	@MANUALCLEANRULE@ bakery.bound2.rmm
 

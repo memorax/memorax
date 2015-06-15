@@ -18,31 +18,31 @@
  *
  */
 
-#include "sb_container.h"
+#include "channel_container.h"
 
-const bool SbContainer::print_every_state_on_clear = false;
-const bool SbContainer::use_genealogy = false;
+const bool ChannelContainer::print_every_state_on_clear = false;
+const bool ChannelContainer::use_genealogy = false;
 
-SbContainer::SbContainer(){
+ChannelContainer::ChannelContainer(){
   last_popped.first = 0;
   last_popped.second = 0;
   q_size = f_size = 0;
 };
 
-SbContainer::~SbContainer(){
+ChannelContainer::~ChannelContainer(){
 #ifndef NDEBUG
   stats.print();
 #endif
   clear();
 };
 
-void SbContainer::insert_root(Constraint *r){
-  insert(new CWrapper(static_cast<SbConstraint*>(r)));
+void ChannelContainer::insert_root(Constraint *r){
+  insert(new CWrapper(static_cast<ChannelConstraint*>(r)));
 };
 
-void SbContainer::insert(Constraint *p, const Machine::PTransition *t, Constraint *c){
-  CWrapper *pcw = get_cwrapper(static_cast<SbConstraint*>(p));
-  CWrapper *cw = new CWrapper(static_cast<SbConstraint*>(c), pcw, t);
+void ChannelContainer::insert(Constraint *p, const Machine::PTransition *t, Constraint *c){
+  CWrapper *pcw = get_cwrapper(static_cast<ChannelConstraint*>(p));
+  CWrapper *cw = new CWrapper(static_cast<ChannelConstraint*>(c), pcw, t);
   if(insert(cw)){
     if(use_genealogy){
       pcw->children.push_back(cw);
@@ -50,8 +50,8 @@ void SbContainer::insert(Constraint *p, const Machine::PTransition *t, Constrain
   }
 };
 
-bool SbContainer::insert(CWrapper *cw){
-  std::vector<CWrapper*> &v = F[cw->sbc->get_control_states()][cw->sbc->characterize_channel()];
+bool ChannelContainer::insert(CWrapper *cw){
+  std::vector<CWrapper*> &v = get_F_set(cw);
   /* Go through v to see if cw is subsumed or if cw subsumes any of
    * the existing constraints */
   for(unsigned i = 0; i < v.size(); ++i){
@@ -72,7 +72,7 @@ bool SbContainer::insert(CWrapper *cw){
   }
   v.push_back(cw);
   update_longest_comparable_array(v);
-  update_longest_channel(cw->sbc->channel.size());
+  update_longest_channel(cw->sbc->get_weight());
   ptr_to_F[cw->sbc] = cw;
   cw->Q_ticket = Q.push(cw);
   ++q_size;
@@ -80,9 +80,9 @@ bool SbContainer::insert(CWrapper *cw){
   return true;
 };
 
-void SbContainer::invalidate(CWrapper *cw, std::vector<CWrapper*> *Fv){
+void ChannelContainer::invalidate(CWrapper *cw, std::vector<CWrapper*> *Fv){
   if(Fv == 0){
-    Fv = &F[cw->sbc->get_control_states()][cw->sbc->characterize_channel()];
+    Fv = &get_F_set(cw);
   }
 #ifndef NDEBUG
   bool erased = false;
@@ -102,7 +102,7 @@ void SbContainer::invalidate(CWrapper *cw, std::vector<CWrapper*> *Fv){
   assert(erased);
   invalid_from_F.push_back(cw);
   cw->valid = false;
-  if(Q.in_queue(cw->Q_ticket,cw->sbc->get_channel_length())){
+  if(Q.in_queue(cw->Q_ticket,cw->sbc->get_weight())){
     --q_size;
   }
   --f_size;
@@ -116,7 +116,7 @@ void SbContainer::invalidate(CWrapper *cw, std::vector<CWrapper*> *Fv){
   }
 };
 
-Constraint *SbContainer::pop(){
+Constraint *ChannelContainer::pop(){
   if(q_size == 0){
     return 0;
   }else{
@@ -131,9 +131,9 @@ Constraint *SbContainer::pop(){
   }
 };
 
-Trace *SbContainer::clear_and_get_trace(Constraint *c){
+Trace *ChannelContainer::clear_and_get_trace(Constraint *c){
   Trace *t = new Trace(c);
-  CWrapper *cw = get_cwrapper(static_cast<SbConstraint*>(c));
+  CWrapper *cw = get_cwrapper(static_cast<ChannelConstraint*>(c));
   cw->sbc = 0;
   while(cw->parent){
     t->push_back(*cw->p_transition,cw->parent->sbc);
@@ -144,24 +144,22 @@ Trace *SbContainer::clear_and_get_trace(Constraint *c){
   return t;
 };
 
-void SbContainer::clear(){
+void ChannelContainer::clear(){
   if(print_every_state_on_clear){
     Log::extreme << "  **************************************\n";
     Log::extreme << "  *** All constraints in visited set ***\n";
     Log::extreme << "  **************************************\n\n";
   }
-  for(auto it = F.begin(); it != F.end(); ++it){
-    for(auto it2 = it->second.begin(); it2 != it->second.end(); ++it2){
-      for(unsigned i = 0; i < it2->second.size(); ++i){
+  visit_F([](std::vector<CWrapper*> &S) {
+      for(unsigned i = 0; i < S.size(); ++i){
         if(print_every_state_on_clear){
-          if(it2->second[i]->sbc){
-            Log::extreme << it2->second[i]->sbc->to_string() << "\n";
+          if(S[i]->sbc){
+            Log::extreme << S[i]->sbc->to_string() << "\n";
           }
         }
-        delete it2->second[i];
+        delete S[i];
       }
-    }
-  }
+    });
   for(auto it = invalid_from_F.begin(); it != invalid_from_F.end(); ++it){
     delete *it;
   }
@@ -174,3 +172,15 @@ void SbContainer::clear(){
   last_popped.first = 0;
   last_popped.second = 0;
 };
+
+std::vector<ChannelContainer::CWrapper*> &ChannelContainer::get_F_set(CWrapper *cw){
+  return F[cw->sbc->get_control_states()][cw->sbc->characterize_channel()];
+}
+
+void ChannelContainer::visit_F(std::function<void(std::vector<CWrapper*>&)> f){
+  for(auto &FPerPcs : F){
+    for (auto &subset : FPerPcs.second){
+      f(subset.second);
+    }
+  }
+}

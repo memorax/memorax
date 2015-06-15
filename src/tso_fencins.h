@@ -55,7 +55,7 @@ namespace TsoFencins{
    * machine M. It represents the set of fences corresponding to making
    * each of the writes locked.
    */
-  class FenceSet : private std::set<Machine::PTransition>{
+  class FenceSet{
   public:
     /* Constructs a set of fences for the machine m, corresponding to
      * making each non-atomi write in f locked.
@@ -91,7 +91,10 @@ namespace TsoFencins{
      *      trace is a trace in the machine get_atomized_machine
      */
     FenceSet atomize(const cycle_t &cycle, const Trace &trace) const;
-    std::string to_string() const throw();
+    void print(Log::redirection_stream &text, Log::redirection_stream &json) const throw();
+
+    /* Returns true iff this fence set is empty */
+    bool empty() const throw() { return writes.empty(); }
 
     /* Returns true iff the W of fs is a subset of the W of this. */
     bool includes(const FenceSet &fs) const;
@@ -135,7 +138,7 @@ namespace TsoFencins{
                               bool only_one = true);
 
   /* Returns all cycles in trace that are enabled by some TSO
-   * reordering in trace.
+   * reordering in trace. Handles both TSO and PSO traces.
    */
   std::list<cycle_t> find_cycles(const Trace &trace);
 
@@ -196,6 +199,15 @@ namespace TsoFencins{
    */
   bool fence_between(const Trace &trace, const Machine &m, int wi, int ri);
 
+  /* Returns the transition from m which equals w modulo atomicity. Handles both
+   * TSO and PSO semantics.
+   *
+   * Pre: w is a write transition, a slocked write transition or an locked write
+   *        instruction.
+   *      There is exactly one transition in m which equals w modulo atomicity.
+   */
+  Machine::PTransition get_transition_from_machine(const Machine &m, const Machine::PTransition &w);
+
   /* Returns the index i, such that trace[i] == t.
    *
    * Pre: There is an index i such that trace[i] == t.
@@ -212,6 +224,11 @@ namespace TsoFencins{
    */
   std::pair<int,int> get_cycle_bounds(const cycle_t &cycle, const Trace &trace);
 
+  /* Returns a map which maps pointers to writes in trace to the corresponding
+   * pointers to updates in trace. Handles both TSO and PSO semantics.
+   */
+  std::map<const Machine::PTransition*,const Machine::PTransition*>
+  pair_writes_with_updates(const Trace &trace);
 };
 
 #endif

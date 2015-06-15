@@ -23,7 +23,7 @@
 #include "min_coverage.h"
 #include "preprocessor.h"      // for testing
 #include "sb_constraint.h"     // for testing
-#include "sb_container.h"      // for testing
+#include "channel_container.h" // for testing
 #include "sb_tso_bwd.h"        // for testing
 #include "test.h"              // for testing
 #include "tso_simple_fencer.h" // for testing
@@ -337,7 +337,7 @@ namespace Fencins{
       reach_arg_init_t arg_init =
         [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
         SbConstraint::Common *common = new SbConstraint::Common(m);
-        return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
+        return new ExactBwd::Arg(m,common->get_bad_states(),common,new ChannelContainer());
       };
       TsoSimpleFencer fencer(*m,TsoSimpleFencer::FENCE);
       Log::loglevel_t ll = Log::get_primary_loglevel();
@@ -411,7 +411,7 @@ namespace Fencins{
       reach_arg_init_t arg_init =
         [](const Machine &m, const Reachability::Result *)->Reachability::Arg*{
         SbConstraint::Common *common = new SbConstraint::Common(m);
-        return new ExactBwd::Arg(m,common->get_bad_states(),common,new SbContainer());
+        return new ExactBwd::Arg(m,common->get_bad_states(),common,new ChannelContainer());
       };
       TsoSimpleFencer fencer(*m,TsoSimpleFencer::FENCE);
       std::set<std::set<Sync*> > fence_sets;

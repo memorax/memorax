@@ -47,7 +47,7 @@ public:
       return to_string();
     };
   };
-  virtual ~Constraint() throw(){};
+  virtual ~Constraint() {};
   virtual const std::vector<int> &get_control_states() const throw() = 0;
   /* Returns the set of transitions that should be explored from this
    * constraint.
