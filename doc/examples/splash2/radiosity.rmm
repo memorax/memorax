@@ -1,0 +1,242 @@
+/* SPLASH2, codes/apps/radiosity, process_tasks
+ *
+ * Correctness criterion:
+ * When all threads are finished, each task has been performed exactly
+ * once.
+ *
+ * Notice:
+ * It is possible in the code from SPLASH2 that some threads quit
+ * working prematurely, and erroneously completes the process barrier
+ * at the end of process_tasks before all work is done. The error
+ * occurs even under SC.
+ *
+ * In this model, the error has been fixed by inserting lockeddecpbar
+ * into the critical section of dequeue.
+ */
+
+forbidden
+  BAD * ; * BAD
+
+macro TN() 2 endmacro /* The number of possible tasks */
+
+/* The allocatable tasks are
+ * #1 : data1
+ * #2 : data2
+ */
+data
+  data1 = 2 : [0:2] /* 0 - free, 1 - allocated, uninitialized, 2 - allocated, initialized */
+  data2 = 2 : [0:2]
+  /* Queues
+   *
+   * The queues queue0 and queue1 are treated as sets of tasks to
+   * simplify. Their contents are encoded as follows:
+   *
+   * Value interpretation:
+   * 0 - []
+   * 1 - [task1]
+   * 2 - [task2]
+   * 3 - [task1,task2]
+   */
+  queue0 = 1 : [0:3]
+  queue1 = 2 : [0:3]
+  pbar = 0 : [0:2]
+  make_count = 2 : [2:3]
+  work_count = 0 : [0:3]
+  lck = 0 : [0:1]
+
+macro dataof(ptr) [ptr-1]
+endmacro
+
+macro lock(l)
+  cas(l,0,1);
+  llfence
+endmacro
+
+macro unlock(l)
+  ssfence;
+  syncwr: l := 0
+endmacro
+
+macro lockedincpbar()
+  lock(lck);
+  either{
+    cas(pbar,0,1)
+  or
+    cas(pbar,1,2)
+  or
+    cas(pbar,2,3)
+  };
+  unlock(lck)
+endmacro
+
+macro lockeddecpbar()
+  lock(lck);
+  either{
+    cas(pbar,1,0)
+  or
+    cas(pbar,2,1)
+  or
+    cas(pbar,3,2)
+  };
+  unlock(lck)
+endmacro
+
+macro dequeue(Q1,Q2,reg)
+  lock(lck);
+  either{ /* Try to dequeue from own queue */
+    cas(Q1,1,0); reg := 1
+  or
+    cas(Q1,2,0); reg := 2
+  or
+    cas(Q1,3,2); reg := 1
+  or
+    read: Q1 = 0; reg := 0
+  };
+  unlock(lck);
+  if reg = 0 then{
+    lock(lck);
+    either{ /* Try the other queue instead */
+      read: Q2 = 0; reg := 0
+    or
+      cas(Q2,1,0); reg := 1
+    or
+      cas(Q2,2,0); reg := 2
+    or
+      cas(Q2,3,2); reg := 1
+    };
+    unlock(lck)
+  }
+endmacro
+
+macro dequeuedec(Q1,Q2,reg)
+  lock(lck);
+  either{ /* Try to dequeue from own queue */
+    cas(Q1,1,0); reg := 1
+  or
+    cas(Q1,2,0); reg := 2
+  or
+    cas(Q1,3,2); reg := 1
+  or
+    read: Q1 = 0; reg := 0
+  };
+  if reg != 0 then{
+    lockeddecpbar()
+  };
+  unlock(lck);
+  if reg = 0 then{
+    lock(lck);
+    either{ /* Try the other queue instead */
+      read: Q2 = 0; reg := 0
+    or
+      cas(Q2,1,0); reg := 1
+    or
+      cas(Q2,2,0); reg := 2
+    or
+      cas(Q2,3,2); reg := 1
+    };
+    if reg != 0 then{
+      lockeddecpbar()
+    };
+    unlock(lck)
+  }
+endmacro
+
+macro dowork(t)
+  either{
+    cas(work_count,0,1)
+  or
+    cas(work_count,1,2)
+  or
+    cas(work_count,2,3)
+  or
+    syncrd: work_count = 3;
+    goto BAD
+  };
+  either{
+    read: dataof(t) = 0;
+    BAD: nop
+  or
+    read: dataof(t) = 1;
+    goto BAD
+  or
+    syncwr: dataof(t) := 0
+  }
+endmacro
+
+macro make_new_task(Q1,Q2)
+  either{
+    syncrd: make_count = 3 /* Can't do any more work */
+  or
+    either{
+      cas(make_count,0,1)
+    or
+      cas(make_count,1,2)
+    or
+      cas(make_count,2,3)
+    };
+    /* Pick an uninitialized task, initialize and insert into own queue */
+    either{
+      cas(data1,0,1);
+      write: data1 := 2;
+      lock(lck);
+      either{
+        cas(Q1,0,1)
+      or
+        cas(Q1,2,3)
+      };
+      unlock(lck)
+    or
+      cas(data2,0,1);
+      write: data2 := 2;
+      lock(lck);
+      either{
+        cas(Q1,0,2)
+      or
+        cas(Q1,1,3)
+      };
+      unlock(lck)
+    }
+  }
+endmacro
+
+macro proc(Q1,Q2)
+process
+registers
+  $t = 0 : [0:TN()]
+  $r0 = 0 : [0:3]
+  $r1 = 0 : [0:3]
+text
+L0:
+  dequeue(Q1,Q2,$t);
+L1:
+  if $t = 0 then{
+    goto FINISHED
+  }else{
+    dowork($t);
+    either{
+      goto L0
+    or
+      make_new_task(Q1,Q2);
+      goto L0
+    }
+  };
+FINISHED:
+  lockedincpbar();
+WAIT:
+  read: $t := pbar;
+  if $t < 2 then{
+    dequeuedec(Q1,Q2,$t);
+    if $t != 0 then {
+      goto L1
+    };
+    goto WAIT
+  }
+endmacro
+
+proc(queue0,queue1)
+
+proc(queue1,queue0);
+syncrd: $r0 := work_count;
+syncrd: $r1 := make_count;
+assume: $r0 != $r1;
+goto BAD

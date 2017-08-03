@@ -1,0 +1,67 @@
+/* SPLASH2, codes/apps/barnes/load.C, hackcofm
+ *
+ * Correctness criterion:
+ * At the end, the mass calculated for the root node is the sum of the
+ * mass of its subtrees.
+ *
+ * The code requires additional fences.
+ */
+
+forbidden
+  BAD *
+
+/* Tree structure:
+
+       N0
+      /  \
+    N1    N2
+
+N0:{
+  m0,    // Mass of tree rooted at node
+}
+
+Ni:{  // for i in {1,2}
+  mi,    // Mass of tree roted at node (= the mass of the leaf itself)
+  di,    // Boolean flag indicating whether the mass has been calculated for this node.
+}
+
+  N0 and N1 belong to process P0, N2 belongs to P1.
+
+ */
+data
+  m0 = 2 : [0:2]
+  m1 = 1 : [0:1]
+  m2 = 1 : [0:1]
+  d1 = 0 : [0:1]
+  d2 = 0 : [0:1]
+
+/* P0 */
+process
+registers
+  $r1 = 0 : [0:1]
+  $r2 = 0 : [0:1]
+text
+  /* Calculate mass for N1 */
+  write: m1 := 0; /* Initialize mass to 0 */
+  write: m1 := 1; /* Then calculate its actual value */
+  write: d1 := 1; /* Done calculating */
+  /* Calculate mass for N0 */
+  write: m0 := 0; /* Initialize mass to 0 */
+  /* Read and add the mass of N1 */
+  read: d1 = 1; /* Wait for mass calculation to finish */
+  read: $r1 := m1;
+  write: m0 := $r1;
+  /* Read and add the mass of N2 */
+  read: d2 = 1; /* Wait for mass calculation to finish */
+  read: $r2 := m2;
+  write: m0 := $r1 + $r2;
+  assume: $r1 + $r2 != 2; /* Correctness criterion: At the end, m0 should have the mass 2. */
+BAD: nop
+
+/* P1 */
+process
+text
+  /* Calculate mass for N2 */
+  write: m2 := 0; /* Initialize mass to 0 */
+  write: m2 := 1; /* Then calculate its actual value */
+  write: d2 := 1  /* Done calculating */

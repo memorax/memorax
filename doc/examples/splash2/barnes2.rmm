@@ -1,0 +1,132 @@
+/* SPLASH2, codes/apps/barnes/load.C, loadtree
+ *
+ * Correctness criterion:
+ * At the end, the tree should have a correct tree structure, and
+ * contain all nodes.
+ *
+ * The code requires additional fences apart from the ones in the
+ * mutex primitives
+ */
+
+forbidden
+  BAD *
+
+/*
+
+   There are three nodes: N1, N2, N3 and N4. Initially, N1 is the root
+   node. Initially N2, N3 and N4 are not allocated, and can only be
+   allocated by P0 and P1 respectively. In the model, the tree is
+   simplified by being unary.
+
+   Node Ni:{
+     childi      // Child of this node, 0: null, 1: N1, 2: N2, 3:N3, 4:N4
+     leafi       // Boolean indicating that this node has no children
+     lcki        // Lock of the node
+   }
+ */
+
+data
+  child1 = 0 : [0:4]
+  child2 = 0 : [0:4]
+  child3 = 0 : [0:4]
+  child4 = 0 : [0:4]
+  leaf1 = 0 : [0:1] /* Root is initialized as non-leaf despite having no children. */
+  leaf2 = 1 : [0:1]
+  leaf3 = 1 : [0:1]
+  leaf4 = 1 : [0:1]
+  lck1 = 0 : [0:1]
+  lck2 = 0 : [0:1]
+  lck3 = 0 : [0:1]
+  lck4 = 0 : [0:1]
+  pbar = 0 : [0:1]
+
+macro lock(lck)
+  cas(lck,0,1);
+  llfence
+endmacro
+
+macro unlock(lck)
+  ssfence;
+  syncwr: lck := 0
+endmacro
+
+macro childof(ptr) [(ptr)-1] endmacro
+
+macro leafof(ptr) [(ptr)+3] endmacro
+
+macro lockof(ptr) [(ptr)+7] endmacro
+
+macro insert(mynode,LOOP,DONE)
+LOOP:
+  read: $q := childof($p);
+  if $q = 0 then{
+    lock(lockof($p));
+    read: $q := childof($p);
+    if $q = 0 then{
+      /* Add new node as leaf */
+      write: childof($p) := mynode
+    };
+    unlock(lockof($p));
+    if $q = 0 then goto DONE
+  };
+  read: $q := childof($p);
+  if $q != 0 then{
+    either{
+      read: leafof($q) = 1;
+      lock(lockof($p));
+      read: $q := childof($p); /* necessary */
+      either{
+        read: leafof($q) = 1;
+        /* Subdivide the node of $q */
+        write: childof(mynode) := $q;
+        write: leafof(mynode) := 0;
+        write: childof($p) := mynode;
+        $q := 0
+      or
+        read: leafof($q) = 0
+      };
+      unlock(lockof($p));
+      if $q = 0 then goto DONE
+    or
+      read: leafof($q) = 0
+    }
+  };
+  /* Descend the tree */
+  read: $p := childof($p);
+  goto LOOP
+endmacro
+
+process
+registers
+  $p = 1 : [0:4]
+  $q = 0 : [0:4]
+  $r = 0 : [0:4]
+text
+  insert(2,LOOP1,INS3);
+INS3:
+  $p := 1;
+  insert(3,LOOP2,DONE);
+DONE:
+  syncrd: pbar = 1;
+  syncrd: $p := childof(1);
+  syncrd: $q := childof($p);
+  syncrd: $r := childof($q);
+  either{
+    assume: $p = $q || $p = $r || $q = $r
+  or
+    assume: $p < 2 || $q < 2 || $r < 2
+  or
+    syncrd: $p := childof($r);
+    assume: $p != 0
+  };
+BAD: nop
+
+process
+registers
+  $p = 1 : [0:4]
+  $q = 0 : [0:4]
+text
+  insert(4,LOOP1,DONE);
+DONE:
+  ssfence;
+  syncwr: pbar := 1

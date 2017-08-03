@@ -1,0 +1,111 @@
+/* SPLASH2, codes/apps/volrend, adaptive.C, Ray_Trace_Non_Adaptively
+ *
+ * Correctness criterion:
+ * Each task is done exactly once.
+ *
+ * NOTICE:
+ * In the SPLASH code, it is possible that some tasks are performed
+ * twice, by different threads. This behaviour occurs even under
+ * SC. In this model, we fix that issue by removing the statement
+ * "write: queueof(pid) := 0;" at the beginning of the procedure
+ * (commented out below).
+ */
+
+forbidden
+  * BAD ;
+  BAD *
+
+macro W() 2 endmacro /* The amount of work per thread */
+macro Wmargin() 4 endmacro /* W() + P() */
+macro P() 2 endmacro /* The number of threads */
+macro TW() 4 endmacro /* The total amount of work (W()*P()) */
+
+data
+  w00 = 0 : [0:1] /* Work item #0 of P0. */
+  w01 = 0 : [0:1] /* Work item #1 of P0. */
+  w10 = 0 : [0:1] /* Work item #0 of P1. */
+  w11 = 0 : [0:1] /* Work item #1 of P1. */
+  queue0 = 0 : [0:Wmargin()] /* The amount of P0's work that is finished */
+  queue1 = 0 : [0:Wmargin()] /* The amount of P1's work that is finished */
+  queuen = 2 : [0:P()] /* The number of threads that are finished */
+  bar = 0 : [0:2]
+
+macro workof(pid,w)
+  [pid+pid+w]
+endmacro
+
+macro queueof(pid)
+  [TW()+pid]
+endmacro
+
+macro lockedinc(var,val)
+  either{
+    cas(var,0,1); val := 0
+  or
+    cas(var,1,2); val := 1
+  or
+    cas(var,2,3); val := 2
+  or
+    cas(var,3,4); val := 3
+  }
+endmacro
+
+macro lockeddec(var)
+  either{
+    cas(var,2,1)
+  or
+    cas(var,1,0)
+  }
+endmacro
+
+macro dowork(ln,w)
+  either{
+    read: workof(ln,w) = 1;
+    BAD: nop
+  or
+    write: workof(ln,w) := 1 /* work */
+  }
+endmacro
+
+macro proc(pid)
+process
+registers
+  $ln = pid : [0:1]
+  $w = 0 : [0:Wmargin()]
+  $p = 0 : [0:P()]
+text
+  /*write: queueof(pid) := 0;*/
+  read: $p := queuen;
+  while $p != 0 do{
+    lockedinc(queueof($ln),$w);
+    while $w < W() do{
+      dowork($ln,$w);
+      lockedinc(queueof($ln),$w)
+    };
+    if $ln = pid then{
+      lockeddec(queuen)
+    };
+    $ln := 1 - $ln;
+    read: $w := queueof($ln);
+    read: $p := queuen;
+    while [$w >= W()] && [$p > 0] do {
+      $ln := 1 - $ln;
+      read: $w := queueof($ln);
+      read: $p := queuen
+    }
+  }
+endmacro
+
+proc(0);
+ssfence;
+cas(bar,0,1)
+
+proc(1);
+cas(bar,1,2);
+llfence;
+either{
+  read: w00 = 0
+or
+  read: w10 = 0
+};
+goto BAD

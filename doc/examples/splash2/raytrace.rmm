@@ -1,0 +1,130 @@
+/* SPLASH2, codes/apps/raytrace, workpool.C, GetJobs
+ *
+ * Correctness criterion:
+ * Each task is done exactly once.
+ */
+
+forbidden
+  BAD * ;
+  * BAD
+
+data
+  /* Tasks hold the value 0 initially, and 1 when finished. */
+  w00 = 0 : [0:1] /* Task #0 of P0 */
+  w01 = 0 : [0:1] /* Task #1 of P0 */
+  w10 = 0 : [0:1] /* Task #0 of P1 */
+  w11 = 0 : [0:1] /* Task #1 of P1 */
+
+  /* The work queues are abstracted as an integer with the following interpretation:
+   * qi value       work queue
+   * 0              []
+   * 1              [wi1]
+   * 2              [wi0,wi1]
+   */
+  q0 = 2 : [0:2] /* The work queue of P0 */
+  q1 = 2 : [0:2] /* The work queue of P1 */
+  /* wstate gives the current status of the queue:
+   * 1: non-empty
+   * 0: empty
+   */
+  wstate0 = 1 : [0:1] /* wstate for P0 */
+  wstate1 = 1 : [0:1] /* wstate for P1 */
+  qlck0 = 0 : [0:1] /* Queue lock for P0 */
+  qlck1 = 0 : [0:1] /* Queue lock for P1 */
+  pbar = 0 : [0:1]
+
+macro ptrtotaskof(pid,tno) (pid+pid+tno) endmacro
+macro queueof(pid) [4+pid] endmacro
+macro wstateof(pid) [6+pid] endmacro
+macro qlockof(pid) [8+pid] endmacro
+
+macro lock(lck)
+  cas(lck,0,1);
+  llfence
+endmacro
+
+macro unlock(lck)
+  ssfence;
+  syncwr: lck := 0
+endmacro
+
+macro getjobs(pid,tgt)
+  /* First check own queue. */
+  tgt := 4; /* null */
+  either{
+    read: wstateof(pid) = 0
+  or
+    read: wstateof(pid) = 1;
+    lock(qlockof(pid));
+    either{
+      syncrd: queueof(pid) = 0;
+      write: wstateof(pid) := 0
+    or
+      cas(queueof(pid),2,1);
+      tgt := ptrtotaskof(pid,0)
+    or
+      cas(queueof(pid),1,0);
+      tgt := ptrtotaskof(pid,1)
+    };
+    unlock(qlockof(pid))
+  };
+  if tgt = 4 then{ /* Still haven't found a task */
+    /* Try the other queue */
+    either{
+      read: wstateof((1-pid)) = 0
+    or
+      read: wstateof((1-pid)) = 1;
+      lock(qlockof((1-pid)));
+      either{
+        syncrd: queueof((1-pid)) = 0;
+        write: wstateof((1-pid)) := 0
+      or
+        cas(queueof((1-pid)),2,1);
+        tgt := ptrtotaskof((1-pid),0)
+      or
+        cas(queueof((1-pid)),1,0);
+        tgt := ptrtotaskof((1-pid),1)
+      };
+      unlock(qlockof((1-pid)))
+    }
+  }
+endmacro
+
+macro work(task)
+  either{
+    read: [task] = 1;
+    BAD: nop
+  or
+    write: [task] := 1
+  }
+endmacro
+
+macro P(pid)
+process
+registers
+  $r = 0 : [0:4] /* 0-3: pointers, 4: null */
+text
+L0:
+  getjobs(pid,$r);
+  if $r != 4 then{
+    work($r);
+    goto L0
+  }
+endmacro
+
+P(0);
+ssfence;
+syncwr: pbar := 1
+
+P(1);
+syncrd: pbar = 1;
+either{
+  syncrd: w00 = 0
+or
+  syncrd: w01 = 0
+or
+  syncrd: w10 = 0
+or
+  syncrd: w11 = 0
+};
+goto BAD

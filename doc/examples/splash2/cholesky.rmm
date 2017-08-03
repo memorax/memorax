@@ -1,0 +1,129 @@
+/* SPLASH2, codes/kernels/cholesky/mf.C, Send, GetBlock
+ *
+ * Correctness criterion:
+ * 1) When the consumer consumes a task, it must be initialized.
+ * 2) At the end, if the queue is empty, all tasks must be done, and
+ * the task queue must not have an incorrect structure.
+ *
+ */
+
+forbidden
+  BAD *
+
+macro TN() 2 endmacro /* The number of possible tasks */
+
+/* The allocatable tasks are
+ * #1 : {data1, next1}
+ * #2 : {data2, next2}
+ */
+data
+  data1 = 0 : [0:1] /* 0 - uninitialized, 1 - initialized */
+  data2 = 0 : [0:1]
+  next1 = 0 : [0:TN()] /* 0 - null, 1-2 - pointer to task */
+  next2 = 0 : [0:TN()]
+
+  /* Task Queue of the only consumer */
+  taskQ = 0 : [0:TN()]
+  taskQlast = 0 : [0:TN()]
+  tasklock = 0 : [0:1]
+  pbar = 0 : [0:1]
+
+macro dataof(ptr) [ptr-1]
+endmacro
+
+macro nextof(ptr) [ptr+1]
+endmacro
+
+macro lock(lck)
+  cas(lck,0,1);
+  llfence
+endmacro
+
+macro unlock(lck)
+  ssfence;
+  write: lck := 0
+endmacro
+
+macro checkinitialized(ptr)
+  either{
+    read: dataof(ptr) = 0;
+    BAD: nop
+  or
+    nop
+  }
+endmacro
+
+process /* consumer */
+registers
+  $p = 0 : [0:TN()]
+  $n = 0 : [0:TN()]
+text
+L0:
+  read: $p := taskQ;
+  if $p = 0 then goto FAIL;
+  lock(tasklock);
+  read: $p := taskQ;
+  if $p = 0 then goto FAIL; /* double-check the queue */
+  /* pop the front of the queue */
+  read: $n := nextof($p);
+  write: taskQ := $n;
+  if $n = 0 then write: taskQlast := 0;
+  unlock(tasklock);
+  /* check safety */
+  checkinitialized($p);
+  /* consume the task */
+  write: dataof($p) := 0;
+FAIL:
+  /* Await taskQ != 0 */
+  either{
+    read: $p := taskQ;
+    assume: $p != 0;
+    goto L0
+  or
+    syncrd: pbar = 1 /* wait until producer has terminated */
+  };
+  syncrd: taskQ = 0;
+  either{
+    syncrd: data1 = 1 /* unfinished task */
+  or
+    syncrd: data2 = 1 /* unfinished task */
+  or
+    syncrd: taskQlast = 1 /* broken queue */
+  or
+    syncrd: taskQlast = 2 /* broken queue */
+  };
+  /* consumer and producer have both terminated, the queue is empty,
+   * but some task is unfinished or the queue is broken. */
+  goto BAD
+
+process /* producer */
+registers
+  $p = 0 : [0:TN()]
+  $p2 = 0 : [0:TN()]
+text
+L0:
+  either{ /* pick an unallocated task */
+    read: data1 = 0;
+    $p := 1
+  or
+    read: data2 = 0;
+    $p := 2
+  };
+  write: dataof($p) := 1; /* initialize */
+  write: nextof($p) := 0;
+  lock(tasklock);
+  /* push task to the end of the task queue */
+  read: $p2 := taskQlast;
+  if $p2 = 0 then{
+    write: taskQ := $p
+  }else{
+    write: nextof($p2) := $p
+  };
+  write: taskQlast := $p;
+  unlock(tasklock);
+  either{
+    goto L0
+  or
+    ssfence
+  };
+  syncwr: pbar := 1
