@@ -39,6 +39,12 @@
 #include "hsb_constraint.h"
 #include "hsb_container.h"
 #include "hsb_pso_bwd.h"
+#include "dual_constraint.h"
+#include "dual_channel_container.h"
+#include "dual_tso_bwd.h"
+//#include "pdual_constraint.h"
+//#include "pdual_channel_container.h"
+//#include "pdual_tso_bwd.h"
 #include "shellcmd.h"
 #include "sync_set_printer.h"
 #include "test.h"
@@ -108,7 +114,7 @@ Machine *get_machine(const std::map<std::string,Flag> flags, std::istream &input
   std::unique_ptr<Machine> machine(new Machine(Parser::p_test(lex)));
 
   std::set<std::string> abstractions_requiring_fences{"hsb"};
-  std::set<std::string> finite_bounds{"sb", "hsb"};
+  std::set<std::string> finite_bounds{"sb", "hsb", "dual", "pdual"};
   int reg_count = 0;
   for (const auto &pregs : machine->regs) reg_count += pregs.size();
 
@@ -486,6 +492,14 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     HsbConstraint::Common *common = new HsbConstraint::Common(*machine);
     reach = new HsbPsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new HsbContainer());
+  }else if(flags.find("a")->second.argument == "dual"){
+    DualConstraint::Common *common = new DualConstraint::Common(*machine);
+    reach = new DualTsoBwd();
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new DualChannelContainer());
+  // }else if(flags.find("a")->second.argument == "pdual"){
+  //   PDualConstraint::Common *common = new PDualConstraint::Common(*machine);
+  //   reach = new PDualTsoBwd();
+  //   rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new PDualChannelContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
@@ -624,6 +638,14 @@ void print_help(int argc, char *argv[]){
             << "      The Hierarchy Single Buffer model.\n"
             << "      Equivalent to PSO w.r.t. control state reachability.\n"
             << "      Sound and complete for finite data domains.\n"
+            << "    dual\n"
+            << "      The Dual TSO Buffer model.\n"
+            << "      Equivalent to TSO w.r.t. control state reachability.\n"
+            << "      Sound and complete for finite data domains.\n"
+            // << "    pdual\n"
+            // << "      The parameterized Dual TSO Buffer model.\n"
+            // << "      Equivalent to TSO w.r.t. parameterized control state reachability.\n"
+            // << "      Sound and complete for finite data domains.\n"
             << "    vips\n"
             << "      VIPS-M. Explicit state forward analysis.\n"
             << "      Sound and complete for finite data domains.\n"
@@ -799,6 +821,8 @@ int main(int argc, char *argv[]){
           if(argv[i+1] == std::string("sb") ||
              argv[i+1] == std::string("pb") ||
              argv[i+1] == std::string("hsb") ||
+             argv[i+1] == std::string("dual") ||
+             // argv[i+1] == std::string("pdual") ||
              argv[i+1] == std::string("vips")){
             flags["a"] = Flag("a",argv[i],true,argv[i+1]);
             i++;
@@ -890,6 +914,8 @@ int main(int argc, char *argv[]){
       Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
       Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("HsbConstraint",HsbConstraint::test);
+      Test::add_test("DualConstraint",DualConstraint::test);
+      //Test::add_test("PDualConstraint",PDualConstraint::test);
       retval = Test::run_tests();
       break;
     default:
