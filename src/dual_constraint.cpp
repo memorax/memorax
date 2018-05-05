@@ -91,13 +91,14 @@ DualConstraint::Common::Common(const Machine &m)
       
       /* Add deletee */
       for(auto it = messages.begin(); it != messages.end(); ++it){
-        if(it->nmls.size() > 0 && it->wpid == p){ /* Catch all messages except the dummy message */
-          VecSet<Lang::MemLoc<int> > mls;
-          for(auto nmlit = it->nmls.begin(); nmlit != it->nmls.end(); ++nmlit){
-            mls.insert(nmlit->localize(p));
-          }
+        if(it->nmls.size() > 0){ /* Catch all messages except the dummy message */
           if (removed_lock_blocks_messages.count(*it)) { // do not add messages inside a lock block
-            if (use_allow_all_delete || (it->wpid == int(p) && has_reads)) { // process p deletes its own messages
+            if (use_allow_all_delete || 
+                (it->wpid == int(p) && has_reads)) { // the second case: process p deletes its own messages
+              VecSet<Lang::MemLoc<int> > mls;
+              for(auto nmlit = it->nmls.begin(); nmlit != it->nmls.end(); ++nmlit){
+                mls.insert(nmlit->localize(p));
+              }
               all_transitions.push_back(Machine::PTransition(i,Lang::Stmt<int>::deletee(it->wpid,mls),i,p));
             }
           }
@@ -107,11 +108,11 @@ DualConstraint::Common::Common(const Machine &m)
       // add propagate
       for(auto it = messages.begin(); it != messages.end(); ++it){
         if (it->nmls.size() > 0 && !use_propagate_only_after_write) {
-          VecSet<Lang::MemLoc<int> > mls;
-          for(auto nmlit = it->nmls.begin(); nmlit != it->nmls.end(); ++nmlit){
-            mls.insert(nmlit->localize(p));
-          }
           if (use_allow_all_propagate || (it->wpid != int(p) && has_writes)) {
+            VecSet<Lang::MemLoc<int> > mls;
+            for(auto nmlit = it->nmls.begin(); nmlit != it->nmls.end(); ++nmlit){
+              mls.insert(nmlit->localize(p));
+            }
             all_transitions.push_back(Machine::PTransition(i,Lang::Stmt<int>::propagate(it->wpid,mls),i,p));
           }
         }
@@ -250,6 +251,7 @@ void DualConstraint::Common::test(){
     VecSet<Lang::NML> xy = x; xy.insert(y);
     VecSet<Lang::NML> xz = x; xz.insert(Lang::NML::local(0,0));
     VecSet<Lang::NML> yz = y; yz.insert(Lang::NML::local(0,0));
+    expected.insert(MsgHdr(0,VecSet<Lang::NML>()));
     expected.insert(MsgHdr(0,x));
     expected.insert(MsgHdr(0,y));
     expected.insert(MsgHdr(0,xz));
@@ -348,20 +350,8 @@ void DualConstraint::test_possible_values(){
     }
     if(sbc.possible_reg_stores(sbc.reg_stores[0],0,test4_e,12) == test4_v){
       std::cout << "Test4: Success!\n";
-      VecSet<Store>  result = sbc.possible_reg_stores(sbc.reg_stores[0],0,test4_e,12);
-      std::cout << " size \n" << result.size();
-      for (int i=0; i<result.size(); i++) {
-        std::cout << " number " << i << ":" << result[i].to_string() << "\n";
-        
-      }
     }else{
-      std::cout << "Test4:: Failure aaaa\n";
-      VecSet<Store>  result = sbc.possible_reg_stores(sbc.reg_stores[0],0,test4_e,12);
-      std::cout << " size \n" << result.size();
-      for (int i=0; i<result.size(); i++) {
-        std::cout << " number " << i << ":" << result[i].to_string() << "\n";
-        
-      }
+      std::cout << "Test4:: Failure\n";
     }
 
     /* Test 5: possible_reg_stores: r0 + r1 == 15 */
@@ -405,118 +395,80 @@ void DualConstraint::test_pre(){
   /* Construct dummy DualConstraint */
   Common common(dummy_machine);
 
-//  /* Test NOP */
-//  {
-//    std::cout << " ** NOP **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    Machine::PTransition t(0,Lang::Stmt<int>::nop(),1,0);
-//    //std::cout << " ** NOP 1**\n";
-//    std::list<Constraint*> res = sbc.pre(t);
-//    std::cout << res.front()->to_string() << "\n\n";
-//  }
-
-  /* Test READASSERT */
-//  {
-//    std::cout << " ** READASSERT x = $r0 + $r1 **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,1);
-//    std::cout << "Initial:\n" << sbc.to_string() << "\n\n";
-//    Machine::PTransition t(0,Lang::Stmt<int>::read_assert(Lang::MemLoc<int>::global(0),
-//                                                          Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-//    std::list<Constraint*> res = sbc.pre(t);
-//    std::cout << "Pre:\n";
-//    for(auto it = res.begin(); it != res.end(); ++it){
-//      std::cout << (*it)->to_string() << "\n";
-//    }
-//  }
-
-//  /* Test WRITE (Test3) */
-//  {
-//    std::cout << " ** WRITE with too short buffer **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
-//                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-//    if(sbc.pre(t).empty()){
-//      std::cout << "Test3: Success!\n";
-//    }else{
-//      std::cout << "Test3: Failure\n";
-//    }
-//  }
-
-//  /* Test WRITE (Test4) */
-//  {
-//    std::cout << " ** WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
-//                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-//    Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
-//    sbc.channels[0].push_back(msg);
-//    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
-//
-//    std::cout << "Initial:\n" << sbc.to_string() << "\n";
-//    std::list<Constraint*> res = sbc.pre(t);
-//    std::cout << "Pre:\n";
-//    for(auto it = res.begin	(); it != res.end(); ++it){
-//      std::cout << (*it)->to_string() << "\n";
-//    }
-//  }
-
-//  /* Test LOCKED WRITE */
-//  {
-//    std::cout << " ** LOCKED WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    Machine::PTransition t(0,Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),
-//                                                           Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-//    Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
-//    sbc.channels[0].push_back(msg);
-//    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
-//    sbc.cpointers[0] = 1;
-//
-//    std::cout << "Initial:\n" << sbc.to_string() << "\n";
-//    std::list<Constraint*> res = sbc.pre(t);
-//    std::cout << "Pre:\n";
-//    for(auto it = res.begin(); it != res.end(); ++it){
-//      std::cout << (*it)->to_string() << "\n";
-//    }
-//  }
-//
-//  /* Test fresh UPDATE */
-//  {
-//    std::cout << " ** P0: update(P1,x) **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    Machine::PTransition t(0,Lang::Stmt<int>::update(1,VecSet<Lang::MemLoc<int> >::singleton(Lang::MemLoc<int>::global(0))),1,0);
-//    sbc.channel[0].wpid = 1;
-//    sbc.channel[0].nmls = VecSet<Lang::NML>::singleton(Lang::NML::global(0));
-//    std::cout << "Initial:\n" << sbc.to_string() << "\n";
-//    std::list<Constraint*> res = sbc.pre(t);
-//    std::cout << "Pre:\n";
-//    for(auto it = res.begin(); it != res.end(); ++it){
-//      std::cout << (*it)->to_string() << "\n";
-//    }
-//  }
-//
-  /* Test non-fresh UPDATE */
+   /* Test NOP */
   {
-    std::cout << " ** P0: update(P0,x) **\n";
+    std::cout << " ** NOP **\n";
     std::vector<int> pcs;
     pcs.push_back(1); pcs.push_back(3);
     DualConstraint sbc(pcs,common.messages[0],common);
-    Machine::PTransition t(0,Lang::Stmt<int>::update(0,VecSet<Lang::MemLoc<int> >::singleton(Lang::MemLoc<int>::global(0))),1,0);
-    Msg msg(Store(3),1,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
+    Machine::PTransition t(0,Lang::Stmt<int>::nop(),1,0);
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << res.front()->to_string() << "\n\n";
+  }
+
+  /* Test READASSERT */
+  {
+    std::cout << " ** READASSERT x = $r0 + $r1 **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,1);
+    std::cout << "Initial:\n" << sbc.to_string() << "\n\n";
+    Machine::PTransition t(0,Lang::Stmt<int>::read_assert(Lang::MemLoc<int>::global(0),
+                                                          Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << "Pre:\n";
+    for(auto it = res.begin(); it != res.end(); ++it){
+      std::cout << (*it)->to_string() << "\n";
+    }
+  }
+
+  /* Test WRITE (Test3) */
+  {
+    std::cout << " ** WRITE with too short buffer **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
+                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    if(sbc.pre(t).empty()){
+      std::cout << "Test3: Success!\n";
+    }else{
+      std::cout << "Test3: Failure\n";
+    }
+  }
+
+  /* Test WRITE (Test4) */
+  {
+    std::cout << " ** WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
+                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
     sbc.channels[0].push_back(msg);
-    //sbc.cpointers[0] = 1;
+    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
+
+    std::cout << "Initial:\n" << sbc.to_string() << "\n";
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << "Pre:\n";
+    for(auto it = res.begin	(); it != res.end(); ++it){
+      std::cout << (*it)->to_string() << "\n";
+    }
+  }
+
+  /* Test LOCKED WRITE */
+  {
+    std::cout << " ** LOCKED WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),
+                                                            Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
+    sbc.channels[0].push_back(msg);
+    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
     std::cout << "Initial:\n" << sbc.to_string() << "\n";
     std::list<Constraint*> res = sbc.pre(t);
     std::cout << "Pre:\n";
@@ -524,26 +476,7 @@ void DualConstraint::test_pre(){
       std::cout << (*it)->to_string() << "\n";
     }
   }
-//
-//  /* Test blocked non-fresh UPDATE */
-//  {
-//    std::cout << " ** P0: update(P1,y) **\n";
-//    std::vector<int> pcs;
-//    pcs.push_back(1); pcs.push_back(3);
-//    DualConstraint sbc(pcs,common.messages[0],common);
-//    Machine::PTransition t(0,Lang::Stmt<int>::update(1,VecSet<Lang::MemLoc<int> >::singleton(Lang::MemLoc<int>::global(1))),1,0);
-//    Msg msg(Store(3),1,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
-//    sbc.channels[0].push_back(msg);
-//    sbc.cpointers[0] = 1;
-//    std::cout << "Initial:\n" << sbc.to_string() << "\n";
-//    std::list<Constraint*> res = sbc.pre(t);
-//    if(res.empty()){
-//      std::cout << "Test (non-fresh update): Success!\n";
-//    }else{
-//      std::cout << "Test (non-fresh update): Failure\n";
-//    }
-//  }
-  
+
 };
 
 std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTransition &t, bool locked) const{
@@ -988,8 +921,10 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
           sbc->pcs[t.pid] = t.source;
           sbc->mems[0] = new_mem;
         
+
           if(!locked) {
             std::vector<Msg> ch0(sbc->channels[t.pid]);
+            assert(ch0.size());
             ch0.pop_back();
             sbc->channels[t.pid] = ch0;
           }
@@ -997,6 +932,8 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
           res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
           
           if (!locked) {
+            assert(channels[t.pid].size());
+
             std::vector<value_t> v;
             v.push_back(value_t::STAR);
             Store st = Store(v);
@@ -1009,30 +946,30 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
             sbc->mems[0] = new_mem;
           
             std::vector<Msg> ch0(channels[t.pid]);
+            ch0.pop_back();
             ch0.push_back(msg);
             sbc->channels[t.pid] = ch0;
           
             res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
                         
             // insert to other possible positions of channels
-            if (channels[t.pid].size()>0) {
-              for (int it=channels[t.pid].size()-1; it>=0;  it--) {
-                if (channels[t.pid][it].wpid != t.pid) {
-                  DualConstraint *sbc = new DualConstraint(*this);
-                  sbc->pcs[t.pid] = t.source;
-              
-                  std::vector<Msg> ch0(channels[t.pid]);
-                  ch0.insert(ch0.begin()+it, msg);
-                  sbc->mems[0] = new_mem;
-                  sbc->channels[t.pid] = ch0;
-                  
-                  res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
-                  
-                } else {
-                  break;
-                }
+            for (int it=channels[t.pid].size()-2; it>=0;  it--) {
+              if (channels[t.pid][it].wpid != t.pid) {
+                DualConstraint *sbc = new DualConstraint(*this);
+                sbc->pcs[t.pid] = t.source;
+            
+                std::vector<Msg> ch0(channels[t.pid]);
+                ch0.pop_back();
+                ch0.insert(ch0.begin()+it, msg);
+                sbc->mems[0] = new_mem;
+                sbc->channels[t.pid] = ch0;
+                
+                res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
+                
+              } else {
+                break;
               }
-              }
+            }
           }
       } else { // restrict registers
         VecSet<Store> rstores = possible_reg_stores(reg_stores[t.pid],t.pid,s.get_expr(),nml_val);
@@ -1052,6 +989,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         for (int rssi=0; rssi<correct_rstores.size(); rssi++) {
           Store new_mem = mems[0].assign(nmli,value_t::STAR);
           
+
           // shorten channels
           DualConstraint *sbc = new DualConstraint(*this);
           sbc->pcs[t.pid] = t.source;
@@ -1060,6 +998,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         
           if(!locked) {
             std::vector<Msg> ch0(sbc->channels[t.pid]);
+            assert(ch0.size()>0);
             ch0.pop_back();
             sbc->channels[t.pid] = ch0;
           }
@@ -1067,6 +1006,8 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
           res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
           
           if (!locked) {
+            assert(channels[t.pid].size());
+
             std::vector<value_t> v;
             v.push_back(value_t::STAR);
             Store st = Store(v);
@@ -1080,29 +1021,29 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
             sbc->reg_stores[t.pid] = correct_rstores[rssi];
           
             std::vector<Msg> ch0(channels[t.pid]);
+            ch0.pop_back();
             ch0.push_back(msg);
             sbc->channels[t.pid] = ch0;
             
             res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
                         
             // insert to other possible positions of channels
-            if (channels[t.pid].size()>0) {
-              for (int it=channels[t.pid].size()-1; it>=0;  it--) {
-                if (channels[t.pid][it].wpid != t.pid) {
-                  DualConstraint *sbc = new DualConstraint(*this);
-                  sbc->pcs[t.pid] = t.source;
-                  
-                  std::vector<Msg> ch0(channels[t.pid]);
-                  ch0.insert(ch0.begin()+it, msg);
-                  sbc->reg_stores[t.pid] = correct_rstores[rssi];
-                  sbc->mems[0] = new_mem;
-                  sbc->channels[t.pid] = ch0;
-                  
-                  res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
-                  
-                } else {
-                  break;
-                }
+            for (int it=channels[t.pid].size()-2; it>=0;  it--) {
+              if (channels[t.pid][it].wpid != t.pid) {
+                DualConstraint *sbc = new DualConstraint(*this);
+                sbc->pcs[t.pid] = t.source;
+                
+                std::vector<Msg> ch0(channels[t.pid]);
+                ch0.pop_back();
+                ch0.insert(ch0.begin()+it, msg);
+                sbc->reg_stores[t.pid] = correct_rstores[rssi];
+                sbc->mems[0] = new_mem;
+                sbc->channels[t.pid] = ch0;
+                
+                res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
+                
+              } else {
+                break;
               }
             }
           }
@@ -1183,33 +1124,6 @@ void DualConstraint::test_comparison(){
       return result;
     };
 
-//    std::function<std::string(const DualConstraint &)> char_to_string =
-//      [](const DualConstraint &sbc)->std::string{
-//      std::vector<std::vector<MsgCharacterization>> chrs = sbc.characterize_channels();
-//      std::stringstream ss;
-//      ss << "[";
-//      for(unsigned i = 0; i < chrs.size(); ++i){
-//        if(i != 0) ss << ", ";
-//        ss << "<P" << chr[i].wpid << ", ";
-//        if(chr[i].nmls.size() == 1){
-//          ss << chr[i].nmls[0].to_string();
-//        }else{
-//          ss << "{";
-//          for(int j = 0; j < chr[i].nmls.size(); ++j){
-//            if(j != 0) ss << ", ";
-//            ss << chr[i].nmls[j].to_string();
-//          }
-//          ss << "}";
-//        }
-////        for(int j = 0; j < chr[i].cpointers.size(); ++j){
-////          ss << ", ptr" << chr[i].cpointers[j];
-////        }
-//        ss << ">";
-//      }
-//      ss << "]";
-//      return ss.str();
-//    };
-
     /* Test1: */
     {
       std::vector<int> pcs(2,0);
@@ -1223,15 +1137,9 @@ void DualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg0);
       sbc1.channels[0].push_back(msg0);
       sbc1.channels[0].push_back(msg0);
-//      sbc0.cpointers[0] = 0;
-//      sbc0.cpointers[1] = 1;
-//      sbc1.cpointers[0] = 0;
-//      sbc1.cpointers[1] = 2;
       test("Test1a",sbc0.entailment_compare(sbc1) == Constraint::LESS);
       test("Test1b",sbc1.entailment_compare(sbc0) == Constraint::GREATER);
       test("Test1c",(sbc0.characterize_channels())[0].size() == (sbc1.characterize_channels())[0].size());
- //     test("Test1d",sbc1.entailment_compare(sbc0) == Constraint::EQUAL);
-
     }
     /* Test2:  */
     {
@@ -1246,14 +1154,9 @@ void DualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0][1].wpid = 1;
-//      sbc0.cpointers[0] = 0;
-//      sbc0.cpointers[1] = 1;
-//      sbc1.cpointers[0] = 0;
-//      sbc1.cpointers[1] = 2;
-      std::cout << "test 2\n";
-      test("Test2a",sbc0.entailment_compare(sbc1) == Constraint::INCOMPARABLE);
-      test("Test2b",sbc1.entailment_compare(sbc0) == Constraint::INCOMPARABLE);
-      test("Test2c",sbc0.characterize_channels() != sbc1.characterize_channels());
+      test("Test2a",sbc0.entailment_compare(sbc1) != Constraint::EQUAL);
+      test("Test2b",sbc1.entailment_compare(sbc0) != Constraint::EQUAL);
+      test("Test2c",sbc0.characterize_channels() == sbc1.characterize_channels());
       test("Test2d",sbc0.entailment_compare(sbc1) == Constraint::LESS);
       test("Test2e",sbc1.entailment_compare(sbc0) == Constraint::GREATER);
     }
@@ -1269,14 +1172,9 @@ void DualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0].push_back(msg);
-//      sbc0.cpointers[0] = 0;
-//      sbc0.cpointers[1] = 1;
-//      sbc1.cpointers[0] = 0;
-//      sbc1.cpointers[1] = 1;
-      std::cout << "test 3\n";
-      test("Test3a",sbc0.entailment_compare(sbc1) == Constraint::INCOMPARABLE);
-      test("Test3b",sbc1.entailment_compare(sbc0) == Constraint::INCOMPARABLE);
-      test("Test3c",sbc0.characterize_channels() != sbc1.characterize_channels());
+      test("Test3a",sbc0.entailment_compare(sbc1) != Constraint::EQUAL);
+      test("Test3b",sbc1.entailment_compare(sbc0) != Constraint::EQUAL);
+      test("Test3c",sbc0.characterize_channels() == sbc1.characterize_channels());
       test("Test3d",sbc0.entailment_compare(sbc1) == Constraint::LESS);
       test("Test3e",sbc1.entailment_compare(sbc0) == Constraint::GREATER);
     }
@@ -1294,15 +1192,9 @@ void DualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg);
       sbc0.channels[0][0].store = sbc0.channels[0][0].store.assign(0,0);
       sbc1.channels[0][0].store = sbc1.channels[0][0].store.assign(0,0).assign(1,1);
-      
-//      sbc0.cpointers[0] = 0;
-//      sbc0.cpointers[1] = 1;
-//      sbc1.cpointers[0] = 0;
-//      sbc1.cpointers[1] = 2;
       test("Test4a",sbc0.entailment_compare(sbc1) == Constraint::LESS);
       test("Test4b",sbc1.entailment_compare(sbc0) == Constraint::GREATER);
       test("Test4c",sbc0.characterize_channels() == sbc1.characterize_channels());
-      //sbc0.channels[0][0].store = sbc0.channels[0][0].store.assign(0,1);
       test("Test4d",sbc0.channels[0][0].entailment_compare(sbc1.channels[0][0]) == Constraint::LESS);
       test("Test4e",sbc1.channels[0][0].entailment_compare(sbc0.channels[0][0]) == Constraint::GREATER);
     }
@@ -1320,14 +1212,9 @@ void DualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg);
       sbc0.channels[0][0].store = sbc0.channels[0][0].store.assign(0,0).assign(1,1);
       sbc1.channels[0][0].store = sbc1.channels[0][0].store.assign(0,0);
-//      sbc0.cpointers[0] = 0;
-//      sbc0.cpointers[1] = 1;
-//      sbc1.cpointers[0] = 0;
-//      sbc1.cpointers[1] = 2;
       test("Test5a",sbc0.entailment_compare(sbc1) == Constraint::INCOMPARABLE);
       test("Test5b",sbc1.entailment_compare(sbc0) == Constraint::INCOMPARABLE);
       test("Test5c",sbc0.characterize_channels() == sbc1.characterize_channels());
-      Log::extreme << " 5d " << sbc0.entailment_compare(sbc0) << "\n";
       test("Test5d",sbc0.entailment_compare(sbc0) == Constraint::EQUAL);
       test("Test5e",sbc1.entailment_compare(sbc1) == Constraint::EQUAL);
     }

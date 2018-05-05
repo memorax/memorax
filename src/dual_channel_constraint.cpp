@@ -75,6 +75,8 @@ DualChannelConstraint::Common::Common(const Machine &m) : machine(m) {
 
   /* Setup messages */
   {
+    /* Insert a dummy message */
+    messages.insert(MsgHdr(0,VecSet<Lang::NML>()));
     /* Add messages for all writes */
     for(unsigned p = 0; p < machine.automata.size(); ++p){
       const std::vector<Automaton::State> &states = machine.automata[p].get_states();

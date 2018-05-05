@@ -282,7 +282,9 @@ DualZStar<Z>::Vector::possible_regs(const Lang::Expr<int> &e, int value,
   for(int i = 0; i < size(); ++i){
     if((*this)[i].is_wild()){
       assert(decls[i].domain.is_finite());
-      v[i] = decls[i].domain.get_lower_bound();
+      if (regs.count(i)) {
+        v[i] = decls[i].domain.get_lower_bound();
+      }
     }else{
       v[i] = (*this)[i].get_int();
     }
@@ -290,7 +292,13 @@ DualZStar<Z>::Vector::possible_regs(const Lang::Expr<int> &e, int value,
 
   while(true){
     if(e.eval<std::vector<Z>,int*>(v,0) == value){
-      res.insert(Vector(v));
+      Vector tmp_v(size());
+      for(int i = 0; i < size(); ++i){
+        if((*this)[i].is_wild() && regs.count(i)==0){
+          tmp_v.vec[i+2] = STAR;
+        } else tmp_v.vec[i+2] = v[i];
+      }
+      res.insert(tmp_v);
     }
     /* Increase wild values in v */
     int i = 0;
@@ -392,7 +400,9 @@ DualZStar<Z>::Vector::possible_regs(const Lang::BExpr<int> &b,
   for(int i = 0; i < size(); ++i){
     if((*this)[i].is_wild()){
       assert(decls[i].domain.is_finite());
-      v[i] = decls[i].domain.get_lower_bound();
+      if (regs.count(i)) {
+        v[i] = decls[i].domain.get_lower_bound();
+      }
     }else{
       v[i] = (*this)[i].get_int();
     }
@@ -400,7 +410,13 @@ DualZStar<Z>::Vector::possible_regs(const Lang::BExpr<int> &b,
 
   while(true){
     if(b.eval<std::vector<Z>,int*>(v,0)){
-      res.insert(Vector(v));
+      Vector tmp_v(size());
+      for(int i = 0; i < size(); ++i){
+        if((*this)[i].is_wild() && regs.count(i)==0){
+          tmp_v.vec[i+2] = STAR;
+        } else tmp_v.vec[i+2] = v[i];
+      }
+      res.insert(tmp_v);
     }
     /* Increase wild values in v */
     int i = 0;

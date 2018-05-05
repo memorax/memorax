@@ -914,6 +914,7 @@ int main(int argc, char *argv[]){
       Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
       Test::add_test("ZStar",ZStar<int>::test);
       Test::add_test("HsbConstraint",HsbConstraint::test);
+      Test::add_test("DualZStar",DualZStar<int>::test);
       Test::add_test("DualConstraint",DualConstraint::test);
       //Test::add_test("PDualConstraint",PDualConstraint::test);
       retval = Test::run_tests();
