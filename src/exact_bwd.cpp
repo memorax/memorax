@@ -36,6 +36,7 @@ Reachability::Result *ExactBwd::reachability(Reachability::Arg *arg) const{
     return result;
   }else{
     for(auto it = earg->bad_states.begin(); it != earg->bad_states.end(); it++){
+      Log::extreme << " *** Bad states ***\n" << (*it)->to_string();
       if(earg->machine.proc_count() != int((*it)->get_control_states().size())){
         throw new std::logic_error("ExactBwd::reachability: Incompatible process count in machine and bad states.");
       }
@@ -65,11 +66,14 @@ Reachability::Result *ExactBwd::reachability(Reachability::Arg *arg) const{
       std::list<Constraint*> new_consts = c->pre(**trans_it);
       result->generated_constraints += new_consts.size();
 
+      Log::extreme << "\n\n Origin conf " << c->to_string() << "\n";
+      Log::extreme << " *** Transition " << (*trans_it)->to_string(arg->machine) << "***\n";
       for(auto c_it = new_consts.begin(); c_it != new_consts.end(); c_it++){
         if(is_reachable){
           /* Found an initial state earlier in this loop: deallocate */
           delete *c_it;
         }else{
+          Log::extreme << " *** Getting state \n" << (*c_it)->to_string() << "\n";
           c->abstract();
           bool is_init = (*c_it)->is_init_state();
           container.insert(c,*trans_it,*c_it);

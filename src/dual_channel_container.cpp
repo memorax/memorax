@@ -65,12 +65,14 @@ bool DualChannelContainer::insert(CWrapper *cw){
       break;
     case Constraint::GREATER: case Constraint::EQUAL:
       /* The new constraint is subsumed by an old one. */
+      Log::extreme << " *** Smaller state \n" << (*v[i]->sbc).to_string() << "***\n";
       delete cw;
       return false;
     case Constraint::INCOMPARABLE:
       break;
     }
   }
+  Log::extreme << " *** pushed ***\n";
   v.push_back(cw);
   update_longest_comparable_array(v);
   update_longest_channel(cw->sbc->get_weight());

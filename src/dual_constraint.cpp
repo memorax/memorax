@@ -757,13 +757,14 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         for (int vri=0; vri<correct_val_regss.size(); vri++) {
           DualConstraint *sbc = new DualConstraint(*this);
           sbc->pcs[t.pid] = t.source;
+          sbc->reg_stores[t.pid] = correct_val_regss[vri];
+
           Msg msg(st,-1,VecSet<Lang::NML>::singleton(nml));
           if (sbc->channels[t.pid].size()>0) {
             sbc->channels[t.pid].insert(sbc->channels[t.pid].begin(),msg);
           } else {
             sbc->channels[t.pid].push_back(msg);
           }
-          sbc->reg_stores[t.pid] = correct_val_regss[vri];
           res.push_back(sbc);
         }
       }
@@ -829,13 +830,14 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         
         DualConstraint *sbc = new DualConstraint(*this);
         sbc->pcs[t.pid] = t.source;
+        sbc->reg_stores[t.pid] = sbc->reg_stores[t.pid].assign(s.get_reg(), value_t::STAR);
+
         Msg msg(st,-1,VecSet<Lang::NML>::singleton(nml));
         if (sbc->channels[t.pid].size()>0) {
           sbc->channels[t.pid].insert(sbc->channels[t.pid].begin(),msg);
         } else {
           sbc->channels[t.pid].push_back(msg);
         }
-        sbc->reg_stores[t.pid] = sbc->reg_stores[t.pid].assign(s.get_reg(), value_t::STAR);
         res.push_back(sbc);
       }
     }
@@ -958,7 +960,8 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                         
             // insert to other possible positions of channels
             for (int it=channels[t.pid].size()-2; it>=0;  it--) {
-              if (channels[t.pid][it].wpid != t.pid) {
+              int check_nml_val = channels[t.pid].back().store[0].get_int();
+              if (channels[t.pid][it].wpid != t.pid || nmli != check_nml_val) {
                 DualConstraint *sbc = new DualConstraint(*this);
                 sbc->pcs[t.pid] = t.source;
             
@@ -969,7 +972,6 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                 sbc->channels[t.pid] = ch0;
                 
                 res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
-                
               } else {
                 break;
               }
@@ -1033,7 +1035,8 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                         
             // insert to other possible positions of channels
             for (int it=channels[t.pid].size()-2; it>=0;  it--) {
-              if (channels[t.pid][it].wpid != t.pid) {
+              int check_nml_val = channels[t.pid].back().store[0].get_int();
+              if (channels[t.pid][it].wpid != t.pid || nmli !=  check_nml_val) {
                 DualConstraint *sbc = new DualConstraint(*this);
                 sbc->pcs[t.pid] = t.source;
                 
