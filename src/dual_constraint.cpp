@@ -93,8 +93,8 @@ DualConstraint::Common::Common(const Machine &m)
       for(auto it = messages.begin(); it != messages.end(); ++it){
         if(it->nmls.size() > 0){ /* Catch all messages except the dummy message */
           if (removed_lock_blocks_messages.count(*it)) { // do not add messages inside a lock block
-            if (use_allow_all_delete || 
-                (it->wpid == int(p) && has_reads)) { // the second case: process p deletes its own messages
+          if (use_allow_all_delete || 
+              (it->wpid == int(p) && has_reads)) { // the second case: process p deletes its own messages
               VecSet<Lang::MemLoc<int> > mls;
               for(auto nmlit = it->nmls.begin(); nmlit != it->nmls.end(); ++nmlit){
                 mls.insert(nmlit->localize(p));
@@ -717,13 +717,14 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
             
             if(msgi==-1) { // restrict mem
               sbc->channels[t.pid][0].store = sbc->channels[t.pid][0].store.assign(0,val_es[vei]);
-            } else if (msgi>=0){
+              res.push_back(sbc);
+            } else if (msgi>=0) {
               sbc->channels[t.pid][msgi].store = sbc->channels[t.pid][msgi].store.assign(0,val_es[vei]);
-            } else {
+              res.push_back(sbc);
+            } else if (sbc->channels[t.pid].size()==0) { //only for an empty channel
               sbc->mems[0] = sbc->mems[0].assign(nmli,val_es[vei]);
+              res.push_back(sbc);  
             }
-            
-            res.push_back(sbc);
           }
         }
       }
@@ -801,17 +802,20 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
       if (is_star || val_nml == reg_val) {
         DualConstraint *sbc = new DualConstraint(*this);
         sbc->pcs[t.pid] = t.source;
+        sbc->reg_stores[t.pid] = sbc->reg_stores[t.pid].assign(s.get_reg(), value_t::STAR);
+
         if (is_star) { // restrict mem
           if(msgi==-1) {
             sbc->channels[t.pid][0].store = sbc->channels[t.pid][0].store.assign(0,reg_val);
-          } else if (msgi>=0){
+            res.push_back(sbc);
+          } else if (msgi>=0) {
             sbc->channels[t.pid][msgi].store = sbc->channels[t.pid][msgi].store.assign(0,reg_val);
-          } else {
+            res.push_back(sbc);
+          } else if (sbc->channels[t.pid].size()==0) { //only for an empty channel
             sbc->mems[0] = sbc->mems[0].assign(nmli,reg_val);
+            res.push_back(sbc);          
           }
         }
-        sbc->reg_stores[t.pid] = sbc->reg_stores[t.pid].assign(s.get_reg(), value_t::STAR);
-        res.push_back(sbc);
       }
             
       if (hidden) {
@@ -831,7 +835,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         } else {
           sbc->channels[t.pid].push_back(msg);
         }
-      
+        sbc->reg_stores[t.pid] = sbc->reg_stores[t.pid].assign(s.get_reg(), value_t::STAR);
         res.push_back(sbc);
       }
     }
