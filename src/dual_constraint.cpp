@@ -94,7 +94,11 @@ DualConstraint::Common::Common(const Machine &m)
         if(it->nmls.size() > 0){ /* Catch all messages except the dummy message */
           if (removed_lock_blocks_messages.count(*it)) { // do not add messages inside a lock block
           if (use_allow_all_delete || 
-              (it->wpid == int(p) && has_reads)) { // the second case: process p deletes its own messages
+              /* The second case: process p deletes its own messages.
+               * Other deletes will be performed when we calculate the pre sets 
+               * If no read in the code of p, all writes should be locked writes
+               */
+              (it->wpid == int(p) && has_reads)) { 
               VecSet<Lang::MemLoc<int> > mls;
               for(auto nmlit = it->nmls.begin(); nmlit != it->nmls.end(); ++nmlit){
                 mls.insert(nmlit->localize(p));
@@ -203,281 +207,8 @@ std::list<const Machine::PTransition*> DualConstraint::partred() const{
   return l;
 };
 
-void DualConstraint::test(){
-  std::cout << " * test_possible_values\n";
-  test_possible_values();
-  std::cout << " * test_pre\n";
-  test_pre();
-  std::cout << " * Common::test\n";
-  Common::test();
-  std::cout << " * test_comparison\n";
-  test_comparison();
-};
 
-void DualConstraint::Common::test(){
-  /* Test 1: Check messages */
-  {
-    std::stringstream rmm;
-    rmm << "forbidden L0 L0\n"
-        << "data\n"
-        << "  x = 0 : [0:2]\n"
-        << "  y = * : [0:1]\n"
-        << "process\n"
-        << "data\n"
-        << "  z = 42 : [0:100]\n"
-        << "text\n"
-        << "L0:\n"
-        << "  nop;\n"
-        << "  write: x := 0;\n"
-        << "  locked write: y := 0;\n"
-        << "  locked{\n"
-        << "    write: x := 1;\n"
-        << "    write: z[my] := 13\n"
-        << "  or\n"
-        << "    write: z[my] := 10;\n"
-        << "    write: y := 0\n"
-        << "  }\n"
-        << "process\n"
-        << "text\n"
-        << "  L0:\n"
-        << "  locked{write: x := 0; read: y = 0; write: y := 1; write: x := 2}";
-    Lexer lex(rmm);
-    Machine machine(Parser::p_test(lex));
-    Common common(machine);
-    
-    VecSet<MsgHdr> expected;
-    VecSet<Lang::NML> x = VecSet<Lang::NML>::singleton(Lang::NML::global(0));
-    VecSet<Lang::NML> y = VecSet<Lang::NML>::singleton(Lang::NML::global(1));
-    VecSet<Lang::NML> xy = x; xy.insert(y);
-    VecSet<Lang::NML> xz = x; xz.insert(Lang::NML::local(0,0));
-    VecSet<Lang::NML> yz = y; yz.insert(Lang::NML::local(0,0));
-    expected.insert(MsgHdr(0,VecSet<Lang::NML>()));
-    expected.insert(MsgHdr(0,x));
-    expected.insert(MsgHdr(0,y));
-    expected.insert(MsgHdr(0,xz));
-    expected.insert(MsgHdr(0,yz));
-    expected.insert(MsgHdr(1,xy));
 
-    if(common.messages == expected){
-      std::cout << "Test1: Success!\n";
-    }else{
-      std::cout << "Test1: Failure\n";
-    }
-  }
-}
-
-void DualConstraint::test_possible_values(){
-  try{
-    /* Build a dummy machine */
-    std::stringstream dummy_rmm;
-    dummy_rmm << "forbidden L0\n"
-              << "data\n"
-              << "  x = 0 : [0:2]\n"
-              << "  y = * : [0:1]\n"
-              << "process\n"
-              << "data\n"
-              << "  z = 42 : [0:100]\n"
-              << "registers\n"
-              << "  $r0 = * : [0:2]\n"
-              << "  $r1 = * : [10:12]\n"
-              << "  $r2 = * : [1:1]\n"
-              << "text\n"
-              << "L0:\n"
-              << "  nop";
-    Lexer lex(dummy_rmm);
-    Machine dummy_machine(Parser::p_test(lex));
-
-    /* Construct dummy DualConstraint */
-    Common common(dummy_machine);
-    DualConstraint sbc(std::vector<int>(1,0),common.messages[0],common);
-
-    /* Start testing */
-
-    /* Test 1: r0 + r1 + r1 + 42 : {62, 63, 64, 65, 66, 67, 68} */
-    Lang::Expr<int> test1_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1) + Lang::Expr<int>::reg(1) + 
-      Lang::Expr<int>::integer(42);
-    std::vector<int> test1_v(7);
-    test1_v[0] = 62; test1_v[1] = 63; test1_v[2] = 64;
-    test1_v[3] = 65; test1_v[4] = 66; test1_v[5] = 67;
-    test1_v[6] = 68;
-    if(sbc.possible_values(sbc.reg_stores[0],0,test1_e) == test1_v){
-      std::cout << "Test1: Success!\n";
-    }else{
-      std::cout << "Test1: Failure\n";
-      VecSet<int> v = sbc.possible_values(sbc.reg_stores[0],0,test1_e);
-      std::cout << "  Got: [";
-      for(int i = 0; i < v.size(); i++){
-        if(i != 0) std::cout << ", ";
-        std::cout << v[i];
-      }
-      std::cout << "]\n";
-    }
-
-    /* Test 2: r0 + r2 : {1, 2, 3} */
-    Lang::Expr<int> test2_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(2);
-    std::vector<int> test2_v(3);
-    test2_v[0] = 1; test2_v[1] = 2; test2_v[2] = 3;
-    if(sbc.possible_values(sbc.reg_stores[0],0,test2_e) == test2_v){
-      std::cout << "Test2: Success!\n";
-    }else{
-      std::cout << "Test2: Failure\n";
-    }
-
-    /* Test 3: 42 : {42} */
-    Lang::Expr<int> test3_e = Lang::Expr<int>::integer(42);
-    std::vector<int> test3_v(1,42);
-    if(sbc.possible_values(sbc.reg_stores[0],0,test3_e) == test3_v){
-      std::cout << "Test3: Success!\n";
-    }else{
-      std::cout << "Test3: Failure\n";
-    }
-
-    /* Test 4: possible_reg_stores: r0 + r1 == 12 */
-    Lang::Expr<int> test4_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1);
-    std::vector<Store> test4_v;
-    {
-      std::vector<value_t> v;
-      v.push_back(0);
-      v.push_back(12);
-      v.push_back(value_t::STAR);
-      test4_v.push_back(Store(v));
-      v[0] = 1;
-      v[1] = 11;
-      test4_v.push_back(Store(v));
-      v[0] = 2;
-      v[1] = 10;
-      test4_v.push_back(Store(v));
-    }
-    if(sbc.possible_reg_stores(sbc.reg_stores[0],0,test4_e,12) == test4_v){
-      std::cout << "Test4: Success!\n";
-    }else{
-      std::cout << "Test4:: Failure\n";
-    }
-
-    /* Test 5: possible_reg_stores: r0 + r1 == 15 */
-    Lang::Expr<int> test5_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1);
-    std::vector<Store> test5_v;
-    if(sbc.possible_reg_stores(sbc.reg_stores[0],0,test5_e,15) == test5_v){
-      std::cout << "Test5: Success!\n";
-    }else{
-      std::cout << "Test5:: Failure\n";
-    }
-  }catch(std::exception *exc){
-    std::cout << "Error: " << exc->what() << "\n";
-    throw;
-  }
-};
-
-void DualConstraint::test_pre(){
-  /* Build a dummy machine */
-  std::stringstream dummy_rmm;
-  dummy_rmm << "forbidden L0 L0\n"
-            << "data\n"
-            << "  x = * : [8:12]\n"
-            << "  y = * : [0:1]\n"
-            << "process\n"
-            << "data\n"
-            << "  z = 42 : [0:100]\n"
-            << "registers\n"
-            << "  $r0 = * : [0:2]\n"
-            << "  $r1 = * : [10:12]\n"
-            << "  $r2 = * : [1:1]\n"
-            << "text\n"
-            << "L0:\n"
-            << "  nop\n"
-            << "process\n"
-            << "text\n"
-            << "L0:\n"
-            << "  nop\n";
-  Lexer lex(dummy_rmm);
-  Machine dummy_machine(Parser::p_test(lex));
-
-  /* Construct dummy DualConstraint */
-  Common common(dummy_machine);
-
-   /* Test NOP */
-  {
-    std::cout << " ** NOP **\n";
-    std::vector<int> pcs;
-    pcs.push_back(1); pcs.push_back(3);
-    DualConstraint sbc(pcs,common.messages[0],common);
-    Machine::PTransition t(0,Lang::Stmt<int>::nop(),1,0);
-    std::list<Constraint*> res = sbc.pre(t);
-    std::cout << res.front()->to_string() << "\n\n";
-  }
-
-  /* Test READASSERT */
-  {
-    std::cout << " ** READASSERT x = $r0 + $r1 **\n";
-    std::vector<int> pcs;
-    pcs.push_back(1); pcs.push_back(3);
-    DualConstraint sbc(pcs,common.messages[0],common);
-    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,1);
-    std::cout << "Initial:\n" << sbc.to_string() << "\n\n";
-    Machine::PTransition t(0,Lang::Stmt<int>::read_assert(Lang::MemLoc<int>::global(0),
-                                                          Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-    std::list<Constraint*> res = sbc.pre(t);
-    std::cout << "Pre:\n";
-    for(auto it = res.begin(); it != res.end(); ++it){
-      std::cout << (*it)->to_string() << "\n";
-    }
-  }
-
-  /* Test WRITE (Test3) */
-  {
-    std::cout << " ** WRITE with too short buffer **\n";
-    std::vector<int> pcs;
-    pcs.push_back(1); pcs.push_back(3);
-    DualConstraint sbc(pcs,common.messages[0],common);
-    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
-                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-    if(sbc.pre(t).empty()){
-      std::cout << "Test3: Success!\n";
-    }else{
-      std::cout << "Test3: Failure\n";
-    }
-  }
-
-  /* Test WRITE (Test4) */
-  {
-    std::cout << " ** WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
-    std::vector<int> pcs;
-    pcs.push_back(1); pcs.push_back(3);
-    DualConstraint sbc(pcs,common.messages[0],common);
-    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
-                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-    Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
-    sbc.channels[0].push_back(msg);
-    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
-
-    std::cout << "Initial:\n" << sbc.to_string() << "\n";
-    std::list<Constraint*> res = sbc.pre(t);
-    std::cout << "Pre:\n";
-    for(auto it = res.begin	(); it != res.end(); ++it){
-      std::cout << (*it)->to_string() << "\n";
-    }
-  }
-
-  /* Test LOCKED WRITE */
-  {
-    std::cout << " ** LOCKED WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
-    std::vector<int> pcs;
-    pcs.push_back(1); pcs.push_back(3);
-    DualConstraint sbc(pcs,common.messages[0],common);
-    Machine::PTransition t(0,Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),
-                                                            Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
-    Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
-    sbc.channels[0].push_back(msg);
-    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
-    std::cout << "Initial:\n" << sbc.to_string() << "\n";
-    std::list<Constraint*> res = sbc.pre(t);
-    std::cout << "Pre:\n";
-    for(auto it = res.begin(); it != res.end(); ++it){
-      std::cout << (*it)->to_string() << "\n";
-    }
-  }
-
-};
 
 std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTransition &t, bool locked) const{
   std::list<pre_constr_t> res;
@@ -960,8 +691,9 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                         
             // insert to other possible positions of channels
             for (int it=channels[t.pid].size()-2; it>=0;  it--) {
-              int check_nml_val = channels[t.pid].back().store[0].get_int();
-              if (channels[t.pid][it].wpid != t.pid || nmli != check_nml_val) {
+              bool varSame = (channels[t.pid][it].nmls.size() == 1 && 
+                              channels[t.pid][it].nmls.count(nml));
+              if (channels[t.pid][it].wpid != t.pid || !varSame) {
                 DualConstraint *sbc = new DualConstraint(*this);
                 sbc->pcs[t.pid] = t.source;
             
@@ -972,7 +704,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                 sbc->channels[t.pid] = ch0;
                 
                 res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
-              } else {
+              } else { // do not insert more after getting an own message to same variable
                 break;
               }
             }
@@ -995,7 +727,6 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         for (int rssi=0; rssi<correct_rstores.size(); rssi++) {
           Store new_mem = mems[0].assign(nmli,value_t::STAR);
           
-
           // shorten channels
           DualConstraint *sbc = new DualConstraint(*this);
           sbc->pcs[t.pid] = t.source;
@@ -1035,8 +766,9 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                         
             // insert to other possible positions of channels
             for (int it=channels[t.pid].size()-2; it>=0;  it--) {
-              int check_nml_val = channels[t.pid].back().store[0].get_int();
-              if (channels[t.pid][it].wpid != t.pid || nmli !=  check_nml_val) {
+              bool varSame = (channels[t.pid][it].nmls.size() == 1 && 
+                              channels[t.pid][it].nmls.count(nml));
+              if (channels[t.pid][it].wpid != t.pid || !varSame) {
                 DualConstraint *sbc = new DualConstraint(*this);
                 sbc->pcs[t.pid] = t.source;
                 
@@ -1048,8 +780,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                 sbc->channels[t.pid] = ch0;
                 
                 res.push_back(pre_constr_t(sbc,false,VecSet<Lang::NML>::singleton(nml)));
-                
-              } else {
+              } else { // do not insert more after getting an own message to same variable
                 break;
               }
             }
@@ -1081,6 +812,274 @@ std::list<Constraint*> DualConstraint::pre(const Machine::PTransition &t) const{
 
   return res;
 };
+
+
+
+void DualConstraint::Common::test(){
+  /* Test 1: Check messages */
+  {
+    std::stringstream rmm;
+    rmm << "forbidden L0 L0\n"
+        << "data\n"
+        << "  x = 0 : [0:2]\n"
+        << "  y = * : [0:1]\n"
+        << "process\n"
+        << "data\n"
+        << "  z = 42 : [0:100]\n"
+        << "text\n"
+        << "L0:\n"
+        << "  nop;\n"
+        << "  write: x := 0;\n"
+        << "  locked write: y := 0;\n"
+        << "  locked{\n"
+        << "    write: x := 1;\n"
+        << "    write: z[my] := 13\n"
+        << "  or\n"
+        << "    write: z[my] := 10;\n"
+        << "    write: y := 0\n"
+        << "  }\n"
+        << "process\n"
+        << "text\n"
+        << "  L0:\n"
+        << "  locked{write: x := 0; read: y = 0; write: y := 1; write: x := 2}";
+    Lexer lex(rmm);
+    Machine machine(Parser::p_test(lex));
+    Common common(machine);
+    
+    VecSet<MsgHdr> expected;
+    VecSet<Lang::NML> x = VecSet<Lang::NML>::singleton(Lang::NML::global(0));
+    VecSet<Lang::NML> y = VecSet<Lang::NML>::singleton(Lang::NML::global(1));
+    VecSet<Lang::NML> xy = x; xy.insert(y);
+    VecSet<Lang::NML> xz = x; xz.insert(Lang::NML::local(0,0));
+    VecSet<Lang::NML> yz = y; yz.insert(Lang::NML::local(0,0));
+    expected.insert(MsgHdr(0,VecSet<Lang::NML>()));
+    expected.insert(MsgHdr(0,x));
+    expected.insert(MsgHdr(0,y));
+    expected.insert(MsgHdr(0,xz));
+    expected.insert(MsgHdr(0,yz));
+    expected.insert(MsgHdr(1,xy));
+
+    if(common.messages == expected){
+      std::cout << "Test1: Success!\n";
+    }else{
+      std::cout << "Test1: Failure\n";
+    }
+  }
+}
+
+void DualConstraint::test_possible_values(){
+  try{
+    /* Build a dummy machine */
+    std::stringstream dummy_rmm;
+    dummy_rmm << "forbidden L0\n"
+              << "data\n"
+              << "  x = 0 : [0:2]\n"
+              << "  y = * : [0:1]\n"
+              << "process\n"
+              << "data\n"
+              << "  z = 42 : [0:100]\n"
+              << "registers\n"
+              << "  $r0 = * : [0:2]\n"
+              << "  $r1 = * : [10:12]\n"
+              << "  $r2 = * : [1:1]\n"
+              << "text\n"
+              << "L0:\n"
+              << "  nop";
+    Lexer lex(dummy_rmm);
+    Machine dummy_machine(Parser::p_test(lex));
+
+    /* Construct dummy DualConstraint */
+    Common common(dummy_machine);
+    DualConstraint sbc(std::vector<int>(1,0),common.messages[0],common);
+
+    /* Start testing */
+
+    /* Test 1: r0 + r1 + r1 + 42 : {62, 63, 64, 65, 66, 67, 68} */
+    Lang::Expr<int> test1_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1) + Lang::Expr<int>::reg(1) + 
+      Lang::Expr<int>::integer(42);
+    std::vector<int> test1_v(7);
+    test1_v[0] = 62; test1_v[1] = 63; test1_v[2] = 64;
+    test1_v[3] = 65; test1_v[4] = 66; test1_v[5] = 67;
+    test1_v[6] = 68;
+    if(sbc.possible_values(sbc.reg_stores[0],0,test1_e) == test1_v){
+      std::cout << "Test1: Success!\n";
+    }else{
+      std::cout << "Test1: Failure\n";
+      VecSet<int> v = sbc.possible_values(sbc.reg_stores[0],0,test1_e);
+      std::cout << "  Got: [";
+      for(int i = 0; i < v.size(); i++){
+        if(i != 0) std::cout << ", ";
+        std::cout << v[i];
+      }
+      std::cout << "]\n";
+    }
+
+    /* Test 2: r0 + r2 : {1, 2, 3} */
+    Lang::Expr<int> test2_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(2);
+    std::vector<int> test2_v(3);
+    test2_v[0] = 1; test2_v[1] = 2; test2_v[2] = 3;
+    if(sbc.possible_values(sbc.reg_stores[0],0,test2_e) == test2_v){
+      std::cout << "Test2: Success!\n";
+    }else{
+      std::cout << "Test2: Failure\n";
+    }
+
+    /* Test 3: 42 : {42} */
+    Lang::Expr<int> test3_e = Lang::Expr<int>::integer(42);
+    std::vector<int> test3_v(1,42);
+    if(sbc.possible_values(sbc.reg_stores[0],0,test3_e) == test3_v){
+      std::cout << "Test3: Success!\n";
+    }else{
+      std::cout << "Test3: Failure\n";
+    }
+
+    /* Test 4: possible_reg_stores: r0 + r1 == 12 */
+    Lang::Expr<int> test4_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1);
+    std::vector<Store> test4_v;
+    {
+      std::vector<value_t> v;
+      v.push_back(0);
+      v.push_back(12);
+      v.push_back(value_t::STAR);
+      test4_v.push_back(Store(v));
+      v[0] = 1;
+      v[1] = 11;
+      test4_v.push_back(Store(v));
+      v[0] = 2;
+      v[1] = 10;
+      test4_v.push_back(Store(v));
+    }
+    if(sbc.possible_reg_stores(sbc.reg_stores[0],0,test4_e,12) == test4_v){
+      std::cout << "Test4: Success!\n";
+    }else{
+      std::cout << "Test4:: Failure\n";
+    }
+
+    /* Test 5: possible_reg_stores: r0 + r1 == 15 */
+    Lang::Expr<int> test5_e = Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1);
+    std::vector<Store> test5_v;
+    if(sbc.possible_reg_stores(sbc.reg_stores[0],0,test5_e,15) == test5_v){
+      std::cout << "Test5: Success!\n";
+    }else{
+      std::cout << "Test5:: Failure\n";
+    }
+  }catch(std::exception *exc){
+    std::cout << "Error: " << exc->what() << "\n";
+    throw;
+  }
+};
+
+void DualConstraint::test_pre(){
+  /* Build a dummy machine */
+  std::stringstream dummy_rmm;
+  dummy_rmm << "forbidden L0 L0\n"
+            << "data\n"
+            << "  x = * : [8:12]\n"
+            << "  y = * : [0:1]\n"
+            << "process\n"
+            << "data\n"
+            << "  z = 42 : [0:100]\n"
+            << "registers\n"
+            << "  $r0 = * : [0:2]\n"
+            << "  $r1 = * : [10:12]\n"
+            << "  $r2 = * : [1:1]\n"
+            << "text\n"
+            << "L0:\n"
+            << "  nop\n"
+            << "process\n"
+            << "text\n"
+            << "L0:\n"
+            << "  nop\n";
+  Lexer lex(dummy_rmm);
+  Machine dummy_machine(Parser::p_test(lex));
+
+  /* Construct dummy DualConstraint */
+  Common common(dummy_machine);
+
+   /* Test NOP */
+  {
+    std::cout << " ** NOP **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::nop(),1,0);
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << res.front()->to_string() << "\n\n";
+  }
+
+  /* Test READASSERT */
+  {
+    std::cout << " ** READASSERT x = $r0 + $r1 **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,1);
+    std::cout << "Initial:\n" << sbc.to_string() << "\n\n";
+    Machine::PTransition t(0,Lang::Stmt<int>::read_assert(Lang::MemLoc<int>::global(0),
+                                                          Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << "Pre:\n";
+    for(auto it = res.begin(); it != res.end(); ++it){
+      std::cout << (*it)->to_string() << "\n";
+    }
+  }
+
+  /* Test WRITE (Test3) */
+  {
+    std::cout << " ** WRITE with too short buffer **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
+                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    if(sbc.pre(t).empty()){
+      std::cout << "Test3: Success!\n\n";
+    }else{
+      std::cout << "Test3: Failure\n\n";
+    }
+  }
+
+  /* Test WRITE (Test4) */
+  {
+    std::cout << " ** WRITE x := r0 + r1 [r0=0,r1=10,y=*] **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
+                                                    Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    Msg msg(Store(1),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
+    sbc.channels[0].push_back(msg);
+    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
+    std::cout << "Initial:\n" << sbc.to_string() << "\n";
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << "Pre:\n";
+    for(auto it = res.begin	(); it != res.end(); ++it){
+      std::cout << (*it)->to_string() << "\n";
+    }
+  }
+
+  /* Test LOCKED WRITE */
+  {
+    std::cout << " ** LOCKED WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
+    std::vector<int> pcs;
+    pcs.push_back(1); pcs.push_back(3);
+    DualConstraint sbc(pcs,common.messages[0],common);
+    Machine::PTransition t(0,Lang::Stmt<int>::locked_write(Lang::MemLoc<int>::global(0),
+                                                            Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+    Msg msg(Store(1),0,VecSet<Lang::NML>::singleton(Lang::NML::global(0)));
+    sbc.channels[0].push_back(msg);
+    sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
+    std::cout << "Initial:\n" << sbc.to_string() << "\n";
+    std::list<Constraint*> res = sbc.pre(t);
+    std::cout << "Pre:\n";
+    for(auto it = res.begin(); it != res.end(); ++it){
+      std::cout << (*it)->to_string() << "\n";
+    }
+  }
+
+};
+
+
 
 void DualConstraint::test_comparison(){
   /* Build a dummy machine */
@@ -1231,3 +1230,15 @@ void DualConstraint::test_comparison(){
   }
 };
 
+
+
+void DualConstraint::test(){
+  std::cout << " * test_possible_values\n";
+  test_possible_values();
+  std::cout << " * test_pre\n";
+  test_pre();
+  std::cout << " * Common::test\n";
+  Common::test();
+  std::cout << " * test_comparison\n";
+  test_comparison();
+};
