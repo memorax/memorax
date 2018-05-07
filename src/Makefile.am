@@ -8,10 +8,13 @@ automaton.cpp automaton.h \
 cegar_reachability.cpp cegar_reachability.h \
 channel_bwd.h channel_bwd.cpp \
 dual_channel_bwd.h dual_channel_bwd.cpp \
+pdual_channel_bwd.h pdual_channel_bwd.cpp \
 channel_constraint.h channel_constraint.cpp \
 dual_channel_constraint.h dual_channel_constraint.cpp \
+pdual_channel_constraint.h pdual_channel_constraint.cpp \
 channel_container.cpp channel_container.h \
 dual_channel_container.cpp dual_channel_container.h \
+pdual_channel_container.cpp pdual_channel_container.h \
 cmsat.h \
 constraint_container1.cpp constraint_container1.h \
 constraint_container.h \
@@ -43,7 +46,9 @@ reachability.cpp reachability.h \
 sb_constraint.cpp sb_constraint.h \
 sb_tso_bwd.cpp sb_tso_bwd.h \
 dual_constraint.cpp dual_constraint.h \
+pdual_constraint.cpp pdual_constraint.h \
 dual_tso_bwd.cpp dual_tso_bwd.h \
+pdual_tso_bwd.cpp pdual_tso_bwd.h \
 shared.h \
 sharinglist.tcc sharinglist.h \
 shellcmd.cpp shellcmd.h \

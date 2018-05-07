@@ -26,7 +26,6 @@
 /* Configuration */
 /*****************/
 const bool DualConstraint::use_limit_other_delete_propagate = false;
-//const bool DualConstraint::use_propagate_only_before_write = true;
 const bool DualConstraint::use_propagate_only_after_write = false;
 const bool DualConstraint::use_allow_all_delete = false;
 const bool DualConstraint::use_allow_all_propagate = false;
@@ -169,27 +168,10 @@ std::list<const Machine::PTransition*> DualConstraint::partred() const{
   if(use_limit_other_delete_propagate){
     for(unsigned p = 0; p < pcs.size(); ++p){
       bool has_read = false;
-      bool has_write = false;
-      bool is_final = false;
-      bool is_init = pcs[p] == 0;
-      
-      for (int i=0; i<common.machine.forbidden.size(); i++) {
-        std::vector<int> pcss = common.machine.forbidden[i];
-        if (pcss[p] == pcs[p]) {
-          is_final = true;
-          break;
-        }
-      }
       
       for(auto it = common.transitions_by_pc[p][pcs[p]].begin(); it != common.transitions_by_pc[p][pcs[p]].end(); ++it){
         if((*it)->instruction.get_reads().size()){
           has_read = true;
-        }
-      }
-      
-      for(auto it = common.transitions_by_pc[p][pcs[p]].begin(); it != common.transitions_by_pc[p][pcs[p]].end(); ++it){
-        if((*it)->instruction.get_type() == Lang::WRITE){
-          has_write = true;
         }
       }
       
@@ -370,7 +352,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
     break;
   }
       
-  case Lang::READASSERT:  // read: x = e
+  case Lang::READASSERT:  // read: x = e. Allow read from mem if empty buffer
   {
     Lang::NML nml(s.get_memloc(),t.pid);
     int nmli = common.index(nml);
@@ -393,9 +375,9 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
     
     if (!is_star) {
       rss = possible_reg_stores(reg_stores[t.pid],
-                                       t.pid,
-                                       s.get_expr(),
-                                       val_nml);
+                                t.pid,
+                                s.get_expr(),
+                                val_nml);
       std::set<int> regs = s.get_expr().get_registers();
       // get STAR registers that not in expr from 0 to STAR
       VecSet<Store> correct_rss;
@@ -425,9 +407,9 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
       } else {
         for (int vei=0; vei<val_es.size(); vei++) {
           VecSet<Store> val_regss = possible_reg_stores(reg_stores[t.pid],
-                                                               t.pid,
-                                                               s.get_expr(),
-                                                               val_es[vei]);
+                                                        t.pid,
+                                                        s.get_expr(),
+                                                        val_es[vei]);
           std::set<int> regs = s.get_expr().get_registers();
           // get STAR registers that not in expr from 0 to STAR
           VecSet<Store> correct_val_regss;
@@ -468,9 +450,9 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         Store st = Store(v);
         
         VecSet<Store> val_regss = possible_reg_stores(reg_stores[t.pid],
-                                                       t.pid,
-                                                       s.get_expr(),
-                                                       val_es[vei]);
+                                                      t.pid,
+                                                      s.get_expr(),
+                                                      val_es[vei]);
         
         std::set<int> regs = s.get_expr().get_registers();
         // get STAR registers that not in expr from 0 to STAR
@@ -602,7 +584,6 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
     }
     break;
   }
-      
   
   case Lang::WRITE: // x = e
   {    
@@ -657,7 +638,6 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
           DualConstraint *sbc = new DualConstraint(*this);
           sbc->pcs[t.pid] = t.source;
           sbc->mems[0] = new_mem;
-        
 
           if(!locked) {
             std::vector<Msg> ch0(sbc->channels[t.pid]);
@@ -794,7 +774,6 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
   default:
     throw new std::logic_error("DualConstraint::pre: Unsupported transition: "+t.to_string(common.machine));
   }
-  
     
   return res;
 };

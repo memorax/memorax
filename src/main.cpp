@@ -42,9 +42,9 @@
 #include "dual_constraint.h"
 #include "dual_channel_container.h"
 #include "dual_tso_bwd.h"
-//#include "pdual_constraint.h"
-//#include "pdual_channel_container.h"
-//#include "pdual_tso_bwd.h"
+#include "pdual_constraint.h"
+#include "pdual_channel_container.h"
+#include "pdual_tso_bwd.h"
 #include "shellcmd.h"
 #include "sync_set_printer.h"
 #include "test.h"
@@ -496,10 +496,10 @@ int reachability(const std::map<std::string,Flag> flags, std::istream &input_str
     DualConstraint::Common *common = new DualConstraint::Common(*machine);
     reach = new DualTsoBwd();
     rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new DualChannelContainer());
-  // }else if(flags.find("a")->second.argument == "pdual"){
-  //   PDualConstraint::Common *common = new PDualConstraint::Common(*machine);
-  //   reach = new PDualTsoBwd();
-  //   rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new PDualChannelContainer());
+  }else if(flags.find("a")->second.argument == "pdual"){
+    PDualConstraint::Common *common = new PDualConstraint::Common(*machine);
+    reach = new PDualTsoBwd();
+    rarg = new ExactBwd::Arg(*machine,common->get_bad_states(),common,new PDualChannelContainer());
   }else{
     Log::warning << "Abstraction '" << flags.find("a")->second.argument << "' is not supported.\nSorry.\n";
     return 1;
@@ -642,10 +642,10 @@ void print_help(int argc, char *argv[]){
             << "      The Dual TSO Buffer model.\n"
             << "      Equivalent to TSO w.r.t. control state reachability.\n"
             << "      Sound and complete for finite data domains.\n"
-            // << "    pdual\n"
-            // << "      The parameterized Dual TSO Buffer model.\n"
-            // << "      Equivalent to TSO w.r.t. parameterized control state reachability.\n"
-            // << "      Sound and complete for finite data domains.\n"
+            << "    pdual\n"
+            << "      The parameterized Dual TSO Buffer model.\n"
+            << "      Equivalent to TSO w.r.t. parameterized control state reachability.\n"
+            << "      Sound and complete for finite data domains.\n"
             << "    vips\n"
             << "      VIPS-M. Explicit state forward analysis.\n"
             << "      Sound and complete for finite data domains.\n"
@@ -822,7 +822,7 @@ int main(int argc, char *argv[]){
              argv[i+1] == std::string("pb") ||
              argv[i+1] == std::string("hsb") ||
              argv[i+1] == std::string("dual") ||
-             // argv[i+1] == std::string("pdual") ||
+             argv[i+1] == std::string("pdual") ||
              argv[i+1] == std::string("vips")){
             flags["a"] = Flag("a",argv[i],true,argv[i+1]);
             i++;
@@ -895,28 +895,28 @@ int main(int argc, char *argv[]){
       retval = dotify(flags,*input_stream);
       break;
     case TEST:
-      Test::add_test("Automaton",Automaton::test);
-      Test::add_test("Fencins",Fencins::test);
-      Test::add_test("FenceSync",FenceSync::test);
-      Test::add_test("Machine",Machine::test);
-      Test::add_test("MinCoverage",MinCoverage::test);
-      Test::add_test("SbTsoBwd",SbTsoBwd::test);
-      Test::add_test("Test",Test::test_testing);
-      Test::add_test("TestVipsFencins",TestVipsFencins::test);
-      Test::add_test("TsoFenceSync",TsoFenceSync::test);
-      Test::add_test("TsoLockSync",TsoLockSync::test);
-      Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
-      Test::add_test("VIPS-M Bit",VipsBitConstraint::test);
-      Test::add_test("VIPS-M Bit Reachability",VipsBitReachability::test);
-      Test::add_test("VipsFenceSync",VipsFenceSync::test);
-      Test::add_test("VipsSimpleFencer",VipsSimpleFencer::test);
-      Test::add_test("VipsSyncrdSync",VipsSyncwrSync::test);
-      Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
-      Test::add_test("ZStar",ZStar<int>::test);
-      Test::add_test("HsbConstraint",HsbConstraint::test);
-      Test::add_test("DualZStar",DualZStar<int>::test);
-      Test::add_test("DualConstraint",DualConstraint::test);
-      //Test::add_test("PDualConstraint",PDualConstraint::test);
+      // Test::add_test("Automaton",Automaton::test);
+      // Test::add_test("Fencins",Fencins::test);
+      // Test::add_test("FenceSync",FenceSync::test);
+      // Test::add_test("Machine",Machine::test);
+      // Test::add_test("MinCoverage",MinCoverage::test);
+      // Test::add_test("SbTsoBwd",SbTsoBwd::test);
+      // Test::add_test("Test",Test::test_testing);
+      // Test::add_test("TestVipsFencins",TestVipsFencins::test);
+      // Test::add_test("TsoFenceSync",TsoFenceSync::test);
+      // Test::add_test("TsoLockSync",TsoLockSync::test);
+      // Test::add_test("TsoSimpleFencer",TsoSimpleFencer::test);
+      // Test::add_test("VIPS-M Bit",VipsBitConstraint::test);
+      // Test::add_test("VIPS-M Bit Reachability",VipsBitReachability::test);
+      // Test::add_test("VipsFenceSync",VipsFenceSync::test);
+      // Test::add_test("VipsSimpleFencer",VipsSimpleFencer::test);
+      // Test::add_test("VipsSyncrdSync",VipsSyncwrSync::test);
+      // Test::add_test("VipsSyncwrSync",VipsSyncwrSync::test);
+      // Test::add_test("ZStar",ZStar<int>::test);
+      // Test::add_test("HsbConstraint",HsbConstraint::test);
+      // Test::add_test("DualZStar",DualZStar<int>::test);
+      // Test::add_test("DualConstraint",DualConstraint::test);
+      Test::add_test("PDualConstraint",PDualConstraint::test);
       retval = Test::run_tests();
       break;
     default:
