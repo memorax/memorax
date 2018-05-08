@@ -152,5 +152,7 @@ License
 Contact / Bug Report
 ====================
 
-   Feedback, questions or bug reports should be directed to Carl
-   Leonardsson (carl.leonardsson@it.uu.se).
+   Feedback, questions or bug reports should be directed to Carl 
+   Leonardsson (carl.leonardsson@it.uu.se). Moreover, questions or 
+   bug reports related to DUAL and PDUAL abstractions should be directed 
+   to Tuan Phong Ngo (tuanphong.ngo@gmail.com).
