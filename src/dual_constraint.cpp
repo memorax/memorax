@@ -318,7 +318,7 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
     /* Check if the locked block contains writes.
      * If so, it is fencing. */
     if(s.get_writes().size() == 0 || channels[t.pid].size() == 0){
-      for(int i = 0; i < s.get_statement_count(); ++i){
+      for(int i = 0; i < s.get_statement_count(); ++i){ // s can only contain single or sequence
         Machine::PTransition ti(t.source,*s.get_statement(i),t.target,t.pid);
         std::list<pre_constr_t> v = pre(ti,true);
         res.insert(res.end(),v.begin(),v.end());

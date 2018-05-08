@@ -259,24 +259,53 @@ std::list<PDualConstraint::pre_constr_t> PDualConstraint::pre(const Machine::PTr
   
   int proc = -1;
   bool needAddProc = false;
-  if (s.get_type()!= Lang::WRITE) {
+  if (s.get_type()!= Lang::WRITE && s.get_type()!= Lang::LOCKED) {
     for(int p=0;p<pcs.size(); p++) {
       if (ptypes[p]==t.pid && pcs[p] == t.target) {
         proc = p;
         break;
       }
     }
+  } else if (s.get_type() == Lang::LOCKED) {
+    if (s.get_writes().size()!=0) { // locked write
+      for(int p=0;p<pcs.size(); p++) {
+        if (ptypes[p]==t.pid && pcs[p] == t.target) {
+          if (channels[p].size()==0) {
+            proc = p;
+            break;
+          }
+        }
+      }
+    } else { //fence
+      for(int p=0;p<pcs.size(); p++) {
+        if (ptypes[p]==t.pid && pcs[p] == t.target) {
+          proc = p;
+          break;        
+        }
+      }
+    }
+
+    if (proc==-1 && s.get_writes().size()!=0) {
+      proc = pcs.size();
+      needAddProc = true;
+    }
   } else { // write
+    Lang::NML nml(s.get_memloc(),t.pid);
     for(int p=0;p<pcs.size(); p++) {
       if (ptypes[p]==t.pid && pcs[p] == t.target) {
         bool feasible = true;
-        if (channels[p].size()>0 && !channels[p].back().store[0].is_wild()) {
-          int nml_val = channels[p].back().store[0].get_int();
-          VecSet<Store> rstores = possible_reg_stores(reg_stores[p],t.pid,s.get_expr(),nml_val);
-          if (rstores.size()==0) {
+        if (channels[p].size()>0) {
+          if (locked) feasible = false;
+          else if (channels[p].back().nmls.size() != 1 || 
+              channels[p].back().nmls.count(nml)==0 || 
+              channels[p].back().wpid != t.pid) {
             feasible = false;
+          } else if (!channels[p].back().store[0].is_wild()){
+            int nml_val = channels[p].back().store[0].get_int();
+            VecSet<Store> rstores = possible_reg_stores(reg_stores[p],t.pid,s.get_expr(),nml_val);
+            if (rstores.size()==0) feasible = false;
           }
-        }
+        }          
         if (feasible) {
           proc = p;
           break;
@@ -406,15 +435,32 @@ std::list<PDualConstraint::pre_constr_t> PDualConstraint::pre(const Machine::PTr
       
     case Lang::LOCKED:
     {      
-      /* Check if the locked block contains writes.
-       * If so, it is fencing. */
-      if(s.get_writes().size() == 0 || channels[proc].size() == 0){
+      if (!needAddProc) {
+        /* Check if the locked block contains writes.
+         * If so, it is fencing. */
+        if(s.get_writes().size() == 0 || channels[proc].size() == 0){
+          for(int i = 0; i < s.get_statement_count(); ++i){ // s can only contain single or sequence
+            Machine::PTransition ti(t.source,*s.get_statement(i),t.target,t.pid);
+            std::list<pre_constr_t> v = pre(ti,true);
+            res.insert(res.end(),v.begin(),v.end());
+          }
+        }
+      } else { // add a new process with empty channel for the case of a locked write
+        PDualConstraint *sbc = new PDualConstraint(*this);
+        sbc->pcs.push_back(t.target);
+        sbc->ptypes.push_back(t.pid);
+        std::vector<Msg> ch0;
+        sbc->channels.push_back(ch0);
+        Store reg_stores_proc =  Store(common.reg_count[t.pid]);
+        sbc->reg_stores.push_back(reg_stores_proc);
+
         for(int i = 0; i < s.get_statement_count(); ++i){
-          Machine::PTransition ti(t.source,*s.get_statement(i),t.target,t.pid);
-          std::list<pre_constr_t> v = pre(ti,true);
-          res.insert(res.end(),v.begin(),v.end());
+            Machine::PTransition ti(t.source,*s.get_statement(i),t.target,t.pid);
+            std::list<pre_constr_t> v = sbc->pre(ti,true);
+            res.insert(res.end(),v.begin(),v.end());
         }
       }
+      
       break;
     }
         
@@ -893,7 +939,7 @@ std::list<PDualConstraint::pre_constr_t> PDualConstraint::pre(const Machine::PTr
           std::vector<std::vector<Msg>> chns;
           chns.push_back(empty_chn);
           
-          if (!locked) {
+          if (!locked) { // generating all possible sequences in the new channel
             for (int pnmli=0; pnmli<pnmls.size(); pnmli++) {
               std::vector<value_t> v;
               v.push_back(value_t::STAR);
@@ -957,9 +1003,8 @@ void PDualConstraint::Common::test(){
         << "data\n"
         << "  x = 0 : [0:2]\n"
         << "  y = * : [0:1]\n"
+        << "  z = * : [0:1]\n"
         << "process\n"
-        << "data\n"
-        << "  z = 42 : [0:100]\n"
         << "text\n"
         << "L0:\n"
         << "  nop;\n"
@@ -967,9 +1012,9 @@ void PDualConstraint::Common::test(){
         << "  locked write: y := 0;\n"
         << "  locked{\n"
         << "    write: x := 1;\n"
-        << "    write: z[my] := 13\n"
+        << "    write: z := 13\n"
         << "  or\n"
-        << "    write: z[my] := 10;\n"
+        << "    write: z := 10;\n"
         << "    write: y := 0\n"
         << "  }\n"
         << "process\n"
@@ -983,9 +1028,11 @@ void PDualConstraint::Common::test(){
     VecSet<MsgHdr> expected;
     VecSet<Lang::NML> x = VecSet<Lang::NML>::singleton(Lang::NML::global(0));
     VecSet<Lang::NML> y = VecSet<Lang::NML>::singleton(Lang::NML::global(1));
+    VecSet<Lang::NML> z = VecSet<Lang::NML>::singleton(Lang::NML::global(2));
     VecSet<Lang::NML> xy = x; xy.insert(y);
-    VecSet<Lang::NML> xz = x; xz.insert(Lang::NML::local(0,0));
-    VecSet<Lang::NML> yz = y; yz.insert(Lang::NML::local(0,0));
+    VecSet<Lang::NML> xz = x; xz.insert(z);
+    VecSet<Lang::NML> yz = y; yz.insert(z);
+    expected.insert(MsgHdr(0,VecSet<Lang::NML>()));
     expected.insert(MsgHdr(0,x));
     expected.insert(MsgHdr(0,y));
     expected.insert(MsgHdr(0,xz));
@@ -1012,8 +1059,6 @@ void PDualConstraint::test_possible_values(){
               << "  x = 0 : [0:2]\n"
               << "  y = * : [0:1]\n"
               << "process\n"
-              << "data\n"
-              << "  z = 42 : [0:100]\n"
               << "registers\n"
               << "  $r0 = * : [0:2]\n"
               << "  $r1 = * : [10:12]\n"
@@ -1114,19 +1159,17 @@ void PDualConstraint::test_pre(){
             << "  x = * : [8:12]\n"
             << "  y = * : [0:1]\n"
             << "process\n"
-            << "data\n"
-            << "  z = 42 : [0:100]\n"
             << "registers\n"
             << "  $r0 = * : [0:2]\n"
             << "  $r1 = * : [10:12]\n"
             << "  $r2 = * : [1:1]\n"
             << "text\n"
             << "L0:\n"
-            << "  nop\n"
+            << "  write: x := 1\n"
             << "process\n"
             << "text\n"
             << "L0:\n"
-            << "  nop\n";
+            << "  write: y := 1\n";
   Lexer lex(dummy_rmm);
   Machine dummy_machine(Parser::p_test(lex));
 
@@ -1197,7 +1240,27 @@ void PDualConstraint::test_pre(){
    }
  }
 
- /* Test LOCKED WRITE */
+ /* Test WRITE (Test5) */
+ {
+   std::cout << " ** WRITE with no satisfied process x := r0 + r1 [r0=0,r1=10,x=*] **\n";
+   std::vector<int> pcs;
+   pcs.push_back(1); pcs.push_back(3);
+   PDualConstraint sbc(pcs,common.messages[0],common);
+   Machine::PTransition t(0,Lang::Stmt<int>::write(Lang::MemLoc<int>::global(0),
+                                                   Lang::Expr<int>::reg(0) + Lang::Expr<int>::reg(1)),1,0);
+   Msg msg(Store(3),0,VecSet<Lang::NML>::singleton(Lang::NML::global(1)));
+   sbc.channels[0].push_back(msg);
+   sbc.reg_stores[0] = sbc.reg_stores[0].assign(0,0).assign(1,10);
+
+   std::cout << "Initial:\n" << sbc.to_string() << "\n";
+   std::list<Constraint*> res = sbc.pre(t);
+   std::cout << "Pre:\n";
+   for(auto it = res.begin  (); it != res.end(); ++it){
+     std::cout << (*it)->to_string() << "\n";
+   }
+ }
+
+ /* Test LOCKED WRITE (Test6) */
  {
    std::cout << " ** LOCKED WRITE x := r0 + r1 [r0=0,r1=10,x=*] **\n";
    std::vector<int> pcs;
@@ -1300,10 +1363,9 @@ void PDualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0][1].wpid = 1;
-      std::cout << "test 2\n";
       test("Test2a",sbc0.entailment_compare(sbc1) != Constraint::EQUAL);
       test("Test2b",sbc1.entailment_compare(sbc0) != Constraint::EQUAL);
-      test("Test2c",sbc0.characterize_channel(0) != sbc1.characterize_channel(0));
+      test("Test2c",sbc0.characterize_channel(0) == sbc1.characterize_channel(0));
       test("Test2d",sbc0.entailment_compare(sbc1) == Constraint::LESS);
       test("Test2e",sbc1.entailment_compare(sbc0) == Constraint::GREATER);
     }
@@ -1319,10 +1381,9 @@ void PDualConstraint::test_comparison(){
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0].push_back(msg);
       sbc1.channels[0].push_back(msg);
-      std::cout << "test 3\n";
-      test("Test3a",sbc0.entailment_compare(sbc1) == Constraint::EQUAL);
-      test("Test3b",sbc1.entailment_compare(sbc0) == Constraint::EQUAL);
-      test("Test3c",sbc0.characterize_channel(0) != sbc1.characterize_channel(0));
+      test("Test3a",sbc0.entailment_compare(sbc1) != Constraint::EQUAL);
+      test("Test3b",sbc1.entailment_compare(sbc0) != Constraint::EQUAL);
+      test("Test3c",sbc0.characterize_channel(0) == sbc1.characterize_channel(0));
       test("Test3d",sbc0.entailment_compare(sbc1) == Constraint::LESS);
       test("Test3e",sbc1.entailment_compare(sbc0) == Constraint::GREATER);
     }
@@ -1363,7 +1424,6 @@ void PDualConstraint::test_comparison(){
       test("Test5a",sbc0.entailment_compare(sbc1) == Constraint::INCOMPARABLE);
       test("Test5b",sbc1.entailment_compare(sbc0) == Constraint::INCOMPARABLE);
       test("Test5c",sbc0.characterize_channel(0) == sbc1.characterize_channel(0));
-      Log::extreme << " 5d " << sbc0.entailment_compare(sbc0) << "\n";
       test("Test5d",sbc0.entailment_compare(sbc0) == Constraint::EQUAL);
       test("Test5e",sbc1.entailment_compare(sbc1) == Constraint::EQUAL);
     }
@@ -1371,12 +1431,12 @@ void PDualConstraint::test_comparison(){
     
     /* Test6: */
     {
-      std::vector<int> pcs(2,1);
-      std::vector<int> pcs1(3,1);
+      std::vector<int> pcs(1,1);
+      std::vector<int> pcs1(2,1);
       PDualConstraint sbc0(pcs,common);
       PDualConstraint sbc1(pcs1,common);
-      test("Test6a",sbc0.entailment_compare(sbc1) == Constraint::INCOMPARABLE);
-      test("Test6b",sbc0.entailment_compare(sbc1) == Constraint::GREATER);
+      test("Test6a",sbc0.entailment_compare(sbc1) != Constraint::EQUAL);
+      test("Test6b",sbc0.entailment_compare(sbc1) != Constraint::GREATER);
       test("Test6c",sbc0.entailment_compare(sbc1) == Constraint::LESS);
     }
   }catch(std::exception *exc){

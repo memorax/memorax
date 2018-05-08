@@ -161,8 +161,8 @@ DualChannelConstraint::DualChannelConstraint(std::vector<int> pcs, const Common:
     std::vector<Msg> chni;
     if(ci==msg.wpid) {
       chni.push_back(Msg(Store(common.mem_size),msg.wpid,msg.nmls));
-      channels.push_back(chni);
     }
+    channels.push_back(chni);
   }
   mems.push_back(Store(common.mem_size));
   for(unsigned p = 0; p < pcs.size(); p++){
