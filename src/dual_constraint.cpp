@@ -378,9 +378,9 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
                                 t.pid,
                                 s.get_expr(),
                                 val_nml);
+      assert(rss.size());
       std::set<int> regs = s.get_expr().get_registers();
       // get STAR registers that not in expr from 0 to STAR
-      VecSet<Store> correct_rss;
       for (int rssi=0; rssi<rss.size(); rssi++) {
         Store st = rss[rssi];
         for (int rsi=0; rsi<reg_stores[t.pid].size(); rsi++) {
@@ -391,18 +391,21 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         correct_rss.insert(st);
       }
     }
-  
+    
+
     VecSet<int> val_es = possible_values(reg_stores[t.pid],t.pid,s.get_expr());
       
-    if (msgi>=0 || correct_rss.size()) hidden = false;
+    if (msgi>=0 || (msgi==-1 && correct_rss.size())) hidden = false;
 
-    if (is_star || correct_rss.size()) { // read from channels      
+    if (is_star || correct_rss.size()) { // read from channels or mem     
       if (correct_rss.size()) { // this case !is_star
-        for (int rssi=0; rssi<correct_rss.size(); rssi++) {
-          DualConstraint *sbc = new DualConstraint(*this);
-          sbc->pcs[t.pid] = t.source;
-          sbc->reg_stores[t.pid] = correct_rss[rssi]; // restrict registers
-          res.push_back(sbc);
+        if (msgi>=-1 || channels[t.pid].size()==0) { //read from mem only when the channel is empty
+          for (int rssi=0; rssi<correct_rss.size(); rssi++) {
+            DualConstraint *sbc = new DualConstraint(*this);
+            sbc->pcs[t.pid] = t.source;
+            sbc->reg_stores[t.pid] = correct_rss[rssi]; // restrict registers
+            res.push_back(sbc);
+          }  
         }
       } else {
         for (int vei=0; vei<val_es.size(); vei++) {
@@ -491,27 +494,29 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
     int nmli = common.index(nml);
     int msgi = index_of_read(nml,t.pid);
     
-    if (reg_stores[t.pid][s.get_reg()].is_wild()) {
-      DualConstraint *sbc = new DualConstraint(*this);
-      sbc->pcs[t.pid] = t.source;
-      res.push_back(sbc);
-    }else{
-      int reg_val = reg_stores[t.pid][s.get_reg()].get_int();
-      bool hidden = true;
-      int val_nml;
-      bool is_star = false;
-      if(msgi==-1) {
-        if (channels[t.pid][0].store[0].is_wild()) is_star = true;
-        else val_nml = channels[t.pid][0].store[0].get_int();
-      } else if (msgi>=0){
-        if  (channels[t.pid][msgi].store[0].is_wild()) is_star = true;
-        else val_nml = channels[t.pid][msgi].store[0].get_int();
-      } else {
-        if (mems[0][nmli].is_wild()) is_star = true;
-        else val_nml = mems[0][nmli].get_int();
-      }
+    int reg_val = reg_stores[t.pid][s.get_reg()].get_int();
+    bool hidden = true;
+    int val_nml;
+    bool is_star = false;
+    if(msgi==-1) {
+      if (channels[t.pid][0].store[0].is_wild()) is_star = true;
+      else val_nml = channels[t.pid][0].store[0].get_int();
+    } else if (msgi>=0){
+      if  (channels[t.pid][msgi].store[0].is_wild()) is_star = true;
+      else val_nml = channels[t.pid][msgi].store[0].get_int();
+    } else {
+      if (mems[0][nmli].is_wild()) is_star = true;
+      else val_nml = mems[0][nmli].get_int();
+    }
 
-      if (msgi>=0 || (!is_star && val_nml == reg_val)) hidden = false;
+    if (reg_stores[t.pid][s.get_reg()].is_wild()) {
+      if (msgi>=-1 || channels[t.pid].size()==0) { //read from mem only when the channel is empty
+        DualConstraint *sbc = new DualConstraint(*this);
+        sbc->pcs[t.pid] = t.source;
+        res.push_back(sbc);
+      }
+    } else {
+      if (msgi>=0 || (msgi==-1 && (is_star || val_nml == reg_val))) hidden = false;
 
       if (is_star || val_nml == reg_val) {
         DualConstraint *sbc = new DualConstraint(*this);
@@ -553,7 +558,11 @@ std::list<DualConstraint::pre_constr_t> DualConstraint::pre(const Machine::PTran
         }
         res.push_back(sbc);
       }
+
     }
+
+      
+    //}
     break;
   }
       

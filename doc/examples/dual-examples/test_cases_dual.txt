@@ -73,6 +73,8 @@ echo WRC 3 3 3
 memorax -a dual reach ./wrc_3_3_3.rmm
 echo WRC 3 3 4
 memorax -a dual reach ./wrc_3_3_4.rmm
+echo WRC 3 4 4
+memorax -a dual reach ./wrc_3_4_4.rmm
 
 echo ISA2
 memorax -a dual reach ./isa2.rmm
@@ -88,7 +90,8 @@ echo ISA2 2 3 3
 memorax -a dual reach ./isa2_2_3_3.rmm
 echo ISA2 3 3 3
 memorax -a dual reach ./isa2_3_3_3.rmm
-
+echo ISA2 3 3 4
+memorax -a dual reach ./isa2_3_3_4.rmm
 
 
 echo RWC
@@ -168,13 +171,6 @@ memorax -a dual reach ./ticket_spin_lock_2_3_finite.rmm
 
 
 
-
-
-
-
-
-echo CLH
-memorax -a dual reach ../clh.rmm
 echo Sense Reverse Barrier
 memorax -a dual reach ../sense_rev_bar.rmm
 echo Burns
@@ -184,7 +180,7 @@ memorax -a dual reach ../dekker.rmm
 echo Dekker Simple
 memorax -a dual reach ./dekker_simple.rmm
 echo Peterson Single
-memorax -a dual reach ./peterson_simple.rmm
+memorax -a dual reach ./peterson_single.rmm
 echo Peterson 
 memorax -a dual reach ../peterson.rmm
 echo Szymanski
@@ -203,6 +199,19 @@ memorax -a dual reach ../dijkstra.rmm
 
 
 
+
+
+
+
+
+
+
+
+
+echo CLH
+memorax -a dual reach ../clh.rmm
+
+
 echo LB 4 4
 memorax -a dual reach ./lb_4_4.rmm
 echo LB 4 5
@@ -210,15 +219,9 @@ memorax -a dual reach ./lb_4_5.rmm
 echo LB 5 5
 memorax -a dual reach ./lb_5_5.rmm
 
-echo WRC 3 4 4
-memorax -a dual reach ./wrc_3_4_4.rmm
 
-echo ISA2 3 3 4
-memorax -a dual reach ./isa2_3_3_4.rmm
 echo ISA2 3 4 4
 memorax -a dual reach ./isa2_3_4_4.rmm
-
-
 
 
 echo NBW_W_WR 2 3

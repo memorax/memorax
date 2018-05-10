@@ -43,8 +43,8 @@ text
     write: flag[my] := 2;
     L2:  read: $flag := flag[0];
     if $flag < 4 then goto L2
-    or
-      read: $flag := flag[0];
+  or
+    read: $flag := flag[0];
     assume: $flag != 1
   };
   write: flag[my] := 4;
@@ -73,8 +73,8 @@ text
     write: flag[my] := 2;
     L2:  read: $flag := flag[0];
     if $flag < 4 then goto L2
-    or
-      read: $flag := flag[0];
+  or
+    read: $flag := flag[0];
     assume:  $flag != 1
   };
   write: flag[my] := 4;
