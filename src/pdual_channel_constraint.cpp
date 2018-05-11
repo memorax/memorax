@@ -69,7 +69,7 @@ PDualChannelConstraint::Common::Common(const Machine &m) : machine(m) {
   max_lvar_count = 0;
   for(unsigned p = 0; p < machine.lvars.size(); ++p){
     if (machine.lvars[p].size()) {
-      throw new std::logic_error("Option Pdual does not allow any process to have local variables. It accepts only global variables!!!\n");
+      throw new std::logic_error("Option Pdual accepts only global variables!!! It does not allow any process to have local variables (because of the requirement of finite state transition systems, i.e. finite data domain and finite number of variables).\n");
     }
     max_lvar_count = std::max<int>(max_lvar_count, machine.lvars[p].size());
     reg_count.push_back(machine.regs[p].size());

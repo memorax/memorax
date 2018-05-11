@@ -18,26 +18,6 @@ memorax -a pdual reach ./iriw.rmm
 echo NBW_W_WR
 memorax -a pdual reach ./nbw_w_wr.rmm
 
-echo Sense Reverse Barrier
-memorax -a pdual reach ../sense_rev_bar.rmm
-echo Burns
-memorax -a pdual reach ../burns.rmm
-echo Dekker
-memorax -a pdual reach ../dekker.rmm
-echo Dekker Simple
-memorax -a pdual reach ./dekker_simple.rmm
-echo Peterson Sigle
-memorax -a pdual reach ./peterson_single.rmm
-echo Peterson
-memorax -a pdual reach ../peterson.rmm
-echo Lamport Fast
-memorax -a pdual reach ../lamport_fast.rmm
-echo Dijkstra
-memorax -a pdual reach ../dijkstra.rmm
-echo Bakery bound 2
-memorax -a pdual reach ../bakery.bound2.rmm
-echo Szymanski
-memorax -a pdual reach ./szymanski.rmm
 
 echo Ticket Spin Lock with Finite Domain
 memorax -a pdual reach ./ticket_spin_lock_finite.rmm

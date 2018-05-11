@@ -34,7 +34,8 @@ echo LB 3 3
 memorax -a dual reach ./lb_3_3.rmm
 echo LB 3 4
 memorax -a dual reach ./lb_3_4.rmm
-
+echo LB 4 4
+memorax -a dual reach ./lb_4_4.rmm
 
 
 echo MP
@@ -212,8 +213,7 @@ echo CLH
 memorax -a dual reach ../clh.rmm
 
 
-echo LB 4 4
-memorax -a dual reach ./lb_4_4.rmm
+
 echo LB 4 5
 memorax -a dual reach ./lb_4_5.rmm
 echo LB 5 5
