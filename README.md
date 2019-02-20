@@ -1,7 +1,7 @@
 Installation Instructions
 =========================
 
-Memorax can be compiled and installed on UNIX-like systems.
+DualTSO can be compiled and installed on UNIX-like systems.
 
 Requirements
 ------------
@@ -15,25 +15,25 @@ Requirements
      due to major changes in the Tkinter API.
 
   3. For predicate abstraction the MathSAT SMT solver as well as the
-     library gmpxx are required. Memorax supports MathSAT 4 and
-     MathSAT 5. MathSAT 4 is recommended. Memorax can be compiled
+     library gmpxx are required. DualTSO supports MathSAT 4 and
+     MathSAT 5. MathSAT 4 is recommended. DualTSO can be compiled
      without MathSAT and gmpxx, but will then not support predicate
      abstraction.
 
   4. To be able to graphically draw automata, Graphviz is required.
 
-  If you acquired Memorax by other means than downloading the
+  If you acquired DualTSO by other means than downloading the
   installable tarballs (e.g. cloning the git repository) then GNU
   autotools and a latex installation will also be required.
 
 Basic Installation
 ------------------
 
-   In the simplest case, Memorax can be installed with the following
+   In the simplest case, DualTSO can be installed with the following
    commands:
 
-    $ tar xvf memorax-<version>.tar.gz
-    $ cd memorax-<version>
+    $ tar xvf DualTSO-<version>.tar.gz
+    $ cd DualTSO-<version>
     $ ./configure
     $ make
     $ make install
@@ -45,12 +45,12 @@ Building the configure Script and Makefiles
 -------------------------------------------
 
    The installable tarballs are provided with a configure script and
-   Makefile templates. But in case you acquired the Memorax sources by
+   Makefile templates. But in case you acquired the DualTSO sources by
    e.g. cloning the git repository, it is necessary to build those
    files using GNU autotools. The easiest way to do this is as
    follows:
 
-    $ cd memorax-<version>
+    $ cd DualTSO-<version>
     $ autoreconf --install
 
    This will automatically produce a configure script as well as
@@ -73,7 +73,7 @@ Installation Options
 
 ###Changing Installation Directory
 
-   The command 'make install' will install Memorax, its graphical
+   The command 'make install' will install DualTSO, its graphical
    interface and its documentation in the directories which are
    standard on your system. To override this behavior add the switch
    --prefix to the './configure' command:
@@ -82,7 +82,7 @@ Installation Options
 
 ###Compiling with Predicate Abstraction Support
 
-   To support predicate abstraction, Memorax must be compiled with
+   To support predicate abstraction, DualTSO must be compiled with
    MathSAT and gmpxx. Their header files and shared libraries must
    reside where they can be found by the compilation. If they are
    installed in non-standard locations, then the compilation can be
@@ -128,23 +128,24 @@ Troubleshooting
     Error: MSatFailure: Program is not compiled with MathSAT.
 
    In order to use predicate abstraction, (e.g. the PB abstraction)
-   the Memorax tool needs to be compiled with MathSAT. To solve the
+   the DualTSO tool needs to be compiled with MathSAT. To solve the
    problem, install MathSAT on your system and then reinstall
-   Memorax. In case the installation fails to find MathSAT (see the
+   DualTSO. In case the installation fails to find MathSAT (see the
    output from the configure script), then try the instructions in the
    section "Compiling with Predicate Abstraction Support" above.
 
 License
 =======
 
-   The Memorax tool is licensed under GPLv3. See COPYING.
+   DualTSO is using the source code of Memorax. The DualTSO tool is licensed under GPLv3. 
+   See COPYING.
 
-   Memorax is free software: you can redistribute it and/or modify it
+   DualTSO is free software: you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by
    the Free Software Foundation, either version 3 of the License, or
    (at your option) any later version.
 
-   Memorax is distributed in the hope that it will be useful, but
+   DualTSO is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
    General Public License for more details.
@@ -152,5 +153,4 @@ License
 Contact / Bug Report
 ====================
 
-   Feedback, questions or bug reports should be directed to Carl
-   Leonardsson (carl.leonardsson@it.uu.se).
+   Feedback, questions or bug reports should be directed to Tuan Phong Ngo (tuanphong.ngo@gmail.com).

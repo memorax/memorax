@@ -232,7 +232,7 @@ can be over or under approximations of the semantics given in
 \cref{sec:semantics}. They can alternatively be exact, or even
 approximations that are neither over approximations nor under
 approximations. \memorax\ currently supports three abstractions: SB,
-PB, and VIPS. See \cref{sec:abstractions} for details.
+PB, HSB, DUAL, PDUAL, and VIPS. See \cref{sec:abstractions} for details.
 
 \paragraph{Reachability checking}
  In this mode, \memorax\ will attempt to determine whether or not
@@ -297,7 +297,7 @@ the standard input.
   instructions. This conversion is possible when all registers in the
   program have finite domains. Converting a program to register free
   form may be beneficial for analysis time, in particular when using
-  the SB abstraction.}
+  the SB and DUAL abstractions.}
 
 \paragraph{Options:}
 
@@ -308,7 +308,7 @@ the standard input.
 
 \item {\tt -a <abstraction>} or {\tt --abstraction <abstraction>}
   \\ Use abstraction {\tt <abstraction>}. The abstraction should be
-  one of {\tt pb} and {\tt sb}. If no abstraction is specified, then
+  one of {\tt pb}, {\tt sb}, {\tt hsb}, {\tt dual}, {\tt pdual}, and {\tt vips}. If no abstraction is specified, then
   \memorax\ will default to using the SB abstraction.
 
 \item {\tt -k <int>}\\ Use {\tt k} as buffer bound. The TSO buffers in
@@ -2057,6 +2057,28 @@ complete memory snapshot.
 The reachability analysis is by backward state space exploration.
 
 For details about the SB abstraction, see~\cite{AACLR12}.
+
+\subsection{DUAL - Dual TSO}
+
+The DUAL abstraction is an implementation of Dual-TSO semantics~\cite{lmcs:4228,AbdullaABN16}. 
+Reachability analysis with DUAL is
+both sound and complete. Fence insertion with DUAL is currently not supported. 
+
+The DUAL abstraction defines a program semantic which is equivalent to
+TSO with regards to control state reachability. For the DUAL semantics,
+the well-quasi ordering framework~\cite{ACJT96} is applicable and
+provides a sound and complete reachability analysis.
+
+The DUAL semantics is more amenable to efficient algorithmic verification and for the extension to parametric verification. We adopt a dual view where load buffers are used instead of store buffers. The flow of information is now from the memory to load buffers.
+
+The reachability analysis is by backward state space exploration.
+
+For details about the DUAL abstraction, see~\cite{lmcs:4228,AbdullaABN16}.
+
+\subsection{PDUAL - Parameterized Dual TSO}
+
+The PDUAL abstraction is for parameterized verification under
+the Dual-TSO semantics~\cite{lmcs:4228,AbdullaABN16}. For details about the PDUAL abstraction, see~\cite{lmcs:4228,AbdullaABN16}.
 
 \subsection{VIPS}
 

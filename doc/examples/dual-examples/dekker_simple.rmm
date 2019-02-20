@@ -1,0 +1,37 @@
+/* Dekker's lock with deadlock protection
+locked{
+read: flag[my] = 0;
+write: flag[my] := 1
+};
+*/
+
+forbidden
+  CS CS
+
+
+process(1)
+data
+  flag = 0 : [0:1]
+registers
+  $r0 = 0 : [0:1]
+
+text
+  write: flag[my] := 1;
+  read: $r0 := flag[0];
+  assume: $r0 = 0;
+  CS: nop
+
+process(1)
+data
+  flag = 0 : [0:1]
+registers
+  $r0 = 0:[0:1]
+
+text
+  write: flag[my] := 1;
+  read: $r0 := flag[0];
+  assume: $r0 = 0;
+  CS: nop
+
+
+

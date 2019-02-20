@@ -1,0 +1,56 @@
+/*
+http://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=393507
+
+We test with one writer and one write-read thread (reader)
+
+Violation of Non-blocking writing protocal is when reader reads sucessfuly while writer is writing
+*/
+
+forbidden
+  * * * ERROR * * *;
+  * * * * ERROR * *;
+  * * * * * ERROR *;
+  * * * * * * ERROR
+
+data
+  buf = 0 : [0:1]
+  ccf = 0 : [0:2]
+
+process(3)
+registers
+  $ccf = * : [0:2]
+text
+  L0: read: $ccf := ccf;
+  L1: write: ccf := $ccf + 1;
+  L2: write: buf := 1;
+  L3: write: ccf := $ccf + 2;
+  goto L0
+
+process(4)
+registers
+  $ccf = * : [0:2]
+  $ccf_b = * : [0:2]
+  $ccf_e = * : [0:2]
+  $r_b = * : [0:2]
+  $v = * : [0:1]
+text
+  L0: read: $ccf := ccf;
+  L1: write: ccf := $ccf + 1;
+  L2: write: buf := 1;
+  L3: write: ccf := $ccf + 2;
+  L4: read: $ccf_b := ccf;
+  read: $v := buf;
+  read: $ccf_e := ccf;
+  L5:  if $r_b > 1 then {
+    $r_b := $r_b - 2;
+    goto L5
+  };
+  if $ccf_b != $ccf_e || $r_b = 1 then {
+    goto L4
+  };
+  if $ccf_b != $ccf_e then
+    ERROR: nop;
+  goto L0
+
+
+

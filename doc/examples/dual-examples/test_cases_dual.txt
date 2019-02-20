@@ -1,0 +1,251 @@
+
+
+
+echo SB
+memorax -a dual reach ./sb.rmm
+echo SB 1 2
+memorax -a dual reach ./sb_1_2.rmm
+echo SB 2 2
+memorax -a dual reach ./sb_2_2.rmm
+echo SB 2 3
+memorax -a dual reach ./sb_2_3.rmm
+echo SB 3 3
+memorax -a dual reach ./sb_3_3.rmm
+echo SB 3 4
+memorax -a dual reach ./sb_3_4.rmm
+echo SB 4 4
+memorax -a dual reach ./sb_4_4.rmm
+echo SB 4 5
+memorax -a dual reach ./sb_4_5.rmm
+echo SB 5 5
+memorax -a dual reach ./sb_5_5.rmm
+
+
+
+echo LB
+memorax -a dual reach ./lb.rmm
+echo LB 1 2
+memorax -a dual reach ./lb_1_2.rmm
+echo LB 2 2
+memorax -a dual reach ./lb_2_2.rmm
+echo LB 2 3
+memorax -a dual reach ./lb_2_3.rmm
+echo LB 3 3
+memorax -a dual reach ./lb_3_3.rmm
+echo LB 3 4
+memorax -a dual reach ./lb_3_4.rmm
+echo LB 4 4
+memorax -a dual reach ./lb_4_4.rmm
+
+
+echo MP
+memorax -a dual reach ./mp.rmm
+echo MP 1 2
+memorax -a dual reach ./mp_1_2.rmm
+echo MP 2 2
+memorax -a dual reach ./mp_2_2.rmm
+echo MP 2 3
+memorax -a dual reach ./mp_2_3.rmm
+echo MP 3 3
+memorax -a dual reach ./mp_3_3.rmm
+echo MP 3 4
+memorax -a dual reach ./mp_3_4.rmm
+echo MP 4 4
+memorax -a dual reach ./mp_4_4.rmm
+echo MP 4 5
+memorax -a dual reach ./mp_4_5.rmm
+echo MP 5 5
+memorax -a dual reach ./mp_5_5.rmm
+
+
+echo WRC
+memorax -a dual reach ./wrc.rmm
+echo WRC 1 1 2
+memorax -a dual reach ./wrc_1_1_2.rmm
+echo WRC 1 2 2
+memorax -a dual reach ./wrc_1_2_2.rmm
+echo WRC 2 2 2
+memorax -a dual reach ./wrc_2_2_2.rmm
+echo WRC 2 2 3
+memorax -a dual reach ./wrc_2_2_3.rmm
+echo WRC 2 3 3
+memorax -a dual reach ./wrc_2_3_3.rmm
+echo WRC 3 3 3
+memorax -a dual reach ./wrc_3_3_3.rmm
+echo WRC 3 3 4
+memorax -a dual reach ./wrc_3_3_4.rmm
+echo WRC 3 4 4
+memorax -a dual reach ./wrc_3_4_4.rmm
+
+echo ISA2
+memorax -a dual reach ./isa2.rmm
+echo ISA2 1 1 2
+memorax -a dual reach ./isa2_1_1_2.rmm
+echo ISA2 1 2 2
+memorax -a dual reach ./isa2_1_2_2.rmm
+echo ISA2 2 2 2
+memorax -a dual reach ./isa2_2_2_2.rmm
+echo ISA2 2 2 3
+memorax -a dual reach ./isa2_2_2_3.rmm
+echo ISA2 2 3 3
+memorax -a dual reach ./isa2_2_3_3.rmm
+echo ISA2 3 3 3
+memorax -a dual reach ./isa2_3_3_3.rmm
+echo ISA2 3 3 4
+memorax -a dual reach ./isa2_3_3_4.rmm
+
+
+echo RWC
+memorax -a dual reach ./rwc.rmm
+echo RWC 1 1 2
+memorax -a dual reach ./rwc_1_1_2.rmm
+echo RWC 1 2 2
+memorax -a dual reach ./rwc_1_2_2.rmm
+echo RWC 2 2 2
+memorax -a dual reach ./rwc_2_2_2.rmm
+echo RWC 2 2 3
+memorax -a dual reach ./rwc_2_2_3.rmm
+echo RWC 2 3 3
+memorax -a dual reach ./rwc_2_3_3.rmm
+echo RWC 3 3 3
+memorax -a dual reach ./rwc_3_3_3.rmm
+echo RWC 3 3 4
+memorax -a dual reach ./rwc_3_3_4.rmm
+echo RWC 3 4 4
+memorax -a dual reach ./rwc_3_4_4.rmm
+
+
+echo W+RWC
+memorax -a dual reach ./w+rwc.rmm
+echo W+RWC 1 1 2
+memorax -a dual reach ./w+rwc_1_1_2.rmm
+echo W+RWC 1 2 2
+memorax -a dual reach ./w+rwc_1_2_2.rmm
+echo W+RWC 2 2 2
+memorax -a dual reach ./w+rwc_2_2_2.rmm
+echo W+RWC 2 2 3
+memorax -a dual reach ./w+rwc_2_2_3.rmm
+echo W+RWC 2 3 3
+memorax -a dual reach ./w+rwc_2_3_3.rmm
+echo W+RWC 3 3 3
+memorax -a dual reach ./w+rwc_3_3_3.rmm
+echo W+RWC 3 3 4
+memorax -a dual reach ./w+rwc_3_3_4.rmm
+echo W+RWC 3 4 4
+memorax -a dual reach ./w+rwc_3_4_4.rmm
+
+
+echo IRIW
+memorax -a dual reach ./iriw.rmm
+echo IRIW 1 1 1 2
+memorax -a dual reach ./iriw_1_1_1_2.rmm
+echo IRIW 1 1 2 2
+memorax -a dual reach ./iriw_1_1_2_2.rmm
+echo IRIW 1 2 2 2
+memorax -a dual reach ./iriw_1_2_2_2.rmm
+echo IRIW 2 2 2 2
+memorax -a dual reach ./iriw_2_2_2_2.rmm
+echo IRIW 2 2 2 3
+memorax -a dual reach ./iriw_2_2_2_3.rmm
+echo IRIW 2 2 3 3
+memorax -a dual reach ./iriw_2_2_3_3.rmm
+echo IRIW 2 3 3 3
+memorax -a dual reach ./iriw_2_3_3_3.rmm
+echo IRIW 3 3 3 3
+memorax -a dual reach ./iriw_3_3_3_3.rmm
+
+echo NBW_W_WR
+memorax -a dual reach ./nbw_w_wr.rmm
+echo NBW_W_WR 1 2
+memorax -a dual reach ./nbw_w_wr_1_2.rmm
+echo NBW_W_WR 2 2
+memorax -a dual reach ./nbw_w_wr_2_2.rmm
+
+echo Ticket Spin Lock with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_finite.rmm
+echo Ticket Spin Lock 1 2 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_1_2_finite.rmm
+echo Ticket Spin Lock 2 2 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_2_2_finite.rmm
+echo Ticket Spin Lock 2 3 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_2_3_finite.rmm
+
+
+
+echo Sense Reverse Barrier
+memorax -a dual reach ../sense_rev_bar.rmm
+echo Burns
+memorax -a dual reach ../burns.rmm
+echo Dekker
+memorax -a dual reach ../dekker.rmm
+echo Dekker Simple
+memorax -a dual reach ./dekker_simple.rmm
+echo Peterson Single
+memorax -a dual reach ./peterson_single.rmm
+echo Peterson 
+memorax -a dual reach ../peterson.rmm
+echo Szymanski
+memorax -a dual reach ./szymanski.rmm
+echo Lamport Fast
+memorax -a dual reach ../lamport_fast.rmm
+echo Bakery bound 2
+memorax -a dual reach ../bakery.bound2.rmm
+echo Dijkstra
+memorax -a dual reach ../dijkstra.rmm
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+echo CLH
+memorax -a dual reach ../clh.rmm
+
+
+
+echo LB 4 5
+memorax -a dual reach ./lb_4_5.rmm
+echo LB 5 5
+memorax -a dual reach ./lb_5_5.rmm
+
+
+echo ISA2 3 4 4
+memorax -a dual reach ./isa2_3_4_4.rmm
+
+
+echo NBW_W_WR 2 3
+memorax -a dual reach ./nbw_w_wr_2_3.rmm
+echo NBW_W_WR 3 3
+memorax -a dual reach ./nbw_w_wr_3_3.rmm
+echo NBW_W_WR 3 4
+memorax -a dual reach ./nbw_w_wr_3_4.rmm
+echo NBW_W_WR 4 4
+memorax -a dual reach ./nbw_w_wr_4_4.rmm
+echo NBW_W_WR 4 5
+memorax -a dual reach ./nbw_w_wr_4_5.rmm
+echo NBW_W_WR 5 5
+memorax -a dual reach ./nbw_w_wr_5_5.rmm
+
+echo Ticket Spin Lock 3 3 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_3_3_finite.rmm
+echo Ticket Spin Lock 3 4 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_3_4_finite.rmm
+echo Ticket Spin Lock 4 4 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_4_4_finite.rmm
+echo Ticket Spin Lock 4 5 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_4_5_finite.rmm
+echo Ticket Spin Lock 5 5 with Finite Domain
+memorax -a dual reach ./ticket_spin_lock_5_5_finite.rmm
+
+echo Dual Done!

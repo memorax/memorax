@@ -1,0 +1,38 @@
+/* LB axiom
+T1: repeat {x==1; y=1;}
+T2: repeat {y==1; x=1;}
+*/
+
+forbidden
+  END * * END * *;
+  END * * * END *;
+  END * * * * END;
+  * END * END * *;
+  * END * * END *;
+  * END * * * END;
+  * * END END * *;
+  * * END * END *;
+  * * END * * END
+
+data
+  x = 0 : [0:1]
+  y = 0: [0:1]
+
+process(3)
+text
+  L0: read: x = 1;
+  write: y := 1;
+  END: nop;
+  goto L0
+
+
+
+process(3)
+text
+  L0: read: y = 1;
+  write: x := 1;
+  END: nop;
+  goto L0
+
+
+

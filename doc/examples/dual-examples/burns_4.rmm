@@ -1,0 +1,58 @@
+/* Burn's algorithm for two processes */
+
+forbidden
+  CS CS * *;
+  CS * CS *;
+  CS * * CS;
+  * CS CS *;
+  * CS * CS;
+  * * CS CS
+
+
+process(1)
+data
+  flag = 0 : [0:1]
+text
+  L0: write: flag[my] := 1;
+      read: flag[0] = 0;
+      read: flag[1] = 0;
+      read: flag[2] = 0;
+  CS: write: flag[my] := 0;
+      goto L0
+
+process(1)
+data
+  flag = 0 : [0:1]
+text
+  L0: read: flag[0] = 0;
+      write: flag[my] := 1;
+      read: flag[0] = 0;
+      read: flag[1] = 0;
+      read: flag[2] = 0;
+      CS:   write: flag[my] := 0;
+      goto L0
+
+process(1)
+data
+    flag = 0 : [0:1]
+text
+    L0: read: flag[0] = 0;
+    write: flag[my] := 1;
+    read: flag[0] = 0;
+    read: flag[1] = 0;
+    read: flag[2] = 0;
+    CS:   write: flag[my] := 0;
+    goto L0
+
+
+process(1)
+data
+  flag = 0 : [0:1]
+text
+  L0: read: flag[0] = 0;
+  write: flag[my] := 1;
+  read: flag[0] = 0;
+  read: flag[1] = 0;
+  read: flag[2] = 0;
+  CS:   write: flag[my] := 0;
+  goto L0

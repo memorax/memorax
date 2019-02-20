@@ -509,6 +509,14 @@ namespace Lang {
     /* Update: An update concerning memory location writes[0], and a
      * write performed by process writer. */
     UPDATE,
+    /* Delete: An delete concerning memory location writes[0], and a
+     * write performed by process writer. Used for DUAL and PDUAL models. 
+     */
+    DELETEE,
+    /* Propagate: An propagate copies the current snapshot of memory. 
+     * Used for DUAL and PDUAL models. 
+     */
+    PROPAGATE,
     /* Fetch: The value of memory location writes[0] is fetched from
      * memory to local storage. For VIPS-M, the data is fetched into
      * L1.
@@ -671,6 +679,14 @@ namespace Lang {
     static Stmt<RegId> update(int writer, VecSet<MemLoc<RegId> > mls,
 			      const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* A delete concerning the memory locations mls */
+    static Stmt<RegId> deletee(int writer, VecSet<MemLoc<RegId> > mls,
+                          const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                          std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
+    /* A propagate concerning the memory locations mls */
+    static Stmt<RegId> propagate(int writer, VecSet<MemLoc<RegId> > mls,
+                                 const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),
+                               std::vector<Lexer::Token> symbs = std::vector<Lexer::Token>());
     /* A fetch concerning the memory location ml. */
     static Stmt<RegId> fetch(MemLoc<RegId> ml,
                              const Lexer::TokenPos &p = Lexer::TokenPos(-1,-1),

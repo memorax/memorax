@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012 Carl Leonardsson
+ * Copyright (C) 2018 Tuan Phong Ngo
  *
  * This file is part of Memorax.
  *
@@ -587,6 +587,28 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::update(int writer, VecSet<MemLoc<RegId> > m
 };
 
 template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::deletee(int writer, VecSet<MemLoc<RegId> > mls,
+                                            const Lexer::TokenPos &p,
+                                            std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
+  s.type = DELETEE;
+  s.writer = writer;
+  s.writes = mls;
+  return s;
+};
+
+template<class RegId>
+Lang::Stmt<RegId> Lang::Stmt<RegId>::propagate(int writer, VecSet<MemLoc<RegId> > mls,
+                                            const Lexer::TokenPos &p,
+                                            std::vector<Lexer::Token> symbs){
+  Stmt<RegId> s(p,symbs);
+  s.type = PROPAGATE;
+  s.writer = writer;
+  s.writes = mls;
+  return s;
+};
+
+template<class RegId>
 Lang::Stmt<RegId> Lang::Stmt<RegId>::serialise(VecSet<MemLoc<RegId>> mls,
                                                const Lexer::TokenPos &p) {
   Stmt<RegId> s(p);
@@ -738,6 +760,40 @@ Lang::Stmt<RegId>::to_string(const std::function<std::string(const RegId&)> &reg
     {
       std::stringstream ss;
       ss << indlbl << "update(";
+      if(writes.size() == 1){
+        ss << mlts(writes[0]);
+      }else{
+        ss << "[";
+        for(int i = 0; i < writes.size(); ++i){
+          if(i != 0) ss << ", ";
+          ss << mlts(writes[i]);
+        }
+        ss << "]";
+      }
+      ss << ", P" << writer << ")";
+      return ss.str();
+    }
+  case DELETEE:
+    {
+      std::stringstream ss;
+      ss << indlbl << "deletee(";
+      if(writes.size() == 1){
+        ss << mlts(writes[0]);
+      }else{
+        ss << "[";
+        for(int i = 0; i < writes.size(); ++i){
+          if(i != 0) ss << ", ";
+          ss << mlts(writes[i]);
+        }
+        ss << "]";
+      }
+      ss << ", P" << writer << ")";
+      return ss.str();
+    }
+  case PROPAGATE:
+    {
+      std::stringstream ss;
+      ss << indlbl << "propagate(";
       if(writes.size() == 1){
         ss << mlts(writes[0]);
       }else{
@@ -909,6 +965,30 @@ template<class RegId> int Lang::Stmt<RegId>::compare(const Stmt<RegId> &stmt,boo
       }else{
         return 0;
       }
+    case DELETEE:
+      if(writes[0] < stmt.writes[0]){
+        return -1;
+      }else if(stmt.writes[0] < writes[0]){
+        return 1;
+      }else if(writer < stmt.writer){
+        return -1;
+      }else if(writer > stmt.writer){
+        return 1;
+      }else{
+        return 0;
+      }
+    case PROPAGATE:
+      if(writes[0] < stmt.writes[0]){
+        return -1;
+      }else if(stmt.writes[0] < writes[0]){
+        return 1;
+      }else if(writer < stmt.writer){
+        return -1;
+      }else if(writer > stmt.writer){
+        return 1;
+      }else{
+        return 0;
+      }
     case FETCH: case EVICT: case WRLLC: case SERIALISE:
       if(writes[0] < stmt.writes[0]){
         return -1;
@@ -1029,6 +1109,12 @@ template<class RegId> bool Lang::Stmt<RegId>::check_locked_invariant(const Stmt 
   case UPDATE:
     if(comment) *comment = "Illegal type of statement in locked block: update.";
     return false;
+  case DELETEE:
+    if(comment) *comment = "Illegal type of statement in locked block: deletee.";
+    return false;
+  case PROPAGATE:
+    if(comment) *comment = "Illegal type of statement in locked block: propagate.";
+    return false;
   case FETCH:
     if(comment) *comment = "Illegal type of statement in locked block: fetch.";
     return false;
@@ -1065,7 +1151,7 @@ template<class RegId> bool Lang::Stmt<RegId>::find_substmt(std::function<bool(co
   }else{
     switch(type){
     case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN:
-    case WRITE: case GOTO: case UPDATE: case SYNCWR: case FENCE: case SSFENCE:
+    case WRITE: case GOTO: case UPDATE: case DELETEE: case PROPAGATE: case SYNCWR: case FENCE: case SSFENCE:
     case LLFENCE: case FETCH: case EVICT: case WRLLC: case SYNCRDASSERT:
     case SYNCRDASSIGN:
       return false;
@@ -1088,7 +1174,7 @@ template<class RegId> Lang::MemLoc<RegId> Lang::Stmt<RegId>::get_memloc() const{
   switch(type){
   case READASSERT: case READASSIGN: case SYNCRDASSERT: case SYNCRDASSIGN:
     return reads[0];
-  case WRITE: case UPDATE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
+  case WRITE: case UPDATE: case DELETEE: case PROPAGATE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
   case SLOCKED:
     return writes[0];
   default:
@@ -1127,7 +1213,7 @@ template<class RegId> std::set<RegId> Lang::Stmt<RegId>::get_registers() const{
   case WRITE: case SYNCWR:
     return e0->get_registers();
   case GOTO: return set;
-  case UPDATE: case FETCH: case EVICT: case WRLLC: return set;
+  case UPDATE: case DELETEE: case PROPAGATE: case FETCH: case EVICT: case WRLLC: return set;
   case IF: case WHILE:
     set = b->get_registers();
     // Note: no break
@@ -1152,7 +1238,7 @@ VecSet<VecSet<Lang::MemLoc<RegId> > > Lang::Stmt<RegId>::get_write_sets() const 
   case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT: case SYNCRDASSERT:
   case SYNCRDASSIGN:
     return no_writes;
-  case WRITE: case UPDATE: case SYNCWR: case WRLLC:
+  case WRITE: case UPDATE: case DELETEE: case PROPAGATE: case SYNCWR: case WRLLC:
     return VecSet<VecSet<MemLoc<RegId> > >::singleton(writes);
   case LOCKED: case SLOCKED: case EITHER: case IF:
     {
@@ -1214,7 +1300,7 @@ Lang::Stmt<RegId> Lang::Stmt<RegId>::flatten() const{
       return locked_block(vs.get_vector(),get_pos());
     }
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
-  case SYNCWR: case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT: case WRLLC:
+  case DELETEE: case PROPAGATE: case SYNCWR: case FENCE: case SSFENCE: case LLFENCE: case FETCH: case EVICT: case WRLLC:
   case SYNCRDASSERT: case SYNCRDASSIGN:
     return *this;
   case IF: case WHILE: case EITHER: case SEQUENCE: case GOTO:
@@ -1257,7 +1343,7 @@ std::vector<std::vector<Lang::Stmt<RegId> > > Lang::Stmt<RegId>::flatten_aux() c
     }
   case NOP: case ASSIGNMENT: case ASSUME: case READASSERT: case READASSIGN: case WRITE: case UPDATE:
   case FENCE: case SSFENCE: case LLFENCE: case SYNCWR: case FETCH: case EVICT: case WRLLC:
-  case SYNCRDASSERT: case SYNCRDASSIGN:
+  case DELETEE: case PROPAGATE: case SYNCRDASSERT: case SYNCRDASSIGN:
     {
       res.insert(std::vector<Stmt>(1,*this));
       break;
